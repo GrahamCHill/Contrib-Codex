@@ -442,6 +442,8 @@ public class MainApp extends Application {
                 "  - If a contributor has significant deletions (e.g., deletions > 50% of additions), acknowledge this as high-value refactoring and adjust risk downward.\n" +
                 "- MERGE COMMITS:\n" +
                 "  - Flag merge commits (multi-parent) as distinct from regular commits. They often represent integration rather than new code bloat.\n" +
+                "  - In the provided commit history, merge commits are marked with [MERGE].\n" +
+                "  - IMPORTANT: Lines added in merge commits are NOT attributed to the contributor's 'Total lines added' in the summary stats to avoid skewing metrics. Use the [MERGE] commits only for context on what was integrated.\n" +
                 "- Reduce risk if tests are present:\n" +
                 "  - If contributor changed files in test folders (\"test\", \"tests\", \"__tests__\"), apply a risk reduction and note it.\n" +
                 "- Contextual adjustment:\n" +
@@ -476,9 +478,12 @@ public class MainApp extends Application {
                 "   - Refactoring impact: Who is reducing technical debt?\n" +
                 "   - Any suspicious patterns (bulk changes, generated artifacts, formatting churn)\n" +
                 "\n" +
-                "2) Repository Overview\n" +
+                "2) Repository Overview & Architecture\n" +
                 "   - Total commits, contributors, time range (if provided)\n" +
                 "   - High-level change distribution by file type/location (if provided)\n" +
+                "   - SOFTWARE ARCHITECTURE & DESIGN: Analyze the directory structure and file distribution. \n" +
+                "     Comment on the overall design patterns (e.g., MVC, Microservices, Layered), tech stack usage, \n" +
+                "     and assess the long-term maintainability of these choices.\n" +
                 "\n" +
                 "3) Contributor Breakdown (one section per contributor)\n" +
                 "   Include a table with:\n" +
@@ -487,10 +492,13 @@ public class MainApp extends Application {
                 "   - total_lines_added\n" +
                 "   - total_lines_deleted (refactoring indicator)\n" +
                 "   - lines_added_per_commit\n" +
-                "   - tests_touched (yes/no + count if available)\n" +
+                "   - tests_touched (Yes/No + count if available). STRICT RULE: Use 'No' if there is no evidence of test changes in the provided commit details for this contributor.\n" +
                 "   - top directories / file types modified\n" +
                 "   Then provide:\n" +
                 "   - impact summary (what areas they changed)\n" +
+                "   - MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., \"update\", \"fix\").\n" +
+                "   - FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files.\n" +
+                "   - MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section.\n" +
                 "   - code quality signals (tests, granularity, churn, refactoring activity)\n" +
                 "   - risk rating + justification (considering refactoring as a positive factor)\n" +
                 "\n" +
@@ -525,6 +533,7 @@ public class MainApp extends Application {
                 "\n" +
                 "MERGE COMMITS:\n" +
                 "- Flag merge commits as distinct events that represent integration rather than individual code contribution spikes.\n" +
+                "- Merge commits in history are marked with [MERGE] and their LOC is not included in summary totals to avoid skewing metrics.\n" +
                 "\n" +
                 "RISK ASSESSMENT:\n" +
                 "- Calculate risk using: lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
@@ -969,10 +978,17 @@ public class MainApp extends Application {
         // Add full commit history for context
         try {
             List<CommitInfo> allCommits = gitService.getLastCommits(repoDir, 1000, aliasesMap());
-            metricsText.append("\nCOMPLETE COMMIT HISTORY (LATEST 1000 COMMITS, LATEST FIRST):\n");
+            // Sort by timestamp descending to ensure the LLM sees the chronological order correctly if it matters, 
+            // though getLastCommits usually returns them that way.
+            allCommits = allCommits.stream()
+                    .sorted(Comparator.comparing(CommitInfo::timestamp).reversed())
+                    .limit(1000)
+                    .toList();
+            metricsText.append("\nCOMPLETE COMMIT HISTORY (LATEST 1000 COMMITS, INCLUDING MERGED BRANCHES, LATEST FIRST):\n");
             for (CommitInfo ci : allCommits) {
-                metricsText.append(String.format("[%s] %s: %s (%s) +%d/-%d l, %d n/%d e/%d d f, AI: %.0f%%\n",
-                    ci.id(), ci.authorName(), ci.message(), formatLanguages(ci.languageBreakdown()),
+                String mergeMarker = ci.isMerge() ? " [MERGE]" : "";
+                metricsText.append(String.format("[%s]%s %s <%s>: %s (%s) +%d/-%d l, %d n/%d e/%d d f, AI: %.0f%%\n",
+                    ci.id(), mergeMarker, ci.authorName(), ci.branch(), ci.message(), formatLanguages(ci.languageBreakdown()),
                     ci.linesAdded(), ci.linesDeleted(), ci.filesAdded(), ci.filesEdited(), ci.filesDeleted(),
                     ci.aiProbability() * 100));
             }
@@ -1212,6 +1228,7 @@ public class MainApp extends Application {
                     if (end > start) {
                         return response.substring(start, end)
                                 .replace("\\n", "\n")
+                                .replace("\\t", "\t")
                                 .replace("\\\"", "\"")
                                 .replace("\\\\", "\\")
                                 .replace("\\u0026", "&")
@@ -1331,10 +1348,14 @@ public class MainApp extends Application {
                     "# Introduction\n" +
                     "This report provides an exhaustive and technical analysis of the git repository's development history and contributor activity.\n" +
                     "The focus is on identifying high-value contributions, assessing project stability, and evaluating technical risk across the codebase.\n\n" +
+                    "This is an **AI Assisted Review**, where AI assists by analyzing git metrics, commit messages, and project structure to provide insights into code quality, contributor impact, and potential risks.\n\n" +
                     "INSTRUCTIONS FOR AI:\n" +
                     "- Provide a high-level executive summary of the project's current state.\n" +
                     "- Analyze the repository structure to identify core backend, frontend, and infrastructure components.\n" +
-                    "- Reference specific directory patterns to explain the architectural distribution of work.");
+                    "- Reference specific directory patterns to explain the architectural distribution of work.\n" +
+                    "- SOFTWARE ARCHITECTURE & DESIGN: Analyze the directory structure and file distribution. \n" +
+                    "  Comment on the overall design patterns (e.g., MVC, Microservices, Layered), tech stack usage, \n" +
+                    "  and assess the long-term maintainability of these choices.");
 
                 java.nio.file.Files.writeString(new File(folder, "02_Methodology.md").toPath(),
                     "# Analysis Methodology\n" +
@@ -1343,9 +1364,10 @@ public class MainApp extends Application {
                     "- Explain the 'Lines Added per Commit' risk scoring system (1500+ VERY HIGH to <250 LOW).\n" +
                     "- Describe how the presence of tests (files in 'test' directories) mitigates risk scores.\n" +
                     "- Explicitly state that risk is based on average lines added per commit, not lines in a single file.\n" +
+                    "- Explain that merge commits are tracked but their lines of code are excluded from total counts to prevent metric skewing.\n" +
                     "- Detail the 'Meaningful Change' score logic:\n" +
                     "  - Repository-wide score: Weighted by Source Code (70%) and Tests (30%) insertions.\n" +
-                    "  - Contributor-level score: Evaluates iterative development (bonus for <250-500 lines per commit), testing activity, and requirements alignment.\n" +
+                    "  - Contributor-level score: In this AI-assisted mode, the score is qualitatively assigned by the LLM (0-100) based on commit descriptive quality, iterative patterns, and functional impact.\n" +
                     "  - Filters out boilerplate, generated artifacts, and documentation noise.");
 
                 java.nio.file.Files.writeString(new File(folder, "03_Contributor_Deep_Dive.md").toPath(),
@@ -1356,6 +1378,9 @@ public class MainApp extends Application {
                     "- Use the 'Gender' field for correct pronouns.\n" +
                     "- Analyze their specific 'Impact Analysis' (Added vs Deleted lines) and the types of files they touched as shown in their metrics.\n" +
                     "- Do NOT invent or assume names; attribute impact ONLY to the names provided in the metrics.\n" +
+                    "- MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., \"update\", \"fix\").\n" +
+                    "- FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files.\n" +
+                    "- MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section.\n" +
                     "- Identify their 'Most Valuable Contributor' potential based on iterative development rather than just bulk LOC.");
 
                 java.nio.file.Files.writeString(new File(folder, "04_Risk_and_Quality_Assessment.md").toPath(),
@@ -1365,6 +1390,7 @@ public class MainApp extends Application {
                     "- Create a detailed Risk Table for all contributors.\n" +
                     "- Columns: Contributor, Commits, Lines Added, Lines Added/Commit, Tests Touched, Risk Band, Justification.\n" +
                     "- IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.\n" +
+                    "- STRICT RULE: In the 'Tests Touched' column, use 'No' if there is no evidence of test changes in the provided commit details for this contributor. If the 'touchedTests' metric is false, they MUST NOT get a 'Yes' in this column.\n" +
                     "- Explain the reasoning behind each risk level.\n" +
                     "- Identify patterns of 'Bulk Commits' vs 'Iterative Refinement'.\n" +
                     "- Highlighting areas where test coverage is lacking relative to feature complexity.");
@@ -1550,7 +1576,7 @@ public class MainApp extends Application {
                         return new ContributorStats(s.name(), emailOverrides.get(s.name()), s.gender(), 
                             s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                             s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
-                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore());
+                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore(), s.touchedTests());
                     }
                     return s;
                 }).collect(Collectors.toList());
@@ -1612,7 +1638,9 @@ public class MainApp extends Application {
         Map<String, Integer> oLangs = new HashMap<>();
         others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful));
+        boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
+
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests));
         return top;
     }
 
@@ -1979,6 +2007,7 @@ public class MainApp extends Application {
             String aiReport = null;
             if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
                 aiReport = llmResponseArea.getText();
+                updateStatsWithAiScores(aiReport);
             }
 
             Map<String, String> mdSections = readMdSections();
@@ -2030,6 +2059,48 @@ public class MainApp extends Application {
             e.printStackTrace();
             Platform.runLater(() -> showAlert("Error", "Export failed: " + e.getMessage()));
         }
+    }
+
+    private void updateStatsWithAiScores(String aiReport) {
+        if (aiReport == null || aiReport.isEmpty() || currentStats == null) return;
+
+        // Pattern: [MEANINGFUL_SCORE: Name=XX/100]
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\[MEANINGFUL_SCORE:\\s*([^=]+)=\\s*(\\d+)(?:/100)?\\]");
+        java.util.regex.Matcher matcher = pattern.matcher(aiReport);
+
+        Map<String, Double> aiScores = new HashMap<>();
+        while (matcher.find()) {
+            String name = matcher.group(1).trim();
+            try {
+                double score = Double.parseDouble(matcher.group(2));
+                aiScores.put(name.toLowerCase(), score);
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+
+        if (aiScores.isEmpty()) return;
+
+        currentStats = currentStats.stream().map(s -> {
+            String cleanName = s.name();
+            if (cleanName.contains("<") && cleanName.contains(">")) {
+                cleanName = cleanName.substring(0, cleanName.indexOf("<")).trim();
+            }
+            
+            Double aiScore = aiScores.get(cleanName.toLowerCase());
+            if (aiScore != null) {
+                return new ContributorStats(s.name(), s.email(), s.gender(), 
+                    s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
+                    s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
+                    s.filesEdited(), s.filesDeletedCount(), aiScore, s.touchedTests());
+            }
+            return s;
+        }).collect(Collectors.toList());
+
+        Platform.runLater(() -> {
+            List<ContributorStats> tableStats = groupOthers(currentStats, tableLimitSpinner.getValue());
+            statsTable.setItems(FXCollections.observableArrayList(tableStats));
+        });
     }
 
     private Map<String, String> aliasesMap() {

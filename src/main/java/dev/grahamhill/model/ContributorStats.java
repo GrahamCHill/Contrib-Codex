@@ -14,7 +14,8 @@ public record ContributorStats(
     int filesAdded,
     int filesEdited,
     int filesDeletedCount,
-    double meaningfulChangeScore
+    double meaningfulChangeScore,
+    boolean touchedTests
 ) {
     public int getTotalImpact() {
         return linesAdded + linesDeleted;

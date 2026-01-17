@@ -25,11 +25,19 @@ A table containing (if available in METRICS):
 - Lines added per commit (total_lines_added / total_commits)
 - Tests touched (Yes/No + count if available)
 - Primary areas modified (top directories / file types from METRICS)
+- **Meaningful Score**: (Your LLM-calculated score 0-100)
 
-### 2) Impact & Ownership Analysis
+### 2) Meaningful Score Tag (MANDATORY)
+At the end of this contributor's subsection, you MUST include this exact tag: 
+`[MEANINGFUL_SCORE: Contributor Name=XX/100]`
+Where XX is the score you calculated. This score should take into account commit messages, iterative patterns, and the qualitative nature of the work.
+
+### 3) Impact & Ownership Analysis
 - Explain WHAT areas this contributor worked on (directories + file types).
 - Describe the nature of the work using evidence:
     - features vs refactors vs formatting vs generated outputs
+- MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., "update", "fix").
+- FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files (e.g., changes to CSS-in-JS, styled-components, or large chunks of JSX with classes). If a contributor has significant 'Styling' category metrics, call it out specifically.
 - Explicitly differentiate between:
     - **Meaningful functional changes**
     - **Low-signal changes** (generated artifacts, build outputs, lockfiles, whitespace churn), if indicated by METRICS

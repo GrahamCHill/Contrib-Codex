@@ -15,5 +15,6 @@ public record CommitInfo(
     int filesDeleted,
     int linesAdded,
     int linesDeleted,
-    boolean isMerge
+    boolean isMerge,
+    String branch
 ) {}

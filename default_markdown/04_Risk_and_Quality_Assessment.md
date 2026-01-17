@@ -8,6 +8,7 @@ Use ONLY the contributor names, file paths, commit refs, and numeric values prov
 - IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.
 - Any ranking (highest/lowest risk) MUST be numerically correct. If the METRICS are inconsistent, explicitly flag:
   **"Metrics inconsistency detected"**, then correct the ranking using the numeric values.
+- STRICT RULE: In the 'Tests Touched' column, use 'No' if there is no evidence of test changes in the provided commit details for this contributor. If the 'touchedTests' metric is false, they MUST NOT get a 'Yes' in this column.
 - STRICT DATA STRUCTURE: The Risk Table MUST contain exactly these columns: Contributor, Commits, Lines Added, Lines Added/Commit, Tests Touched, Risk Band, Justification. Do not combine, add, or skip columns.
 
 ## Required Output

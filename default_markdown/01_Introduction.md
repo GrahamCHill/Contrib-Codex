@@ -1,6 +1,8 @@
 # Introduction
 This report provides an exhaustive, technical analysis of the repository’s development history and contributor activity based on the provided GIT METRICS and file change data. The focus is to identify high-value contributions, assess project stability, and evaluate technical risk across the codebase.
 
+This is an **AI Assisted Review**, where AI assists by analyzing git metrics, commit messages, and project structure to provide insights into code quality, contributor impact, and potential risks. It transforms raw data into a structured engineering audit, highlighting patterns that may require further human investigation.
+
 ## Instructions for the LLM (STRICT)
 - Use ONLY repository structure, directory paths, contributor names, and metrics explicitly provided in the METRICS section.
 - Do NOT invent or assume folders, technologies, services, commit IDs, or contributor names that are not present in the METRICS.
@@ -31,3 +33,9 @@ Explain how development effort is distributed across the architecture by:
 - referencing directory-level change concentrations (top directories by commits/LOC if provided)
 - highlighting whether work is primarily backend/frontend/infra/test-heavy
 - describing potential architectural implications (e.g., heavy infra churn vs minimal core logic changes), using metric evidence
+
+### 4) Software Architecture & Design Review
+Analyze the directory structure and file distribution provided in the METRICS.
+- Identify overall design patterns (e.g., MVC, Microservices, Layered, Monolithic) based on folder naming and organization.
+- Comment on the tech stack usage observed (e.g., languages, configuration file types).
+- Assess the long-term maintainability of these choices: Are components well-separated? Is the structure intuitive for onboarding and scaling?

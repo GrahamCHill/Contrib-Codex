@@ -140,7 +140,7 @@ public class GitService {
                     
                     if (isIgnoredFolder(path, ignoredFolders)) continue;
 
-                    String category = categorizePath(path);
+                    String category = categorizePath(path, repository);
                     
                     int ins = 0;
                     int del = 0;
@@ -197,19 +197,46 @@ public class GitService {
     }
 
     private void initializeCategories(Map<String, MeaningfulChangeAnalysis.CategoryMetrics> map) {
-        String[] cats = {"Source Code", "Tests", "Generated/Artifacts", "Lockfiles", "Sourcemaps/Minified", "Config/Data", "Documentation", "Other"};
+        String[] cats = {"Source Code", "Tests", "Styling", "Generated/Artifacts", "Lockfiles", "Sourcemaps/Minified", "Config/Data", "Documentation", "Other"};
         for (String c : cats) map.put(c, new MeaningfulChangeAnalysis.CategoryMetrics(0, 0, 0));
     }
 
     private String categorizePath(String path) {
-        path = path.toLowerCase();
-        if (path.contains("test/") || path.contains("tests/") || path.contains("__tests__") || path.endsWith("test.java") || path.endsWith("spec.js")) return "Tests";
-        if (path.startsWith("src/") || path.startsWith("app/") || path.startsWith("lib/") || path.contains("backend/") || path.contains("frontend/")) return "Source Code";
-        if (path.startsWith("dist/") || path.startsWith("build/") || path.contains(".next/") || path.contains(".nuxt/") || path.contains("coverage/")) return "Generated/Artifacts";
-        if (path.endsWith("package-lock.json") || path.endsWith("yarn.lock") || path.endsWith("pnpm-lock.yaml") || path.endsWith("requirements.txt") || path.endsWith("pom.xml")) return "Lockfiles";
-        if (path.endsWith(".map") || path.endsWith(".min.js") || path.endsWith(".min.css")) return "Sourcemaps/Minified";
-        if (path.endsWith(".json") || path.endsWith(".yml") || path.endsWith(".yaml") || path.endsWith(".toml") || path.endsWith(".xml")) return "Config/Data";
-        if (path.endsWith(".md")) return "Documentation";
+        return categorizePath(path, null);
+    }
+
+    private String categorizePath(String path, Repository repository) {
+        String lowerPath = path.toLowerCase();
+        if (lowerPath.contains("test/") || lowerPath.contains("tests/") || lowerPath.contains("__tests__") || lowerPath.endsWith("test.java") || lowerPath.endsWith("spec.js")) return "Tests";
+        if (lowerPath.endsWith(".css") || lowerPath.endsWith(".scss") || lowerPath.endsWith(".sass") || lowerPath.endsWith(".less")) return "Styling";
+        
+        if (lowerPath.startsWith("src/") || lowerPath.startsWith("app/") || lowerPath.startsWith("lib/") || lowerPath.contains("backend/") || lowerPath.contains("frontend/")) {
+            if (lowerPath.endsWith(".vue") || lowerPath.endsWith(".jsx") || lowerPath.endsWith(".tsx")) {
+                if (repository != null) {
+                    // Try to see if it's mostly styling
+                    try {
+                        byte[] data = repository.open(repository.resolve("HEAD:" + path)).getBytes();
+                        String content = new String(data);
+                        if (content.contains("<style") || content.contains("styled-components") || content.contains("className=")) {
+                             // This is still a bit weak, but it's "seeing into" the file.
+                             // Let's count it as styling if it has a lot of style related tags and is in a frontend dir.
+                             if (content.split("<style").length > 1 || content.split("className=").length > 5) {
+                                 // Simple heuristic: many classes or a style block
+                                 return "Styling";
+                             }
+                        }
+                    } catch (Exception e) {
+                        // ignore and fallback
+                    }
+                }
+            }
+            return "Source Code";
+        }
+        if (lowerPath.startsWith("dist/") || lowerPath.startsWith("build/") || lowerPath.contains(".next/") || lowerPath.contains(".nuxt/") || lowerPath.contains("coverage/")) return "Generated/Artifacts";
+        if (lowerPath.endsWith("package-lock.json") || lowerPath.endsWith("yarn.lock") || lowerPath.endsWith("pnpm-lock.yaml") || lowerPath.endsWith("requirements.txt") || lowerPath.endsWith("pom.xml")) return "Lockfiles";
+        if (lowerPath.endsWith(".map") || lowerPath.endsWith(".min.js") || lowerPath.endsWith(".min.css")) return "Sourcemaps/Minified";
+        if (lowerPath.endsWith(".json") || lowerPath.endsWith(".yml") || lowerPath.endsWith(".yaml") || lowerPath.endsWith(".toml") || lowerPath.endsWith(".xml")) return "Config/Data";
+        if (lowerPath.endsWith(".md")) return "Documentation";
         return "Other";
     }
 
@@ -239,12 +266,14 @@ public class GitService {
         if (totalIns == 0) return 100.0;
         MeaningfulChangeAnalysis.CategoryMetrics src = map.get("Source Code");
         MeaningfulChangeAnalysis.CategoryMetrics test = map.get("Tests");
+        MeaningfulChangeAnalysis.CategoryMetrics style = map.get("Styling");
         
         double srcWeight = (double)src.insertions() / totalIns;
         double testWeight = (double)test.insertions() / totalIns;
+        double styleWeight = style != null ? (double)style.insertions() / totalIns : 0;
         
-        // Very basic heuristic
-        double score = (srcWeight * 70) + (testWeight * 30);
+        // Very basic heuristic: tests are highly valued, styling is slightly less valued than logic but still meaningful
+        double score = (srcWeight * 60) + (testWeight * 30) + (styleWeight * 10);
         return Math.min(100.0, score);
     }
 
@@ -287,8 +316,38 @@ public class GitService {
                 int linesDeletedBefore = builder.linesDeleted;
 
                 RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
-                analyzeDiff(repository, parent, commit, builder, ignoredExtensions, ignoredFolders, null);
                 
+                // For merge commits, we don't want to attribute all the merged LOC to the person who clicked merge
+                // because it skews the "lines added per commit" metric significantly.
+                // We still want to see what was touched for context, but LOC should be handled carefully.
+                // However, we DO want to see what was actually changed IN the merge itself (like conflict resolution).
+                // Diffing a merge against its FIRST parent (the branch it was merged INTO) usually shows all 
+                // changes brought in by the other branch. This is what we want to avoid for contributor stats.
+                if (!isMerge) {
+                    analyzeDiff(repository, parent, commit, builder, ignoredExtensions, ignoredFolders, null);
+                } else {
+                    // For merge commits, we don't add the LOC to their total to avoid skewing.
+                }
+                
+                // Risk assessment for tests: Check if any file changed by this contributor was a test
+                boolean touchedTests = false;
+                try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+                    df.setRepository(repository);
+                    List<DiffEntry> diffs = df.scan(parent != null ? parent.getTree() : null, commit.getTree());
+                    for (DiffEntry entry : diffs) {
+                        String path = entry.getNewPath() != null ? entry.getNewPath() : entry.getOldPath();
+                        if ("Tests".equals(categorizePath(path))) {
+                            touchedTests = true;
+                            break;
+                        }
+                    }
+                } catch (IOException e) {
+                    // ignore
+                }
+                if (touchedTests) {
+                    builder.touchedTests = true;
+                }
+
                 int linesAdded = builder.linesAdded - linesAddedBefore;
                 int linesDeleted = builder.linesDeleted - linesDeletedBefore;
                 
@@ -476,12 +535,24 @@ public class GitService {
     public List<CommitInfo> getLastCommits(File repoPath, int limit, Map<String, String> aliases) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
-            var logCommand = git.log();
+            var logCommand = git.log().all(); // Use .all() to include branch commits
             if (limit > 0) {
                 logCommand.setMaxCount(limit);
             }
             Iterable<RevCommit> commits = logCommand.call();
             List<CommitInfo> result = new ArrayList<>();
+
+            // Pre-calculate branch mappings
+            Map<ObjectId, String> commitToBranch = new HashMap<>();
+            List<org.eclipse.jgit.lib.Ref> branches = git.branchList().setListMode(org.eclipse.jgit.api.ListBranchCommand.ListMode.ALL).call();
+            for (org.eclipse.jgit.lib.Ref branch : branches) {
+                String branchName = repository.shortenRemoteBranchName(branch.getName());
+                Iterable<RevCommit> branchCommits = git.log().add(branch.getObjectId()).call();
+                for (RevCommit branchCommit : branchCommits) {
+                    commitToBranch.merge(branchCommit.getId(), branchName, (old, val) -> old.contains(val) ? old : old + ", " + val);
+                }
+            }
+
             for (RevCommit commit : commits) {
                 Map<String, Integer> languages = new HashMap<>();
                 int linesAdded = 0;
@@ -497,7 +568,22 @@ public class GitService {
                 RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
                 try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
                     df.setRepository(repository);
-                    List<DiffEntry> diffs = parent != null ? df.scan(parent.getTree(), commit.getTree()) : df.scan(null, commit.getTree());
+                    
+                    List<DiffEntry> diffs;
+                    if (commit.getParentCount() > 1) {
+                        // For merge commits, we only want to show what changed in the merge itself (e.g. conflicts)
+                        // This is achieved by comparing against all parents (combined diff) 
+                        // but a simple way to show just the merge-specific changes is harder in JGit.
+                        // Standard practice for 'what's in the merge' is comparing against FIRST parent,
+                        // which shows everything from the merged branch.
+                        // If we want to include branch commits as regular commits, 
+                        // then we should probably let the merge commit only show conflict resolutions if possible.
+                        // For now, comparing to parent(0) is what we had, which shows all branch changes.
+                        diffs = df.scan(parent.getTree(), commit.getTree());
+                    } else {
+                        diffs = parent != null ? df.scan(parent.getTree(), commit.getTree()) : df.scan(null, commit.getTree());
+                    }
+                    
                     for (DiffEntry entry : diffs) {
                         String path = entry.getNewPath() != null ? entry.getNewPath() : entry.getOldPath();
                         if (path != null) {
@@ -535,7 +621,8 @@ public class GitService {
                         fDeleted,
                         linesAdded,
                         linesDeleted,
-                        commit.getParentCount() > 1
+                        commit.getParentCount() > 1,
+                        commitToBranch.getOrDefault(commit.getId(), "unknown")
                 ));
             }
             return result;
@@ -601,7 +688,8 @@ public class GitService {
                         fDeleted,
                         linesAdded,
                         linesDeleted,
-                        initial.getParentCount() > 1
+                        initial.getParentCount() > 1,
+                        "main"
                 );
             }
             return null;
@@ -621,6 +709,7 @@ public class GitService {
         int filesAdded;
         int filesEdited;
         int filesDeleted;
+        boolean touchedTests;
 
         StatsBuilder(String name, String email, String gender) {
             this.name = name;
@@ -629,7 +718,7 @@ public class GitService {
         }
 
         ContributorStats build(double meaningfulChangeScore) {
-            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore);
+            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore, touchedTests);
         }
     }
 }

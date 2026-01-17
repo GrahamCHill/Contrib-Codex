@@ -107,7 +107,7 @@ public class ExportService {
         }
 
         if (aiReport != null) {
-            addIndexRow(indexTable, "AI Generated Review", "ai_review", currentPage, normalFont);
+            addIndexRow(indexTable, "AI Assisted Review", "ai_review", currentPage, normalFont);
             // AI review can be multi-page, estimate pages based on lines
             int aiPages = Math.max(1, aiReport.split("\n").length / 40);
             currentPage += aiPages;
@@ -155,20 +155,29 @@ public class ExportService {
         document.add(spacing);
         
 
-        // AI Generated Review Section
+        // AI Assisted Review Section
         if (aiReport != null && !aiReport.isEmpty()) {
             document.newPage(); // Start AI Review on a new page
-            Paragraph aiTitle = new Paragraph("AI Generated Review", sectionFont);
+            Paragraph aiTitle = new Paragraph("AI Assisted Review", sectionFont);
             Anchor aiAnchor = new Anchor(aiTitle);
             aiAnchor.setName("ai_review");
             aiTitle.setSpacingBefore(15f);
             document.add(aiAnchor);
+
+            Paragraph aiExplanation = new Paragraph("This section contains an AI assisted review of the project. " +
+                    "The AI assists by analyzing git metrics, commit messages, and project structure to provide insights into code quality, " +
+                    "contributor impact, and potential risks. It transforms raw data into a structured engineering audit, " +
+                    "highlighting patterns that may require further human investigation.", smallFont);
+            aiExplanation.setSpacingAfter(10f);
+            document.add(aiExplanation);
             
             String[] lines = aiReport.split("\n");
             StringBuilder currentText = new StringBuilder();
             
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i].trim();
+                // Replace literal \t with spaces for PDF rendering if it survived
+                line = line.replace("\t", "    ");
                 if (line.isEmpty()) {
                     if (currentText.length() > 0) {
                         Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
@@ -246,6 +255,41 @@ public class ExportService {
                     bold.setSpacingBefore(5f);
                     bold.setSpacingAfter(5f);
                     document.add(bold);
+                } else if (line.matches("^\\d+\\.\\s+.*")) {
+                    if (currentText.length() > 0) {
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
+                        currentText = new StringBuilder();
+                    }
+                    // Extract the text after "1. "
+                    String listItemText = line.replaceAll("^\\d+\\.\\s+", "");
+                    Paragraph listItem = processInlineFormatting(listItemText, normalFont);
+                    listItem.setIndentationLeft(20f);
+                    listItem.setSpacingAfter(2f);
+                    // Add a bullet or keep the number? User said "1. some text and 2. some text".
+                    // Let's keep the number if it matches the pattern exactly.
+                    Paragraph numberedItem = new Paragraph();
+                    String number = line.substring(0, line.indexOf(".") + 1);
+                    numberedItem.add(new Chunk(number + " ", new Font(normalFont.getFamily(), normalFont.getSize(), Font.BOLD)));
+                    numberedItem.add(processInlineFormatting(listItemText, normalFont));
+                    numberedItem.setIndentationLeft(20f);
+                    numberedItem.setSpacingAfter(2f);
+                    document.add(numberedItem);
+                } else if (line.startsWith("- ")) {
+                    if (currentText.length() > 0) {
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
+                        currentText = new StringBuilder();
+                    }
+                    String listItemText = line.substring(2).trim();
+                    Paragraph bulletItem = new Paragraph();
+                    bulletItem.add(new Chunk("• ", new Font(normalFont.getFamily(), normalFont.getSize(), Font.BOLD)));
+                    bulletItem.add(processInlineFormatting(listItemText, normalFont));
+                    bulletItem.setIndentationLeft(20f);
+                    bulletItem.setSpacingAfter(2f);
+                    document.add(bulletItem);
                 } else if (line.startsWith("|")) {
                     if (currentText.length() > 0) {
                         Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
@@ -299,9 +343,9 @@ public class ExportService {
 
             Paragraph mcExplanation = new Paragraph("The Meaningful Change Score is a heuristic metric used to evaluate the quality and impact of code changes. " +
                     "For the repository as a whole, it is calculated based on the proportion of 'Source Code' (70%) and 'Tests' (30%) relative to total insertions, " +
-                    "filtering out non-meaningful changes like generated artifacts, lockfiles, and documentation. " +
-                    "For individual contributors, the score also considers iterative development patterns (bonus for smaller, more frequent commits), " +
-                    "testing activity (bonus for modifying more files than commits), and potential alignment with stated project requirements.", normalFont);
+                    "filtering out non-meaningful changes. " +
+                    "For individual contributors, the score is either calculated via heuristic patterns or, in this report, refined by AI to account for commit message quality, " +
+                    "iterative development, and qualitative impact.", normalFont);
             mcExplanation.setSpacingAfter(15f);
             document.add(mcExplanation);
 
@@ -323,6 +367,13 @@ public class ExportService {
                 }
             });
             document.add(catTable);
+
+            // Add overall repository score explanation if AI assisted
+            if (aiReport != null && !aiReport.isEmpty()) {
+                Paragraph aiScoreNote = new Paragraph("Note: Contributor-specific meaningful scores shown in the tables below are generated by AI, taking into account commit message quality and development patterns.", smallFont);
+                aiScoreNote.setSpacingAfter(10f);
+                document.add(aiScoreNote);
+            }
 
             document.add(new Paragraph("Top Changed Files (by LOC):", normalFont));
             PdfPTable fileTable = new PdfPTable(4);
@@ -505,12 +556,13 @@ public class ExportService {
             document.add(commitAnchor);
             document.add(spacing);
 
-            PdfPTable commitTable = new PdfPTable(4);
+            PdfPTable commitTable = new PdfPTable(5);
             commitTable.setWidthPercentage(100);
             commitTable.setSpacingBefore(5f);
-            commitTable.setWidths(new float[]{1, 2, 4, 3});
+            commitTable.setWidths(new float[]{1, 2, 2, 4, 3});
             
             commitTable.addCell("Date");
+            commitTable.addCell("Branch");
             commitTable.addCell("Author");
             commitTable.addCell("Message");
             commitTable.addCell("Files Changed");
@@ -521,6 +573,8 @@ public class ExportService {
                 String dateStr = ci.timestamp().format(dtf);
                 commitTable.addCell(new Phrase(dateStr, smallFont));
                 
+                commitTable.addCell(new Phrase(ci.branch(), smallFont));
+
                 String authorName = ci.authorName();
                 if (authorName.contains("<") && authorName.contains(">")) {
                     authorName = authorName.substring(0, authorName.indexOf("<")).trim();
@@ -597,7 +651,8 @@ public class ExportService {
                     if (logoFile.exists()) {
                         Image logo = Image.getInstance(logoPath);
                         logo.scaleToFit(500, 20); // Max width 500, height 20
-                        logo.setAbsolutePosition(pageSize.getRight() - document.rightMargin() - logo.getScaledWidth() + 10, pageSize.getTop() - 16 - 20);
+                        // Shifted slightly more right by using a small positive offset to the calculation or just moving it
+                        logo.setAbsolutePosition(pageSize.getRight() - document.rightMargin() - logo.getScaledWidth() + 15, pageSize.getTop() - 16 - 20);
                         cb.addImage(logo);
                     }
                 } catch (Exception e) {
@@ -650,7 +705,9 @@ public class ExportService {
         java.util.Map<String, Integer> oLangs = new java.util.HashMap<>();
         others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful));
+        boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
+
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests));
         return top;
     }
 
