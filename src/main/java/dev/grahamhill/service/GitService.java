@@ -328,6 +328,13 @@ public class GitService {
 
                 if (path != null && !path.equals(DiffEntry.DEV_NULL)) {
                     if (isIgnoredFolder(path, ignoredFolders)) continue;
+                    
+                    // Explicitly ignore lockfiles
+                    String lowerPath = path.toLowerCase();
+                    if (lowerPath.contains("package-lock.json") || lowerPath.contains("yarn.lock") || lowerPath.contains("pnpm-lock.yaml")) {
+                        continue;
+                    }
+
                     String ext = "";
                     int lastDot = path.lastIndexOf('.');
                     if (lastDot > 0) {

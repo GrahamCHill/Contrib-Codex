@@ -88,7 +88,7 @@ public class MainApp extends Application {
         commitLimitSpinner.setEditable(true);
         tableLimitSpinner = new Spinner<>(1, 100, 20);
         tableLimitSpinner.setEditable(true);
-        ignoredExtensionsField = new TextField("json,csv,lock,txt");
+        ignoredExtensionsField = new TextField("json,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml");
         ignoredFoldersField = new TextField("node_modules,target,build,dist,.git");
         mdFolderPathField = new TextField();
         requiredFeaturesPathField = new TextField();
@@ -275,17 +275,17 @@ public class MainApp extends Application {
 
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
-        commitPieChart.setMinWidth(600);
-        commitPieChart.setPrefWidth(800);
+        commitPieChart.setMinWidth(810); // +35% of 600
+        commitPieChart.setPrefWidth(1080); // +35% of 800
         commitPieChart.setLegendVisible(false); // Labels on graph instead
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         impactBarChart = new StackedBarChart<>(xAxis, yAxis);
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
-        impactBarChart.setMinWidth(1600);
-        impactBarChart.setPrefWidth(2000);
-        impactBarChart.setMinHeight(1000); // Taller chart
+        impactBarChart.setMinWidth(1260); // -10% of 1400
+        impactBarChart.setPrefWidth(1620); // -10% of 1800
+        impactBarChart.setMinHeight(900); // -10% of 1000
         impactBarChart.setCategoryGap(20);
         impactBarChart.setLegendSide(javafx.geometry.Side.RIGHT);
         xAxis.setLabel("Contributor");
@@ -296,9 +296,9 @@ public class MainApp extends Application {
         NumberAxis lyAxis = new NumberAxis();
         activityLineChart = new LineChart<>(lxAxis, lyAxis);
         activityLineChart.setTitle("Recent Commit Activity");
-        activityLineChart.setMinWidth(1600);
-        activityLineChart.setPrefWidth(2000);
-        activityLineChart.setMinHeight(1000); // Taller chart
+        activityLineChart.setMinWidth(1260);
+        activityLineChart.setPrefWidth(1620);
+        activityLineChart.setMinHeight(900);
         activityLineChart.setLegendSide(javafx.geometry.Side.RIGHT);
         lxAxis.setLabel("Commit ID");
         lxAxis.setTickLabelRotation(45); // Prevent overlap
@@ -308,9 +308,9 @@ public class MainApp extends Application {
         NumberAxis cyAxis = new NumberAxis();
         calendarActivityChart = new LineChart<>(cxAxis, cyAxis);
         calendarActivityChart.setTitle("Daily Activity (Total Impact)");
-        calendarActivityChart.setMinWidth(1600);
-        calendarActivityChart.setPrefWidth(2000);
-        calendarActivityChart.setMinHeight(1000); // Taller chart
+        calendarActivityChart.setMinWidth(1260);
+        calendarActivityChart.setPrefWidth(1620);
+        calendarActivityChart.setMinHeight(900);
         calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
         cxAxis.setLabel("Date");
         cxAxis.setTickLabelRotation(45); // Prevent overlap
@@ -320,9 +320,9 @@ public class MainApp extends Application {
         NumberAxis cayAxis = new NumberAxis();
         contributorActivityChart = new LineChart<>(caxAxis, cayAxis);
         contributorActivityChart.setTitle("Daily Activity per Contributor");
-        contributorActivityChart.setMinWidth(1600);
-        contributorActivityChart.setPrefWidth(2000);
-        contributorActivityChart.setMinHeight(1000); // Taller chart
+        contributorActivityChart.setMinWidth(1260);
+        contributorActivityChart.setPrefWidth(1620);
+        contributorActivityChart.setMinHeight(900);
         contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
         caxAxis.setLabel("Date");
         caxAxis.setTickLabelRotation(45);
@@ -332,34 +332,21 @@ public class MainApp extends Application {
         NumberAxis cpdYAxis = new NumberAxis();
         commitsPerDayChart = new LineChart<>(cpdXAxis, cpdYAxis);
         commitsPerDayChart.setTitle("Commits per Day");
-        commitsPerDayChart.setMinWidth(1600);
-        commitsPerDayChart.setPrefWidth(2000);
-        commitsPerDayChart.setMinHeight(1000);
+        commitsPerDayChart.setMinWidth(1260);
+        commitsPerDayChart.setPrefWidth(1620);
+        commitsPerDayChart.setMinHeight(900);
         commitsPerDayChart.setLegendSide(javafx.geometry.Side.RIGHT);
         cpdXAxis.setLabel("Date");
         cpdXAxis.setTickLabelRotation(45);
         cpdYAxis.setLabel("Commit Count");
 
-        CategoryAxis cpdpXAxis = new CategoryAxis();
-        NumberAxis cpdpYAxis = new NumberAxis();
-        cpdPerContributorChart = new LineChart<>(cpdpXAxis, cpdpYAxis);
-        cpdPerContributorChart.setTitle("Commits per Day per Contributor");
-        cpdPerContributorChart.setMinWidth(1600);
-        cpdPerContributorChart.setPrefWidth(2000);
-        cpdPerContributorChart.setMinHeight(1000);
-        cpdPerContributorChart.setLegendSide(javafx.geometry.Side.RIGHT);
-        cpdpXAxis.setLabel("Date");
-        cpdpXAxis.setTickLabelRotation(45);
-        cpdpYAxis.setLabel("Commit Count");
-
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart, cpdPerContributorChart);
+        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(commitsPerDayChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(cpdPerContributorChart, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsScrollPane);
 
         statsTabPane.getTabs().addAll(statsTab, visualsTab);
@@ -381,18 +368,21 @@ public class MainApp extends Application {
         systemPromptArea = new TextArea("You are a senior software engineer and code auditor. Analyze git metrics and provide a professional technical report.\n" +
                 "Be extremely verbose and provide exhaustive analyses and feedback on the repos. Use tables and sections to organize information.\n" +
                 "For each contributor, provide a detailed breakdown of their impact, code quality patterns, and specific areas of contribution.\n" +
+                "STRICT RULE: Use ONLY the contributor names and data provided in the METRICS section. Do NOT hallucinate names, metrics, or commit IDs.\n" +
                 "Avoid repetition and ensure you do not hallucinate names or metrics. Use only the provided data.\n" +
                 "CRITICAL RISK SCALE (Lines Added per Commit):\n" +
                 "- 1500+: VERY HIGH; 1000-1500: HIGH; 750-1000: MED-HIGH; 500-750: MED; 250-500: LOW-MED; <250: LOW (Healthy).\n" +
-                "RULE: Higher lines added per commit = HIGHER RISK. Divide Total Lines Added by Total Commits.\n" +
+                "RULE: Higher lines added per commit = HIGHER RISK. Divide Total Lines Added by Total Commits. Do NOT use lines in a file as risk.\n" +
                 "FACTOR: Presence of tests (files in 'test' folders) SHOULD REDUCE the risk score as it shows better quality assurance.\n" +
                 "NOTE: Initial setup commits have lower risk. Use 'Gender' field for pronouns.\n" +
+                "NOTE: If you provide a commit ref or tag, you MUST state who the authors of said commit are.\n" +
                 "Identify the most valuable contributor based on iterative development and quality.");
         systemPromptArea.setPrefHeight(60);
         userPromptArea = new TextArea("Summarize team performance and identify key contributors. " +
                 "Provide an exhaustive and verbose feedback with detailed tables and sections for deep analysis. " +
                 "Explain the reasoning behind the risk assessments in detail. " +
                 "Calculate 'Lines Added per Commit' for risk. Use the defined scale and adjust for presence of tests. " +
+                "STRICT RULE: Use ONLY provided contributor names. Do NOT invent names. " +
                 "Professional report format. Consider language context and project phase. " +
                 "Follow Markdown sections and requirements as directives. " +
                 "Do NOT repeat yourself across sections. " +
@@ -569,7 +559,7 @@ public class MainApp extends Application {
         repoPathField.setText(prefs.get("repoPath", ""));
         commitLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("commitLimit", "10")));
         tableLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("tableLimit", "20")));
-        ignoredExtensionsField.setText(prefs.get("ignoredExtensions", "json,csv,lock,txt"));
+        ignoredExtensionsField.setText(prefs.get("ignoredExtensions", "json,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml"));
         ignoredFoldersField.setText(prefs.get("ignoredFolders", "node_modules,target,build,dist,.git"));
 
         // Load global settings from database
@@ -920,6 +910,7 @@ public class MainApp extends Application {
                                 .replace("\\n", "\n")
                                 .replace("\\\"", "\"")
                                 .replace("\\\\", "\\")
+                                .replace("\\u0026", "&")
                                 .replace("\\u003c", "<")
                                 .replace("\\u003e", ">");
                     }
@@ -1037,6 +1028,7 @@ public class MainApp extends Application {
                 "INSTRUCTIONS FOR AI:\n" +
                 "- Explain the 'Lines Added per Commit' risk scoring system (1500+ VERY HIGH to <250 LOW).\n" +
                 "- Describe how the presence of tests (files in 'test' directories) mitigates risk scores.\n" +
+                "- Explicitly state that risk is based on average lines added per commit, not lines in a single file.\n" +
                 "- Detail the 'Meaningful Change' detection logic which filters out boilerplate and automated code generation.");
 
             java.nio.file.Files.writeString(new File(folder, "03_Contributor_Deep_Dive.md").toPath(), 
@@ -1351,20 +1343,44 @@ public class MainApp extends Application {
             commitsPerDayChart.getData().clear();
             commitsPerDayChart.setAnimated(false);
             if (recentCommits != null && !recentCommits.isEmpty()) {
-                XYChart.Series<String, Number> cpdSeries = new XYChart.Series<>();
-                cpdSeries.setName("Daily Commits");
+                XYChart.Series<String, Number> totalCpdSeries = new XYChart.Series<>();
+                totalCpdSeries.setName("Total Commits");
 
                 // TreeMap keeps it chronological by LocalDate
-                Map<java.time.LocalDate, Integer> dailyCommits = new TreeMap<>();
+                Map<java.time.LocalDate, Integer> dailyTotalCommits = new TreeMap<>();
                 for (CommitInfo ci : recentCommits) {
                     java.time.LocalDate date = ci.timestamp().toLocalDate();
-                    dailyCommits.merge(date, 1, Integer::sum);
+                    dailyTotalCommits.merge(date, 1, Integer::sum);
                 }
 
-                for (Map.Entry<java.time.LocalDate, Integer> entry : dailyCommits.entrySet()) {
-                    cpdSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
+                for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
+                    totalCpdSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
                 }
-                commitsPerDayChart.getData().add(cpdSeries);
+                commitsPerDayChart.getData().add(totalCpdSeries);
+
+                // Add per-contributor overlay (top 5)
+                Map<java.time.LocalDate, Map<String, Integer>> dailyCommitsPerAuthor = new TreeMap<>();
+                Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
+
+                for (CommitInfo ci : recentCommits) {
+                    String author = ci.authorName();
+                    if (!topAuthorNames.contains(author)) continue;
+                    java.time.LocalDate date = ci.timestamp().toLocalDate();
+                    dailyCommitsPerAuthor.computeIfAbsent(date, k -> new HashMap<>()).merge(author, 1, Integer::sum);
+                }
+
+                for (String author : topAuthorNames) {
+                    XYChart.Series<String, Number> series = new XYChart.Series<>();
+                    series.setName(author);
+                    for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
+                        java.time.LocalDate date = entry.getKey();
+                        int count = dailyCommitsPerAuthor.getOrDefault(date, Collections.emptyMap()).getOrDefault(author, 0);
+                        if (count > 0) {
+                            series.getData().add(new XYChart.Data<>(date.toString(), count));
+                        }
+                    }
+                    commitsPerDayChart.getData().add(series);
+                }
             }
 
             updateContributorActivityChart(stats, recentCommits);
@@ -1386,7 +1402,6 @@ public class MainApp extends Application {
             calendarActivityChart.setLegendVisible(true);
             contributorActivityChart.setLegendVisible(true);
             commitsPerDayChart.setLegendVisible(true);
-            cpdPerContributorChart.setLegendVisible(true);
 
             // Set legend side to RIGHT for all except pie
             impactBarChart.setLegendSide(javafx.geometry.Side.RIGHT);
@@ -1394,7 +1409,6 @@ public class MainApp extends Application {
             calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
             contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
             commitsPerDayChart.setLegendSide(javafx.geometry.Side.RIGHT);
-            cpdPerContributorChart.setLegendSide(javafx.geometry.Side.RIGHT);
                 
                 // Increase legend spacing/size if possible or ensure it has enough room
                 // In JavaFX, Legend is a skin property, hard to access directly easily, 
@@ -1406,7 +1420,6 @@ public class MainApp extends Application {
                 calendarActivityChart.requestLayout();
                 contributorActivityChart.requestLayout();
                 commitsPerDayChart.requestLayout();
-                cpdPerContributorChart.requestLayout();
 
                 commitPieChart.requestLayout();
             });
@@ -1419,41 +1432,41 @@ public class MainApp extends Application {
         if (recentCommits == null || recentCommits.isEmpty()) return;
 
         // TreeMap keeps it chronological by LocalDate
+        Map<java.time.LocalDate, Integer> dailyTotalImpact = new TreeMap<>();
         Map<java.time.LocalDate, Map<String, Integer>> dailyImpactPerAuthor = new TreeMap<>();
         Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
 
         for (CommitInfo ci : recentCommits) {
-            String author = ci.authorName();
-            if (!topAuthorNames.contains(author)) continue;
-            
             java.time.LocalDate date = ci.timestamp().toLocalDate();
-            dailyImpactPerAuthor.computeIfAbsent(date, k -> new HashMap<>())
-                                .merge(author, ci.linesAdded(), Integer::sum);
+            dailyTotalImpact.merge(date, ci.linesAdded(), Integer::sum);
+            
+            String author = ci.authorName();
+            if (topAuthorNames.contains(author)) {
+                dailyImpactPerAuthor.computeIfAbsent(date, k -> new HashMap<>())
+                                    .merge(author, ci.linesAdded(), Integer::sum);
+            }
         }
 
+        // Add Total series
+        XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
+        totalSeries.setName("Total Impact");
+        for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalImpact.entrySet()) {
+            totalSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
+        }
+        contributorActivityChart.getData().add(totalSeries);
+
         // Initialize series for each top author
-        Map<String, XYChart.Series<String, Number>> seriesMap = new HashMap<>();
         for (String author : topAuthorNames) {
             XYChart.Series<String, Number> series = new XYChart.Series<>();
             series.setName(author);
-            seriesMap.put(author, series);
-            contributorActivityChart.getData().add(series);
-        }
-
-        // Add data points for all dates in the range for all authors (handling overlap)
-        for (Map.Entry<java.time.LocalDate, Map<String, Integer>> dateEntry : dailyImpactPerAuthor.entrySet()) {
-            String dateStr = dateEntry.getKey().toString();
-            Map<String, Integer> authorImpacts = dateEntry.getValue();
-            
-            for (String author : topAuthorNames) {
-                Integer impact = authorImpacts.getOrDefault(author, 0);
-                // Only add data point if the author had activity on that day to keep lines clean, 
-                // OR add 0 if we want continuous lines. Let's add only active days as per current behavior 
-                // but ensured they share the same X-axis.
+            for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalImpact.entrySet()) {
+                java.time.LocalDate date = entry.getKey();
+                Integer impact = dailyImpactPerAuthor.getOrDefault(date, Collections.emptyMap()).getOrDefault(author, 0);
                 if (impact > 0) {
-                    seriesMap.get(author).getData().add(new XYChart.Data<>(dateStr, impact));
+                    series.getData().add(new XYChart.Data<>(date.toString(), impact));
                 }
             }
+            contributorActivityChart.getData().add(series);
         }
     }
 
@@ -1463,38 +1476,41 @@ public class MainApp extends Application {
         if (recentCommits == null || recentCommits.isEmpty()) return;
 
         // TreeMap keeps it chronological by LocalDate
+        Map<java.time.LocalDate, Integer> dailyTotalCommits = new TreeMap<>();
         Map<java.time.LocalDate, Map<String, Integer>> dailyCommitsPerAuthor = new TreeMap<>();
         Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
 
         for (CommitInfo ci : recentCommits) {
-            String author = ci.authorName();
-            if (!topAuthorNames.contains(author)) continue;
-            
             java.time.LocalDate date = ci.timestamp().toLocalDate();
-            dailyCommitsPerAuthor.computeIfAbsent(date, k -> new HashMap<>())
-                                 .merge(author, 1, Integer::sum);
+            dailyTotalCommits.merge(date, 1, Integer::sum);
+            
+            String author = ci.authorName();
+            if (topAuthorNames.contains(author)) {
+                dailyCommitsPerAuthor.computeIfAbsent(date, k -> new HashMap<>())
+                                     .merge(author, 1, Integer::sum);
+            }
         }
 
+        // Add Total series
+        XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
+        totalSeries.setName("Total Commits");
+        for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
+            totalSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
+        }
+        cpdPerContributorChart.getData().add(totalSeries);
+
         // Initialize series for each top author
-        Map<String, XYChart.Series<String, Number>> seriesMap = new HashMap<>();
         for (String author : topAuthorNames) {
             XYChart.Series<String, Number> series = new XYChart.Series<>();
             series.setName(author);
-            seriesMap.put(author, series);
-            cpdPerContributorChart.getData().add(series);
-        }
-
-        // Add data points for all dates in the range for all authors (handling overlap)
-        for (Map.Entry<java.time.LocalDate, Map<String, Integer>> dateEntry : dailyCommitsPerAuthor.entrySet()) {
-            String dateStr = dateEntry.getKey().toString();
-            Map<String, Integer> authorCounts = dateEntry.getValue();
-            
-            for (String author : topAuthorNames) {
-                Integer count = authorCounts.getOrDefault(author, 0);
+            for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
+                java.time.LocalDate date = entry.getKey();
+                Integer count = dailyCommitsPerAuthor.getOrDefault(date, Collections.emptyMap()).getOrDefault(author, 0);
                 if (count > 0) {
-                    seriesMap.get(author).getData().add(new XYChart.Data<>(dateStr, count));
+                    series.getData().add(new XYChart.Data<>(date.toString(), count));
                 }
             }
+            cpdPerContributorChart.getData().add(series);
         }
     }
 
@@ -1525,7 +1541,6 @@ public class MainApp extends Application {
             File calendarFile = new File("calendar_chart.png");
             File contribFile = new File("contrib_activity.png");
             File cpdFile = new File("commits_per_day.png");
-            File cpdPerContributorFile = new File("cpd_per_contributor.png");
             
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(impactBarChart, barFile);
@@ -1533,7 +1548,6 @@ public class MainApp extends Application {
             saveNodeSnapshot(calendarActivityChart, calendarFile);
             saveNodeSnapshot(contributorActivityChart, contribFile);
             saveNodeSnapshot(commitsPerDayChart, cpdFile);
-            saveNodeSnapshot(cpdPerContributorChart, cpdPerContributorFile);
 
             // Re-take snapshots with much larger dimensions to prevent overlap and ensure high resolution
             // We temporarily increase the size, take snapshot, and restore (though restore is not strictly needed as it is just for export)
@@ -1573,10 +1587,10 @@ public class MainApp extends Application {
                 }
             }
 
-            exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), 
+            exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
                 pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(),
-                cpdPerContributorFile.getAbsolutePath(),
+                null, // cpdPerContributorPath removed
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue());
             
             // Cleanup temp files
@@ -1586,13 +1600,24 @@ public class MainApp extends Application {
             calendarFile.delete();
             contribFile.delete();
             cpdFile.delete();
-            cpdPerContributorFile.delete();
 
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {
             e.printStackTrace();
             Platform.runLater(() -> showAlert("Error", "Export failed: " + e.getMessage()));
         }
+    }
+
+    private Map<String, String> aliasesMap() {
+        Map<String, String> aliases = new HashMap<>();
+        String[] lines = aliasesArea.getText().split("\n");
+        for (String line : lines) {
+            if (line.contains("=")) {
+                String[] parts = line.split("=", 2);
+                aliases.put(parts[0].trim(), parts[1].trim());
+            }
+        }
+        return aliases;
     }
 
     private void saveNodeSnapshot(javafx.scene.Node node, File file) throws Exception {

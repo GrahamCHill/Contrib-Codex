@@ -16,7 +16,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String cpdPerContributorPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String cpdPerContributorPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -146,9 +146,12 @@ public class ExportService {
         addIndexRow(indexTable, "  - Daily Activity - Total Impact (Line Chart)", "chart4", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Daily Activity per Contributor (Line Chart)", "chart5", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Commits per Day (Line Chart)", "chart6", currentPage++, normalFont);
-        addIndexRow(indexTable, "  - Commits per Day per Contributor (Line Chart)", "chart7", currentPage++, normalFont);
         
-        addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage, normalFont);
+        addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage++, normalFont);
+        
+        if (allCommits != null && !allCommits.isEmpty()) {
+            addIndexRow(indexTable, "Complete Commit History", "commits", currentPage, normalFont);
+        }
         
         document.add(indexTable);
         document.newPage();
@@ -209,7 +212,7 @@ public class ExportService {
                 String line = lines[i].trim();
                 if (line.isEmpty()) {
                     if (currentText.length() > 0) {
-                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
                         p.setSpacingAfter(5f);
                         document.add(p);
                         currentText = new StringBuilder();
@@ -219,7 +222,7 @@ public class ExportService {
 
                 if (line.startsWith("# ")) {
                     if (currentText.length() > 0) {
-                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
                         p.setSpacingAfter(5f);
                         document.add(p);
                         currentText = new StringBuilder();
@@ -230,7 +233,7 @@ public class ExportService {
                     document.add(h1Header);
                 } else if (line.startsWith("## ")) {
                     if (currentText.length() > 0) {
-                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
                         p.setSpacingAfter(5f);
                         document.add(p);
                         currentText = new StringBuilder();
@@ -241,7 +244,7 @@ public class ExportService {
                     document.add(h2Header);
                 } else if (line.startsWith("### ")) {
                     if (currentText.length() > 0) {
-                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
                         p.setSpacingAfter(5f);
                         document.add(p);
                         currentText = new StringBuilder();
@@ -250,9 +253,20 @@ public class ExportService {
                     h3Header.setSpacingBefore(10f);
                     h3Header.setSpacingAfter(6f);
                     document.add(h3Header);
+                } else if (line.startsWith("#### ")) {
+                    if (currentText.length() > 0) {
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
+                        currentText = new StringBuilder();
+                    }
+                    Paragraph h4Header = new Paragraph(line.substring(5).trim(), new Font(Font.HELVETICA, 11, Font.BOLD));
+                    h4Header.setSpacingBefore(8f);
+                    h4Header.setSpacingAfter(4f);
+                    document.add(h4Header);
                 } else if (line.startsWith("**") && line.endsWith("**") && line.length() > 4) {
                     if (currentText.length() > 0) {
-                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
                         p.setSpacingAfter(5f);
                         document.add(p);
                         currentText = new StringBuilder();
@@ -263,7 +277,7 @@ public class ExportService {
                     document.add(bold);
                 } else if (line.startsWith("|")) {
                     if (currentText.length() > 0) {
-                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
                         p.setSpacingAfter(5f);
                         document.add(p);
                         currentText = new StringBuilder();
@@ -287,7 +301,7 @@ public class ExportService {
                 }
             }
             if (currentText.length() > 0) {
-                document.add(new Paragraph(currentText.toString(), normalFont));
+                document.add(processInlineFormatting(currentText.toString(), normalFont));
             }
             document.add(spacing);
         }
@@ -369,9 +383,9 @@ public class ExportService {
         document.add(new Paragraph(" ", normalFont));
 
         Image pieImage = Image.getInstance(piePath);
-        pieImage.scaleToFit(800, 500); // Increased size
+        pieImage.scaleToFit(1080, 675); // Scaled Pie Chart +35% (800*1.35, 500*1.35)
         pieImage.setAlignment(Image.MIDDLE);
-        pieImage.setSpacingBefore(-20f); // Move up slightly
+        pieImage.setSpacingBefore(-40f); // Move up slightly more due to size
         document.add(pieImage);
 
         document.newPage();
@@ -379,7 +393,7 @@ public class ExportService {
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
-        barImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
+        barImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
@@ -388,7 +402,7 @@ public class ExportService {
         chartTitle3.setSpacingBefore(15f);
         document.add(chartTitle3);
         Image lineImage = Image.getInstance(linePath);
-        lineImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
+        lineImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         lineImage.setAlignment(Image.MIDDLE);
         document.add(lineImage);
 
@@ -397,7 +411,7 @@ public class ExportService {
         chartTitle4.setSpacingBefore(15f);
         document.add(chartTitle4);
         Image calendarImage = Image.getInstance(calendarPath);
-        calendarImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
+        calendarImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         calendarImage.setAlignment(Image.MIDDLE);
         document.add(calendarImage);
 
@@ -406,7 +420,7 @@ public class ExportService {
         chartTitle5.setSpacingBefore(15f);
         document.add(chartTitle5);
         Image contribImage = Image.getInstance(contribPath);
-        contribImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
+        contribImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         contribImage.setAlignment(Image.MIDDLE);
         document.add(contribImage);
 
@@ -415,7 +429,7 @@ public class ExportService {
         chartTitle6.setSpacingBefore(15f);
         document.add(chartTitle6);
         Image cpdImage = Image.getInstance(cpdPath);
-        cpdImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
+        cpdImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
 
@@ -470,7 +484,76 @@ public class ExportService {
         }
 
         document.add(table);
+
+        // Commit History Table
+        if (allCommits != null && !allCommits.isEmpty()) {
+            document.setPageSize(PageSize.A4.rotate());
+            document.newPage();
+            Paragraph commitTitle = new Paragraph("Complete Commit History:", sectionFont);
+            Anchor commitAnchor = new Anchor(commitTitle);
+            commitAnchor.setName("commits");
+            commitTitle.setSpacingBefore(15f);
+            document.add(commitAnchor);
+            document.add(spacing);
+
+            PdfPTable commitTable = new PdfPTable(4);
+            commitTable.setWidthPercentage(100);
+            commitTable.setSpacingBefore(5f);
+            commitTable.setWidths(new float[]{1, 2, 4, 3});
+            
+            commitTable.addCell("Date");
+            commitTable.addCell("Author");
+            commitTable.addCell("Message");
+            commitTable.addCell("Files Changed");
+
+            java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("EEEE dd MMM yy", java.util.Locale.ENGLISH);
+
+            for (dev.grahamhill.model.CommitInfo ci : allCommits) {
+                String dateStr = ci.timestamp().format(dtf);
+                commitTable.addCell(new Phrase(dateStr, smallFont));
+                commitTable.addCell(new Phrase(ci.authorName(), smallFont));
+                commitTable.addCell(new Phrase(ci.message(), smallFont));
+                
+                String filesStr = String.format("+%d / e%d / -%d", ci.filesAdded(), ci.filesEdited(), ci.filesDeleted());
+                commitTable.addCell(new Phrase(filesStr, smallFont));
+            }
+            document.add(commitTable);
+        }
+
         document.close();
+    }
+
+    private Paragraph processInlineFormatting(String text, Font defaultFont) {
+        Paragraph p = new Paragraph();
+        p.setFont(defaultFont);
+        
+        // Basic parser for **bold**, *italic*, and `code`
+        String regex = "(\\*\\*.*?\\*\\*|\\*.*?\\*|`.*?`)";
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
+        java.util.regex.Matcher matcher = pattern.matcher(text);
+        
+        int lastEnd = 0;
+        while (matcher.find()) {
+            if (matcher.start() > lastEnd) {
+                p.add(new Chunk(text.substring(lastEnd, matcher.start()), defaultFont));
+            }
+            
+            String match = matcher.group();
+            if (match.startsWith("**")) {
+                p.add(new Chunk(match.substring(2, match.length() - 2), new Font(Font.HELVETICA, defaultFont.getSize(), Font.BOLD)));
+            } else if (match.startsWith("*")) {
+                p.add(new Chunk(match.substring(1, match.length() - 1), new Font(Font.HELVETICA, defaultFont.getSize(), Font.ITALIC)));
+            } else if (match.startsWith("`")) {
+                p.add(new Chunk(match.substring(1, match.length() - 1), new Font(Font.COURIER, defaultFont.getSize(), Font.NORMAL, java.awt.Color.DARK_GRAY)));
+            }
+            lastEnd = matcher.end();
+        }
+        
+        if (lastEnd < text.length()) {
+            p.add(new Chunk(text.substring(lastEnd), defaultFont));
+        }
+        
+        return p;
     }
 
     private static class HeaderFooterEvent extends PdfPageEventHelper {
