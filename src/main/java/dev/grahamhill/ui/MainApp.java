@@ -2,6 +2,8 @@ package dev.grahamhill.ui;
 
 import dev.grahamhill.model.CommitInfo;
 import dev.grahamhill.model.ContributorStats;
+import dev.grahamhill.model.MeaningfulChangeAnalysis;
+import dev.grahamhill.model.FileChange;
 import dev.grahamhill.service.DatabaseService;
 import dev.grahamhill.service.ExportService;
 import dev.grahamhill.service.GitService;
@@ -48,10 +50,18 @@ public class MainApp extends Application {
     private BarChart<String, Number> impactBarChart;
 
     private List<ContributorStats> currentStats;
+    private MeaningfulChangeAnalysis currentMeaningfulAnalysis;
 
     private TextArea systemPromptArea;
     private TextArea userPromptArea;
     private TextArea llmResponseArea;
+
+    private String openAiKey = "";
+    private String groqKey = "";
+    private String ollamaUrl = "http://localhost:11434";
+    private String selectedProvider = "OpenAI";
+
+    private CheckBox aiReviewCheckBox;
 
     @Override
     public void start(Stage primaryStage) {
@@ -64,7 +74,19 @@ public class MainApp extends Application {
         primaryStage.setTitle("Git Contributor Metrics");
 
         BorderPane root = new BorderPane();
-        root.setPadding(new Insets(10));
+        
+        // Menu Bar
+        MenuBar menuBar = new MenuBar();
+        Menu settingsMenu = new Menu("Settings");
+        MenuItem apiKeysItem = new MenuItem("API Keys...");
+        apiKeysItem.setOnAction(e -> showApiKeysDialog());
+        settingsMenu.getItems().add(apiKeysItem);
+        menuBar.getMenus().add(settingsMenu);
+        root.setTop(new VBox(menuBar));
+
+        VBox contentBox = new VBox(10);
+        contentBox.setPadding(new Insets(10));
+        root.setCenter(contentBox);
 
         // Top: Repo Selection and Settings
         VBox topBox = new VBox(10);
@@ -78,14 +100,17 @@ public class MainApp extends Application {
         repoBox.getChildren().addAll(new Label("Repo Path:"), repoPathField, browseButton, analyzeButton);
 
         HBox settingsBox = new HBox(10);
-        commitLimitSpinner = new Spinner<>(1, 100, 10);
+        commitLimitSpinner = new Spinner<>(0, 1000, 10);
+        commitLimitSpinner.setEditable(true);
         ignoredExtensionsField = new TextField("json,csv");
         ignoredExtensionsField.setPromptText("e.g. json,csv");
+        aiReviewCheckBox = new CheckBox("Include AI Review in PDF");
         Button exportButton = new Button("Export to PDF");
         exportButton.setOnAction(e -> exportToPdf(primaryStage));
         settingsBox.getChildren().addAll(
                 new Label("Git Tree Commits:"), commitLimitSpinner,
                 new Label("Ignore Extensions:"), ignoredExtensionsField,
+                aiReviewCheckBox,
                 exportButton
         );
 
@@ -96,7 +121,7 @@ public class MainApp extends Application {
         aliasBox.getChildren().addAll(new Label("User Aliases (email=Combined Name):"), aliasesArea);
 
         topBox.getChildren().addAll(repoBox, settingsBox, aliasBox);
-        root.setTop(topBox);
+        contentBox.getChildren().add(topBox);
 
         // SplitPane for Main Content and LLM Panel
         SplitPane mainSplit = new SplitPane();
@@ -123,7 +148,7 @@ public class MainApp extends Application {
         TableColumn<ContributorStats, Integer> fDelCol = new TableColumn<>("Deleted Files");
         fDelCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().filesDeletedCount()).asObject());
 
-        TableColumn<ContributorStats, String> languagesCol = new TableColumn<>("Languages");
+        TableColumn<ContributorStats, String> languagesCol = new TableColumn<>("File Types");
         languagesCol.setCellValueFactory(data -> new SimpleStringProperty(formatLanguages(data.getValue().languageBreakdown())));
         TableColumn<ContributorStats, String> aiCol = new TableColumn<>("AI Prob");
         aiCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f%%", data.getValue().averageAiProbability() * 100)));
@@ -163,20 +188,27 @@ public class MainApp extends Application {
         // LLM Panel
         VBox llmPanel = new VBox(10);
         llmPanel.setPadding(new Insets(10));
-        systemPromptArea = new TextArea("You are a senior software engineer. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns.");
+        systemPromptArea = new TextArea("You are a senior software engineer. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns. Finally, provide a clear conclusion identifying who added the most valuable features to the project and highlight other valuable metrics.");
         systemPromptArea.setPrefHeight(60);
-        userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors.");
+        userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors. Make sure to include a 'Conclusion' section at the end identifying the most valuable contributor.");
         userPromptArea.setPrefHeight(60);
         llmResponseArea = new TextArea();
         llmResponseArea.setEditable(false);
         llmResponseArea.setPromptText("LLM Report will appear here...");
+        
+        HBox llmActionBox = new HBox(10);
+        ComboBox<String> providerCombo = new ComboBox<>(FXCollections.observableArrayList("OpenAI", "Groq", "Ollama"));
+        providerCombo.setValue(selectedProvider);
+        providerCombo.setOnAction(e -> selectedProvider = providerCombo.getValue());
+        
         Button generateLlmReportBtn = new Button("Generate LLM Report");
         generateLlmReportBtn.setOnAction(e -> generateLlmReport());
+        llmActionBox.getChildren().addAll(new Label("Provider:"), providerCombo, generateLlmReportBtn);
 
         llmPanel.getChildren().addAll(
             new Label("System Prompt:"), systemPromptArea,
             new Label("User Prompt:"), userPromptArea,
-            generateLlmReportBtn,
+            llmActionBox,
             new Label("LLM Response:"), llmResponseArea
         );
         VBox.setVgrow(llmResponseArea, javafx.scene.layout.Priority.ALWAYS);
@@ -184,11 +216,46 @@ public class MainApp extends Application {
         mainSplit.getItems().addAll(horizontalSplit, llmPanel);
         mainSplit.setDividerPositions(0.6);
 
-        root.setCenter(mainSplit);
+        contentBox.getChildren().add(mainSplit);
 
         Scene scene = new Scene(root, 1100, 800);
         primaryStage.setScene(scene);
         primaryStage.show();
+    }
+
+    private void showApiKeysDialog() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("API Keys Settings");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField openAiField = new TextField(openAiKey);
+        openAiField.setPromptText("OpenAI API Key");
+        TextField groqField = new TextField(groqKey);
+        groqField.setPromptText("Groq API Key");
+        TextField ollamaField = new TextField(ollamaUrl);
+        ollamaField.setPromptText("Ollama URL (default: http://localhost:11434)");
+
+        grid.add(new Label("OpenAI API Key:"), 0, 0);
+        grid.add(openAiField, 1, 0);
+        grid.add(new Label("Groq API Key:"), 0, 1);
+        grid.add(groqField, 1, 1);
+        grid.add(new Label("Ollama URL:"), 0, 2);
+        grid.add(ollamaField, 1, 2);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                openAiKey = openAiField.getText();
+                groqKey = groqField.getText();
+                ollamaUrl = ollamaField.getText();
+            }
+        });
     }
 
     private void setupStatsTableContextMenu() {
@@ -228,19 +295,142 @@ public class MainApp extends Application {
             return;
         }
 
+        String apiKey;
+        String url;
+        String model;
+
+        if (selectedProvider.equals("OpenAI")) {
+            apiKey = openAiKey;
+            url = "https://api.openai.com/v1/chat/completions";
+            model = "gpt-4o";
+        } else if (selectedProvider.equals("Groq")) {
+            apiKey = groqKey;
+            url = "https://api.groq.com/openai/v1/chat/completions";
+            model = "mixtral-8x7b-32768";
+        } else { // Ollama
+            apiKey = "ollama"; // dummy
+            url = ollamaUrl + "/v1/chat/completions";
+            model = "llama3";
+        }
+
+        if (apiKey.isEmpty() && !selectedProvider.equals("Ollama")) {
+            showAlert("Error", "API Key for " + selectedProvider + " is not set.");
+            return;
+        }
+
         StringBuilder metricsText = new StringBuilder("Git Metrics Data:\n");
         for (ContributorStats s : currentStats) {
             metricsText.append(String.format("- %s (%s): %d commits, +%d/-%d lines, %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
                 s.name(), s.email(), s.commitCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
         }
 
-        llmResponseArea.setText("Generating report (placeholder)...\n\n" +
-            "In a real application, this would send the following to an LLM:\n\n" +
-            "SYSTEM: " + systemPromptArea.getText() + "\n\n" +
-            "USER: " + userPromptArea.getText() + "\n\n" +
-            "DATA: " + metricsText.toString());
-        
-        // You could use an HTTP client here to call OpenAI/Anthropic/etc.
+        if (currentMeaningfulAnalysis != null) {
+            metricsText.append("\nMeaningful Change Analysis:\n");
+            metricsText.append(String.format("- Commit Range: %s\n", currentMeaningfulAnalysis.commitRange()));
+            metricsText.append(String.format("- Total Insertions: %d\n", currentMeaningfulAnalysis.totalInsertions()));
+            metricsText.append(String.format("- Total Deletions: %d\n", currentMeaningfulAnalysis.totalDeletions()));
+            metricsText.append(String.format("- Whitespace Churn: %d\n", currentMeaningfulAnalysis.whitespaceChurn()));
+            metricsText.append(String.format("- Meaningful Change Score: %.1f/100\n", currentMeaningfulAnalysis.meaningfulChangeScore()));
+            metricsText.append(String.format("- Summary: %s\n", currentMeaningfulAnalysis.summary()));
+            
+            metricsText.append("- Category Breakdown:\n");
+            currentMeaningfulAnalysis.categoryBreakdown().forEach((cat, m) -> {
+                if (m.fileCount() > 0) {
+                    metricsText.append(String.format("  * %s: %d files, +%d/-%d lines\n", cat, m.fileCount(), m.insertions(), m.deletions()));
+                }
+            });
+
+            if (!currentMeaningfulAnalysis.warnings().isEmpty()) {
+                metricsText.append("- Warnings:\n");
+                for (String warning : currentMeaningfulAnalysis.warnings()) {
+                    metricsText.append(String.format("  ! %s\n", warning));
+                }
+            }
+            
+            metricsText.append("- Top 10 Changed Files (LOC):\n");
+            currentMeaningfulAnalysis.topChangedFiles().stream().limit(10).forEach(f -> {
+                metricsText.append(String.format("  * %s (+%d/-%d) [%s]\n", f.path(), f.insertions(), f.deletions(), f.category()));
+            });
+        }
+
+        llmResponseArea.setText("Generating report using " + selectedProvider + "...");
+
+        String finalPrompt = "SYSTEM: " + systemPromptArea.getText() + "\n\nUSER: " + userPromptArea.getText() + "\n\nDATA: " + metricsText.toString();
+
+        new Thread(() -> {
+            try {
+                String response = callLlmApi(url, apiKey, model, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + metricsText.toString());
+                Platform.runLater(() -> llmResponseArea.setText(response));
+            } catch (Exception e) {
+                e.printStackTrace();
+                Platform.runLater(() -> llmResponseArea.setText("Error: " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    private String callLlmApi(String apiUrl, String apiKey, String model, String system, String user) throws Exception {
+        java.net.URL url = new java.net.URL(apiUrl);
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        if (!apiKey.equals("ollama")) {
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        }
+        conn.setDoOutput(true);
+
+        String json = String.format("""
+            {
+              "model": "%s",
+              "messages": [
+                {"role": "system", "content": "%s"},
+                {"role": "user", "content": "%s"}
+              ]
+            }
+            """, model, escapeJson(system), escapeJson(user));
+
+        try (java.io.OutputStream os = conn.getOutputStream()) {
+            os.write(json.getBytes());
+        }
+
+        if (conn.getResponseCode() != 200) {
+            try (java.io.InputStream is = conn.getErrorStream()) {
+                if (is == null) return "Error code: " + conn.getResponseCode();
+                return "Error: " + new String(is.readAllBytes());
+            }
+        }
+
+        try (java.io.InputStream is = conn.getInputStream()) {
+            String response = new String(is.readAllBytes());
+            // Improved basic JSON parsing for OpenAI/Groq format
+            int start = response.indexOf("\"content\": \"");
+            if (start != -1) {
+                start += 12;
+                // Find the end of the content string, respecting escaped quotes
+                int end = -1;
+                for (int i = start; i < response.length(); i++) {
+                    if (response.charAt(i) == '\"' && response.charAt(i - 1) != '\\') {
+                        end = i;
+                        break;
+                    }
+                }
+                if (end > start) {
+                    return response.substring(start, end)
+                            .replace("\\n", "\n")
+                            .replace("\\\"", "\"")
+                            .replace("\\\\", "\\");
+                }
+            }
+            return response;
+        }
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
     }
 
     private void browseRepo(Stage stage) {
@@ -277,6 +467,7 @@ public class MainApp extends Application {
         new Thread(() -> {
             try {
                 currentStats = gitService.getContributorStats(repoDir, aliases, ignoredExtensions);
+                currentMeaningfulAnalysis = gitService.performMeaningfulChangeAnalysis(repoDir, commitLimitSpinner.getValue());
                 List<CommitInfo> recentCommits = gitService.getLastCommits(repoDir, commitLimitSpinner.getValue());
                 CommitInfo initial = gitService.getInitialCommit(repoDir);
 
@@ -303,24 +494,34 @@ public class MainApp extends Application {
     }
 
     private void updateCharts(List<ContributorStats> stats) {
-        // Pie Chart
-        List<PieChart.Data> pieData = stats.stream()
-                .map(s -> new PieChart.Data(s.name(), s.commitCount()))
-                .toList();
-        commitPieChart.setData(FXCollections.observableArrayList(pieData));
+        Platform.runLater(() -> {
+            // Pie Chart
+            List<PieChart.Data> pieData = stats.stream()
+                    .map(s -> new PieChart.Data(s.name(), s.commitCount()))
+                    .toList();
+            commitPieChart.setData(FXCollections.observableArrayList(pieData));
 
-        // Bar Chart
-        impactBarChart.getData().clear();
-        XYChart.Series<String, Number> addedSeries = new XYChart.Series<>();
-        addedSeries.setName("Added");
-        XYChart.Series<String, Number> deletedSeries = new XYChart.Series<>();
-        deletedSeries.setName("Deleted");
+            // Bar Chart
+            impactBarChart.getData().clear();
+            XYChart.Series<String, Number> addedSeries = new XYChart.Series<>();
+            addedSeries.setName("Added");
+            XYChart.Series<String, Number> deletedSeries = new XYChart.Series<>();
+            deletedSeries.setName("Deleted");
 
-        for (ContributorStats s : stats) {
-            addedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesAdded()));
-            deletedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesDeleted()));
-        }
-        impactBarChart.getData().addAll(addedSeries, deletedSeries);
+            for (ContributorStats s : stats) {
+                addedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesAdded()));
+                deletedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesDeleted()));
+            }
+            impactBarChart.getData().addAll(addedSeries, deletedSeries);
+
+            // Force layout pass and refresh to ensure charts are rendered correctly
+            Platform.runLater(() -> {
+                commitPieChart.layout();
+                impactBarChart.layout();
+                commitPieChart.requestLayout();
+                impactBarChart.requestLayout();
+            });
+        });
     }
 
     private void exportToPdf(Stage stage) {
@@ -341,7 +542,12 @@ public class MainApp extends Application {
                 saveNodeSnapshot(commitPieChart, pieFile);
                 saveNodeSnapshot(impactBarChart, barFile);
 
-                exportService.exportToPdf(currentStats, file.getAbsolutePath(), pieFile.getAbsolutePath(), barFile.getAbsolutePath());
+                String aiReport = null;
+                if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
+                    aiReport = llmResponseArea.getText();
+                }
+
+                exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport);
                 
                 // Cleanup temp files
                 pieFile.delete();
@@ -364,7 +570,7 @@ public class MainApp extends Application {
         if (languages == null || languages.isEmpty()) return "N/A";
         return languages.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(3)
+                .limit(5)
                 .map(e -> e.getKey() + "(" + e.getValue() + ")")
                 .collect(Collectors.joining(", "));
     }

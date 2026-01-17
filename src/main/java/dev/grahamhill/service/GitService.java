@@ -2,11 +2,14 @@ package dev.grahamhill.service;
 
 import dev.grahamhill.model.CommitInfo;
 import dev.grahamhill.model.ContributorStats;
+import dev.grahamhill.model.FileChange;
+import dev.grahamhill.model.MeaningfulChangeAnalysis;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.diff.Edit;
 import org.eclipse.jgit.diff.RawTextComparator;
+import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
@@ -16,8 +19,165 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class GitService {
+
+    public MeaningfulChangeAnalysis performMeaningfulChangeAnalysis(File repoPath, int limit) throws Exception {
+        try (Git git = Git.open(repoPath)) {
+            Repository repository = git.getRepository();
+            var logCommand = git.log();
+            if (limit > 0) {
+                logCommand.setMaxCount(limit);
+            }
+            List<RevCommit> commits = new ArrayList<>();
+            git.log().all().call().forEach(commits::add);
+            
+            // If limit is set, we only care about the latest N commits
+            if (limit > 0 && commits.size() > limit) {
+                commits = commits.subList(0, limit);
+            }
+
+            if (commits.isEmpty()) return null;
+
+            RevCommit newest = commits.get(0);
+            RevCommit oldest = commits.get(commits.size() - 1);
+            String range = oldest.getName().substring(0, 7) + ".." + newest.getName().substring(0, 7);
+            if (commits.size() == 1) range = newest.getName().substring(0, 7);
+
+            List<FileChange> allFileChanges = new ArrayList<>();
+            int totalIns = 0;
+            int totalDel = 0;
+            int totalWsIns = 0;
+            int totalWsDel = 0;
+
+            // We want to analyze the aggregate change over the range
+            // Compare oldest's parent to newest
+            RevCommit base = oldest.getParentCount() > 0 ? oldest.getParent(0) : null;
+            ObjectId baseTree = base != null ? base.getTree() : null;
+            ObjectId newestTree = newest.getTree();
+
+            Map<String, MeaningfulChangeAnalysis.CategoryMetrics> categoryMap = new HashMap<>();
+            initializeCategories(categoryMap);
+
+            try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE);
+                 DiffFormatter dfWs = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+                df.setRepository(repository);
+                df.setDetectRenames(true);
+                dfWs.setRepository(repository);
+                dfWs.setDiffComparator(RawTextComparator.WS_IGNORE_ALL);
+
+                List<DiffEntry> diffs = df.scan(baseTree, newestTree);
+                for (DiffEntry entry : diffs) {
+                    String path = entry.getNewPath().equals(DiffEntry.DEV_NULL) ? entry.getOldPath() : entry.getNewPath();
+                    String category = categorizePath(path);
+                    
+                    int ins = 0;
+                    int del = 0;
+                    for (Edit edit : df.toFileHeader(entry).toEditList()) {
+                        ins += edit.getEndB() - edit.getBeginB();
+                        del += edit.getEndA() - edit.getBeginA();
+                    }
+
+                    int insWs = 0;
+                    int delWs = 0;
+                    for (Edit edit : dfWs.toFileHeader(entry).toEditList()) {
+                        insWs += edit.getEndB() - edit.getBeginB();
+                        delWs += edit.getEndA() - edit.getBeginA();
+                    }
+
+                    totalIns += ins;
+                    totalDel += del;
+                    // Churn is the difference between normal diff and whitespace-ignored diff
+                    totalWsIns += (ins - insWs);
+                    totalWsDel += (del - delWs);
+
+                    allFileChanges.add(new FileChange(path, ins, del, category, entry.getChangeType().name()));
+                    
+                    MeaningfulChangeAnalysis.CategoryMetrics cm = categoryMap.get(category);
+                    categoryMap.put(category, new MeaningfulChangeAnalysis.CategoryMetrics(
+                        cm.fileCount() + 1, cm.insertions() + ins, cm.deletions() + del));
+                }
+            }
+
+            List<FileChange> top20 = allFileChanges.stream()
+                .sorted(Comparator.comparingInt(FileChange::getTotalChange).reversed())
+                .limit(20)
+                .toList();
+
+            List<String> warnings = generateWarnings(categoryMap, totalIns);
+            double score = calculateMeaningfulScore(categoryMap, totalIns);
+            String summary = generateSummary(range, totalIns, totalDel, categoryMap, warnings);
+
+            return new MeaningfulChangeAnalysis(
+                range, totalIns, totalDel, totalWsIns + totalWsDel,
+                top20, categoryMap, warnings, summary, score
+            );
+        }
+    }
+
+    private void initializeCategories(Map<String, MeaningfulChangeAnalysis.CategoryMetrics> map) {
+        String[] cats = {"Source Code", "Tests", "Generated/Artifacts", "Lockfiles", "Sourcemaps/Minified", "Config/Data", "Other"};
+        for (String c : cats) map.put(c, new MeaningfulChangeAnalysis.CategoryMetrics(0, 0, 0));
+    }
+
+    private String categorizePath(String path) {
+        path = path.toLowerCase();
+        if (path.contains("test/") || path.contains("tests/") || path.contains("__tests__") || path.endsWith("test.java") || path.endsWith("spec.js")) return "Tests";
+        if (path.startsWith("src/") || path.startsWith("app/") || path.startsWith("lib/") || path.contains("backend/") || path.contains("frontend/")) return "Source Code";
+        if (path.startsWith("dist/") || path.startsWith("build/") || path.contains(".next/") || path.contains(".nuxt/") || path.contains("coverage/")) return "Generated/Artifacts";
+        if (path.endsWith("package-lock.json") || path.endsWith("yarn.lock") || path.endsWith("pnpm-lock.yaml")) return "Lockfiles";
+        if (path.endsWith(".map") || path.endsWith(".min.js") || path.endsWith(".min.css")) return "Sourcemaps/Minified";
+        if (path.endsWith(".json") || path.endsWith(".yml") || path.endsWith(".yaml") || path.endsWith(".toml") || path.endsWith(".xml")) return "Config/Data";
+        return "Other";
+    }
+
+    private List<String> generateWarnings(Map<String, MeaningfulChangeAnalysis.CategoryMetrics> map, int totalIns) {
+        List<String> warnings = new ArrayList<>();
+        MeaningfulChangeAnalysis.CategoryMetrics src = map.get("Source Code");
+        MeaningfulChangeAnalysis.CategoryMetrics test = map.get("Tests");
+        MeaningfulChangeAnalysis.CategoryMetrics gen = map.get("Generated/Artifacts");
+        MeaningfulChangeAnalysis.CategoryMetrics lock = map.get("Lockfiles");
+        MeaningfulChangeAnalysis.CategoryMetrics mapMin = map.get("Sourcemaps/Minified");
+
+        if (totalIns > 1000 && src.insertions() < (totalIns * 0.1)) {
+            warnings.add("Huge LOC change but minimal source code changes detected.");
+        }
+        if (src.insertions() > 500 && test.insertions() == 0) {
+            warnings.add("Significant source code changes without accompanying test changes.");
+        }
+        int nonMeaningful = gen.insertions() + lock.insertions() + mapMin.insertions();
+        if (totalIns > 0 && (double)nonMeaningful / totalIns > 0.7) {
+            warnings.add("Majority of changes appear to be generated artifacts, lockfiles, or minified code.");
+        }
+        return warnings;
+    }
+
+    private double calculateMeaningfulScore(Map<String, MeaningfulChangeAnalysis.CategoryMetrics> map, int totalIns) {
+        if (totalIns == 0) return 100.0;
+        MeaningfulChangeAnalysis.CategoryMetrics src = map.get("Source Code");
+        MeaningfulChangeAnalysis.CategoryMetrics test = map.get("Tests");
+        
+        double srcWeight = (double)src.insertions() / totalIns;
+        double testWeight = (double)test.insertions() / totalIns;
+        
+        // Very basic heuristic
+        double score = (srcWeight * 70) + (testWeight * 30);
+        return Math.min(100.0, score);
+    }
+
+    private String generateSummary(String range, int ins, int del, Map<String, MeaningfulChangeAnalysis.CategoryMetrics> map, List<String> warnings) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Analysis for range %s: %d insertions, %d deletions. ", range, ins, del));
+        MeaningfulChangeAnalysis.CategoryMetrics src = map.get("Source Code");
+        sb.append(String.format("Source code accounts for %d lines across %d files. ", src.insertions(), src.fileCount()));
+        if (!warnings.isEmpty()) {
+            sb.append("Notable issues: ").append(String.join("; ", warnings));
+        } else {
+            sb.append("Changes appear generally meaningful.");
+        }
+        return sb.toString();
+    }
 
     public List<ContributorStats> getContributorStats(File repoPath, Map<String, String> aliases, Set<String> ignoredExtensions) throws Exception {
         try (Git git = Git.open(repoPath)) {
@@ -127,6 +287,9 @@ public class GitService {
         // 1. Code bloat: massive additions in a single commit
         // 2. High addition-to-deletion ratio
         // 3. Large number of files changed
+        
+        // Initial commits are usually NOT AI generated in this context, and often large.
+        if (commit.getParentCount() == 0) return 0.0;
         
         double score = 0.0;
         
