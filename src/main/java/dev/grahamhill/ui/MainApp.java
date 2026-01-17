@@ -1008,7 +1008,9 @@ public class MainApp extends Application {
                                        "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
                                        "IMPORTANT: Provide ONLY the content for this section as defined by the instructions. " +
                                        "Do not include information that belongs in other sections. " +
-                                       "Use the provided metrics to inform your analysis for this specific section.";
+                                       "Use the provided metrics to inform your analysis for this specific section.\n" +
+                                       "HEADER NESTING: The application will prepend a top-level header (# " + formattedTitle + ") for this section. " +
+                                       "Ensure all headers in your response use at least TWO hashes (##) so they are correctly nested under the section header.";
                         
                         // No more chunking metrics. Pass full baseMetrics.
                         String fullPrompt = basePrompt + "\n\n" + baseMetrics;
@@ -1065,7 +1067,8 @@ public class MainApp extends Application {
                             }
                         }
                         
-                        sectionResponse = trimmedResponse;
+                        // Shift headers in sectionResponse
+                        sectionResponse = demoteMarkdownHeaders(sectionResponse);
 
                         // Add the section title
                         fullReport.append("# ").append(formattedTitle).append("\n\n");
@@ -1103,6 +1106,20 @@ public class MainApp extends Application {
         // Put a fullstop after the first number that appears
         formatted = formatted.replaceFirst("(\\d+)", "$1.");
         return formatted;
+    }
+
+    private String demoteMarkdownHeaders(String content) {
+        if (content == null || content.isEmpty()) return "";
+        String[] lines = content.split("\n");
+        StringBuilder result = new StringBuilder();
+        for (String line : lines) {
+            if (line.trim().startsWith("#")) {
+                result.append("#").append(line).append("\n");
+            } else {
+                result.append(line).append("\n");
+            }
+        }
+        return result.toString().trim();
     }
 
     private List<String> chunkMetrics(String metrics, int maxLength) {
