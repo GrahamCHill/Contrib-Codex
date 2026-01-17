@@ -16,7 +16,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -38,6 +38,7 @@ public class ExportService {
         Font headerFont = new Font(Font.HELVETICA, 18, Font.BOLD);
         Font sectionFont = new Font(Font.HELVETICA, 14, Font.BOLD);
         Font normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
+        Font smallFont = new Font(Font.HELVETICA, 8, Font.NORMAL);
 
         if (coverHtml != null && !coverHtml.isEmpty()) {
             event.setCoverPage(true);
@@ -66,12 +67,31 @@ public class ExportService {
                         for (String rule : rules) {
                             if (rule.contains("{")) {
                                 String[] kv = rule.split("\\{");
-                                String selector = kv[0].trim().replace(".", ""); // Remove dot for class selectors
+                                String selector = kv[0].trim();
+                                if (selector.startsWith(".")) selector = selector.substring(1); // Remove dot for class selectors
                                 String props = kv[1].trim();
                                 for (String prop : props.split(";")) {
                                     if (prop.contains(":")) {
                                         String[] pk = prop.split(":");
-                                        styles.loadTagStyle(selector, pk[0].trim(), pk[1].trim());
+                                        String key = pk[0].trim();
+                                        String value = pk[1].trim();
+                                        styles.loadTagStyle(selector, key, value);
+                                        
+                                        // If background-color is set for body or html, apply it to the whole page
+                                        if ((selector.equalsIgnoreCase("body") || selector.equalsIgnoreCase("html")) 
+                                            && key.equalsIgnoreCase("background-color")) {
+                                            try {
+                                                java.awt.Color awtColor = java.awt.Color.decode(value);
+                                                com.lowagie.text.pdf.PdfContentByte canvas = writer.getDirectContentUnder();
+                                                canvas.saveState();
+                                                canvas.setColorFill(awtColor);
+                                                canvas.rectangle(0, 0, PageSize.A4.getWidth(), PageSize.A4.getHeight());
+                                                canvas.fill();
+                                                canvas.restoreState();
+                                            } catch (Exception ex) {
+                                                // Ignore invalid colors
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -95,7 +115,26 @@ public class ExportService {
         }
         event.setCoverPage(false);
 
-        document.add(new Paragraph("Git Contributor Metrics Report", headerFont));
+        // Index Page
+        document.add(new Paragraph("Report Index", headerFont));
+        document.add(new Paragraph(" ", normalFont));
+        
+        PdfPTable indexTable = new PdfPTable(2);
+        indexTable.setWidthPercentage(100);
+        indexTable.setWidths(new float[]{4, 1});
+        
+        addIndexRow(indexTable, "Introduction & Purpose", "intro", normalFont);
+        if (aiReport != null) addIndexRow(indexTable, "AI Generated Review", "ai_review", normalFont);
+        if (meaningfulAnalysis != null) addIndexRow(indexTable, "Meaningful Change Detection", "meaningful", normalFont);
+        addIndexRow(indexTable, "Visual Analytics (Charts)", "charts", normalFont);
+        addIndexRow(indexTable, "Detailed Contributor Metrics", "details", normalFont);
+        
+        document.add(indexTable);
+        document.newPage();
+
+        Paragraph introHeader = new Paragraph("Git Contributor Metrics Report", headerFont);
+        introHeader.setLocalDestination("intro");
+        document.add(introHeader);
         
         // Purpose Explanation
         Paragraph explanation = new Paragraph("This report provides a comprehensive analysis of the Git repository's contribution history. " +
@@ -114,42 +153,70 @@ public class ExportService {
         if (aiReport != null && !aiReport.isEmpty()) {
             document.newPage(); // Start AI Review on a new page
             Paragraph aiTitle = new Paragraph("AI Generated Review", sectionFont);
-            aiTitle.setSpacingBefore(15f);
-            document.add(aiTitle);
+        aiTitle.setLocalDestination("ai_review");
+        aiTitle.setSpacingBefore(15f);
+        document.add(aiTitle);
             
-            // Split by Markdown-style headers (e.g. **Header** or # Header)
-            String[] parts = aiReport.split("(?=\n\\*\\*|\\n# )");
-            for (String part : parts) {
-                part = part.trim();
-                if (part.isEmpty()) continue;
-                
-                if (part.startsWith("**") && part.contains("**")) {
-                    int endBold = part.indexOf("**", 2);
-                    if (endBold != -1) {
-                        String subTitle = part.substring(2, endBold);
-                        Paragraph pSub = new Paragraph(subTitle, new Font(Font.HELVETICA, 12, Font.BOLD));
-                        pSub.setSpacingBefore(5f);
-                        document.add(pSub);
-                        String subContent = part.substring(endBold + 2).trim();
-                        if (!subContent.isEmpty()) {
-                            document.add(new Paragraph(subContent, normalFont));
-                        }
-                        continue;
+            String[] lines = aiReport.split("\n");
+            StringBuilder currentText = new StringBuilder();
+            
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i].trim();
+                if (line.isEmpty()) {
+                    if (currentText.length() > 0) {
+                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        currentText = new StringBuilder();
                     }
-                } else if (part.startsWith("#")) {
-                    int contentStart = 0;
-                    while (contentStart < part.length() && part.charAt(contentStart) == '#') contentStart++;
-                    int lineEnd = part.indexOf("\n");
-                    if (lineEnd != -1) {
-                        String subTitle = part.substring(contentStart, lineEnd).trim();
-                        Paragraph pSub = new Paragraph(subTitle, new Font(Font.HELVETICA, 12, Font.BOLD));
-                        pSub.setSpacingBefore(5f);
-                        document.add(pSub);
-                        document.add(new Paragraph(part.substring(lineEnd).trim(), normalFont));
-                        continue;
-                    }
+                    continue;
                 }
-                document.add(new Paragraph(part, normalFont));
+
+                if (line.startsWith("# ")) {
+                    if (currentText.length() > 0) {
+                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        currentText = new StringBuilder();
+                    }
+                    Paragraph h1 = new Paragraph(line.substring(2).trim(), sectionFont);
+                    h1.setSpacingBefore(10f);
+                    document.add(h1);
+                } else if (line.startsWith("## ")) {
+                    if (currentText.length() > 0) {
+                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        currentText = new StringBuilder();
+                    }
+                    Paragraph h2 = new Paragraph(line.substring(3).trim(), new Font(Font.HELVETICA, 12, Font.BOLD));
+                    h2.setSpacingBefore(8f);
+                    document.add(h2);
+                } else if (line.startsWith("**") && line.endsWith("**") && line.length() > 4) {
+                    if (currentText.length() > 0) {
+                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        currentText = new StringBuilder();
+                    }
+                    Paragraph bold = new Paragraph(line.substring(2, line.length() - 2).trim(), new Font(Font.HELVETICA, 11, Font.BOLD));
+                    bold.setSpacingBefore(5f);
+                    document.add(bold);
+                } else if (line.startsWith("|")) {
+                    if (currentText.length() > 0) {
+                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        currentText = new StringBuilder();
+                    }
+                    
+                    // Table detection and processing
+                    java.util.List<String> tableLines = new java.util.ArrayList<>();
+                    while (i < lines.length && lines[i].trim().startsWith("|")) {
+                        tableLines.add(lines[i].trim());
+                        i++;
+                    }
+                    i--; // Step back because outer loop will increment
+                    
+                    if (tableLines.size() >= 2) {
+                        processMarkdownTable(tableLines, document, normalFont);
+                    }
+                } else {
+                    currentText.append(line).append(" ");
+                }
+            }
+            if (currentText.length() > 0) {
+                document.add(new Paragraph(currentText.toString(), normalFont));
             }
             document.add(spacing);
         }
@@ -158,8 +225,10 @@ public class ExportService {
         if (meaningfulAnalysis != null) {
             document.newPage(); // New page for Meaningful Change Detection
             Paragraph mcTitle = new Paragraph("Meaningful Change Detection", sectionFont);
-            mcTitle.setSpacingBefore(15f);
-            document.add(mcTitle);
+        Anchor mcAnchor = new Anchor(mcTitle);
+        mcAnchor.setName("meaningful");
+        mcTitle.setSpacingBefore(15f);
+        document.add(mcAnchor);
             document.add(new Paragraph("Commit Range: " + meaningfulAnalysis.commitRange(), normalFont));
             document.add(new Paragraph("Meaningful Change Score: " + String.format("%.1f/100", meaningfulAnalysis.meaningfulChangeScore()), normalFont));
             document.add(new Paragraph("Summary: " + meaningfulAnalysis.summary(), normalFont));
@@ -213,8 +282,21 @@ public class ExportService {
         document.setPageSize(PageSize.A4.rotate());
         document.newPage(); // New page for Visuals
         Paragraph chartTitle1 = new Paragraph("Commit Distribution:", sectionFont);
+        Anchor chartAnchor = new Anchor(chartTitle1);
+        chartAnchor.setName("charts");
         chartTitle1.setSpacingBefore(15f);
-        document.add(chartTitle1);
+        document.add(chartAnchor);
+        
+        com.lowagie.text.List graphList = new com.lowagie.text.List(true, 20);
+        graphList.add(new ListItem("Commits by Contributor (Pie Chart)", normalFont));
+        graphList.add(new ListItem("Impact Analysis (Stacked Bar Chart)", normalFont));
+        graphList.add(new ListItem("Recent Commit Activity (Line Chart)", normalFont));
+        graphList.add(new ListItem("Daily Activity - Total Impact (Line Chart)", normalFont));
+        graphList.add(new ListItem("Daily Activity per Contributor (Line Chart)", normalFont));
+        graphList.add(new ListItem("Commits per Day (Line Chart)", normalFont));
+        document.add(graphList);
+        document.add(new Paragraph(" ", normalFont));
+
         Image pieImage = Image.getInstance(piePath);
         pieImage.scalePercent(100f); // Keep Pie Chart as is
         pieImage.setAlignment(Image.MIDDLE);
@@ -225,7 +307,7 @@ public class ExportService {
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
-        barImage.scalePercent(50f); // Shrink by 100% (half size)
+        barImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
@@ -234,7 +316,7 @@ public class ExportService {
         chartTitle3.setSpacingBefore(15f);
         document.add(chartTitle3);
         Image lineImage = Image.getInstance(linePath);
-        lineImage.scalePercent(50f); // Shrink
+        lineImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
         lineImage.setAlignment(Image.MIDDLE);
         document.add(lineImage);
 
@@ -243,7 +325,7 @@ public class ExportService {
         chartTitle4.setSpacingBefore(15f);
         document.add(chartTitle4);
         Image calendarImage = Image.getInstance(calendarPath);
-        calendarImage.scalePercent(50f); // Shrink
+        calendarImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
         calendarImage.setAlignment(Image.MIDDLE);
         document.add(calendarImage);
 
@@ -252,17 +334,28 @@ public class ExportService {
         chartTitle5.setSpacingBefore(15f);
         document.add(chartTitle5);
         Image contribImage = Image.getInstance(contribPath);
-        contribImage.scalePercent(50f); // Shrink
+        contribImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
         contribImage.setAlignment(Image.MIDDLE);
         document.add(contribImage);
+
+        document.newPage();
+        Paragraph chartTitle6 = new Paragraph("Commits per Day:", sectionFont);
+        chartTitle6.setSpacingBefore(15f);
+        document.add(chartTitle6);
+        Image cpdImage = Image.getInstance(cpdPath);
+        cpdImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
+        cpdImage.setAlignment(Image.MIDDLE);
+        document.add(cpdImage);
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);
         document.newPage();
 
         Paragraph detailTitle = new Paragraph("Detailed Contributor Metrics:", sectionFont);
+        Anchor detailAnchor = new Anchor(detailTitle);
+        detailAnchor.setName("details");
         detailTitle.setSpacingBefore(15f);
-        document.add(detailTitle);
+        document.add(detailAnchor);
         document.add(spacing);
 
         // Group others for the table
@@ -396,5 +489,53 @@ public class ExportService {
             return report.substring(index).trim();
         }
         return "";
+    }
+
+    private void processMarkdownTable(java.util.List<String> tableLines, Document document, Font font) {
+        try {
+            // Filter out separator lines (e.g. |---|---|)
+            java.util.List<String> dataLines = new java.util.ArrayList<>();
+            for (String line : tableLines) {
+                if (line.contains("---")) continue;
+                dataLines.add(line);
+            }
+
+            if (dataLines.isEmpty()) return;
+
+            // Determine max columns
+            int maxCols = 0;
+            for (String line : dataLines) {
+                String[] parts = line.split("\\|");
+                int cols = 0;
+                for (String p : parts) if (!p.trim().isEmpty()) cols++;
+                maxCols = Math.max(maxCols, cols);
+            }
+
+            if (maxCols == 0) return;
+
+            PdfPTable table = new PdfPTable(maxCols);
+            table.setWidthPercentage(100);
+            table.setSpacingBefore(10f);
+            table.setSpacingAfter(10f);
+
+            for (String line : dataLines) {
+                String[] parts = line.split("\\|");
+                int count = 0;
+                for (String p : parts) {
+                    if (p.trim().isEmpty() && count == 0 && line.startsWith("|")) continue; 
+                    if (count < maxCols) {
+                        table.addCell(new Phrase(p.trim(), font));
+                        count++;
+                    }
+                }
+                while (count < maxCols) {
+                    table.addCell("");
+                    count++;
+                }
+            }
+            document.add(table);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

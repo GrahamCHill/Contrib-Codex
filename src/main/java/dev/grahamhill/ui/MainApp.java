@@ -57,6 +57,7 @@ public class MainApp extends Application {
     private LineChart<String, Number> activityLineChart;
     private LineChart<String, Number> calendarActivityChart;
     private LineChart<String, Number> contributorActivityChart;
+    private LineChart<String, Number> commitsPerDayChart;
 
     private List<ContributorStats> currentStats;
     private MeaningfulChangeAnalysis currentMeaningfulAnalysis;
@@ -259,17 +260,19 @@ public class MainApp extends Application {
 
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
-        commitPieChart.setMinWidth(500);
-        commitPieChart.setPrefWidth(600);
+        commitPieChart.setMinWidth(300);
+        commitPieChart.setPrefWidth(400);
         commitPieChart.setLegendSide(javafx.geometry.Side.BOTTOM);
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         impactBarChart = new StackedBarChart<>(xAxis, yAxis);
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
-        impactBarChart.setMinWidth(500);
-        impactBarChart.setPrefWidth(600);
+        impactBarChart.setMinWidth(600);
+        impactBarChart.setPrefWidth(800);
+        impactBarChart.setMinHeight(400); // Taller chart
         impactBarChart.setCategoryGap(20);
+        impactBarChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         xAxis.setLabel("Contributor");
         xAxis.setTickLabelRotation(45); // Prevent overlap
         yAxis.setLabel("Lines of Code");
@@ -278,8 +281,10 @@ public class MainApp extends Application {
         NumberAxis lyAxis = new NumberAxis();
         activityLineChart = new LineChart<>(lxAxis, lyAxis);
         activityLineChart.setTitle("Recent Commit Activity");
-        activityLineChart.setMinWidth(500);
-        activityLineChart.setPrefWidth(600);
+        activityLineChart.setMinWidth(600);
+        activityLineChart.setPrefWidth(800);
+        activityLineChart.setMinHeight(400); // Taller chart
+        activityLineChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         lxAxis.setLabel("Commit ID");
         lxAxis.setTickLabelRotation(45); // Prevent overlap
         lyAxis.setLabel("Lines Added");
@@ -288,8 +293,10 @@ public class MainApp extends Application {
         NumberAxis cyAxis = new NumberAxis();
         calendarActivityChart = new LineChart<>(cxAxis, cyAxis);
         calendarActivityChart.setTitle("Daily Activity (Total Impact)");
-        calendarActivityChart.setMinWidth(500);
-        calendarActivityChart.setPrefWidth(600);
+        calendarActivityChart.setMinWidth(600);
+        calendarActivityChart.setPrefWidth(800);
+        calendarActivityChart.setMinHeight(400); // Taller chart
+        calendarActivityChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         cxAxis.setLabel("Date");
         cxAxis.setTickLabelRotation(45); // Prevent overlap
         cyAxis.setLabel("Total Lines Added");
@@ -298,18 +305,33 @@ public class MainApp extends Application {
         NumberAxis cayAxis = new NumberAxis();
         contributorActivityChart = new LineChart<>(caxAxis, cayAxis);
         contributorActivityChart.setTitle("Daily Activity per Contributor");
-        contributorActivityChart.setMinWidth(500);
-        contributorActivityChart.setPrefWidth(600);
+        contributorActivityChart.setMinWidth(600);
+        contributorActivityChart.setPrefWidth(800);
+        contributorActivityChart.setMinHeight(400); // Taller chart
+        contributorActivityChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         caxAxis.setLabel("Date");
         caxAxis.setTickLabelRotation(45);
         cayAxis.setLabel("Lines Added");
 
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart);
+        CategoryAxis cpdXAxis = new CategoryAxis();
+        NumberAxis cpdYAxis = new NumberAxis();
+        commitsPerDayChart = new LineChart<>(cpdXAxis, cpdYAxis);
+        commitsPerDayChart.setTitle("Commits per Day");
+        commitsPerDayChart.setMinWidth(600);
+        commitsPerDayChart.setPrefWidth(800);
+        commitsPerDayChart.setMinHeight(400);
+        commitsPerDayChart.setLegendSide(javafx.geometry.Side.BOTTOM);
+        cpdXAxis.setLabel("Date");
+        cpdXAxis.setTickLabelRotation(45);
+        cpdYAxis.setLabel("Commit Count");
+
+        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(commitsPerDayChart, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsScrollPane);
 
         statsTabPane.getTabs().addAll(statsTab, visualsTab);
@@ -328,38 +350,20 @@ public class MainApp extends Application {
         // LLM Panel
         VBox llmPanel = new VBox(10);
         llmPanel.setPadding(new Insets(10));
-        systemPromptArea = new TextArea("You are a senior software engineer and code auditor. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns.\n" +
-                "DO NOT write the response as a letter, email, or correspondence. DO NOT use 'Best regards', 'Sincerely', or similar sign-offs. Use a structured, professional technical report format with clear headings.\n" +
-                "CRITICAL RISK SCALE (Lines per Commit - LOWER IS BETTER):\n" +
-                "- 1500+: VERY HIGH RISK (Indicative of bulk generation, unreviewed code bloat, or severe lack of granularity).\n" +
-                "- 1000 - 1500: HIGH RISK.\n" +
-                "- 750 - 1000: MEDIUM TO HIGH RISK.\n" +
-                "- 500 - 750: MEDIUM RISK.\n" +
-                "- 250 - 500: LOW TO MEDIUM RISK.\n" +
-                "- 1 - 250: LOW RISK (Healthy, iterative development).\n" +
-                "MATHEMATICAL TRUTH: You MUST calculate 'Lines per Commit' yourself (Total Lines Added / Total Commits). \n" +
-                "Example: 2800 lines added in 1 commit = 2800 lines/commit (EXTREME RISK). 800 lines added in 10 commits = 80 lines/commit (HEALTHY).\n" +
-                "Higher lines per commit ALWAYS mean HIGHER RISK. Lower lines per commit ALWAYS mean LOWER RISK.\n" +
-                "If a contributor has 2700+ lines per commit, they are ALWAYS higher risk than someone with 800 lines per commit.\n" +
-                "NOTE: For early project setup (initial commits), risk is naturally lower as project structure is being established and tests may not exist yet.\n" +
-                "STRUCTURED ANALYSIS RULES:\n" +
-                "1. For each contributor, calculate their lines/commit.\n" +
-                "2. Evaluate their risk based on the scale above. State the calculated value and the risk level clearly.\n" +
-                "3. Use the 'Gender' field: 'male' -> he/him, 'female' -> she/her, 'non-binary'/'they'/'unknown' -> they/them.\n" +
-                "4. Identify the most valuable contributor based on iterative development (LOW lines/commit), quality, and alignment with project requirements.\n" +
-                "CONTEXTUAL ANALYSIS:\n" +
-                "- Language & Location: Consider if the lines changed make sense for the file type and location (e.g., massive changes in documentation or config may be less risky than in core logic).\n" +
-                "- Meaningful Change Score: Use this score to determine if changes represent real functionality vs noise.\n" +
-                "- Requirements Alignment: Evaluate how well the contributions align with the provided project requirements.");
+        systemPromptArea = new TextArea("You are a senior software engineer and code auditor. Analyze git metrics and provide a professional technical report.\n" +
+                "Be verbose and provide detailed analyses and feedback on the repos. Use tables and sections to organize information.\n" +
+                "CRITICAL RISK SCALE (Lines Added per Commit):\n" +
+                "- 1500+: VERY HIGH; 1000-1500: HIGH; 750-1000: MED-HIGH; 500-750: MED; 250-500: LOW-MED; <250: LOW (Healthy).\n" +
+                "RULE: Higher lines added per commit = HIGHER RISK. Divide Total Lines Added by Total Commits.\n" +
+                "NOTE: Initial setup commits have lower risk. Use 'Gender' field for pronouns.\n" +
+                "Identify the most valuable contributor based on iterative development and quality.");
         systemPromptArea.setPrefHeight(60);
-        userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors. " +
-                "Evaluate risk by CALCULATING the lines per commit for each contributor and comparing them to the scale. " +
-                "Remember: 2800 lines/commit is MUCH HIGHER risk than 80 lines/commit. " +
-                "DO NOT use a letter format. Use professional report headings. " +
-                "Take into account the context of languages and project setup phase. " +
-                "Strictly follow the Risk and Quality rules defined in the system prompt. " +
-                "Treat the provided Markdown sections and project requirements as directives for your analysis. " +
-                "Make sure to include a 'Conclusion' section at the end identifying the most valuable contributor based on the provided criteria.");
+        userPromptArea = new TextArea("Summarize team performance and identify key contributors. " +
+                "Provide verbose feedback with tables and sections for detailed analysis. " +
+                "Calculate 'Lines Added per Commit' for risk. Use the defined scale. " +
+                "Professional report format. Consider language context and project phase. " +
+                "Follow Markdown sections and requirements as directives. " +
+                "Include a 'Conclusion' section identifying the most valuable contributor.");
         userPromptArea.setPrefHeight(60);
         llmResponseArea = new TextArea();
         llmResponseArea.setEditable(false);
@@ -633,42 +637,40 @@ public class MainApp extends Application {
 
         Map<String, String> mdSections = readMdSections();
         
-        StringBuilder metricsText = new StringBuilder("GIT METRICS DATA FOR ANALYSIS:\n");
+        StringBuilder metricsText = new StringBuilder("METRICS:\n");
         for (ContributorStats s : currentStats) {
-            metricsText.append(String.format("- %s (%s, Gender: %s): %d commits, %d merges, +%d/-%d lines, %d new/%d edited/%d deleted files\n",
-                s.name(), s.email(), s.gender(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount()));
+            metricsText.append(String.format("- %s (%s, %s): %d c, %d m, +%d/-%d l, %d n/%d e/%d d f, %s\n",
+                s.name(), s.email(), s.gender(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
+                s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), formatLanguages(s.languageBreakdown())));
         }
 
-        metricsText.append("\nNote for Risk Analysis: Calculate lines per commit (Total Lines Added / Total Commits) to evaluate risk: 1500+ is VERY HIGH RISK, 1-250 is LOW RISK. Initial setup commits should have lower risk weight.\n");
+        metricsText.append("\nRISK RULES: CALCULATE 'Lines Added/Commit' = (Total Lines Added / Total Commits).\n");
+        metricsText.append("Scale: 1500+ VERY HIGH, 1000-1500 HIGH, 750-1000 MED-HIGH, 500-750 MED, 250-500 LOW-MED, <250 LOW.\n");
+        metricsText.append("Higher = Higher Risk. Don't subtract deletions.\n");
 
         String reqFeatures = readRequiredFeatures();
         if (!reqFeatures.isEmpty()) {
-            metricsText.append("\nRequired Features for Evaluation:\n");
-            metricsText.append(reqFeatures).append("\n");
+            metricsText.append("\nFeatures:\n").append(reqFeatures).append("\n");
         }
 
         if (currentMeaningfulAnalysis != null) {
-            metricsText.append("\nMeaningful Change Analysis:\n");
-            metricsText.append(String.format("- Commit Range: %s\n", currentMeaningfulAnalysis.commitRange()));
-            metricsText.append(String.format("- Total Insertions: %d\n", currentMeaningfulAnalysis.totalInsertions()));
-            metricsText.append(String.format("- Total Deletions: %d\n", currentMeaningfulAnalysis.totalDeletions()));
-            metricsText.append(String.format("- Whitespace Churn: %d\n", currentMeaningfulAnalysis.whitespaceChurn()));
+            metricsText.append("\nMEANINGFUL ANALYSIS:\n");
+            metricsText.append(String.format("- Range: %s, +%d/-%d, WS: %d\n", 
+                currentMeaningfulAnalysis.commitRange(), currentMeaningfulAnalysis.totalInsertions(), 
+                currentMeaningfulAnalysis.totalDeletions(), currentMeaningfulAnalysis.whitespaceChurn()));
             
-            metricsText.append("- Category Breakdown:\n");
+            metricsText.append("- Categories:\n");
             currentMeaningfulAnalysis.categoryBreakdown().forEach((cat, m) -> {
                 if (m.fileCount() > 0) {
-                    metricsText.append(String.format("  * %s: %d files, +%d/-%d lines\n", cat, m.fileCount(), m.insertions(), m.deletions()));
+                    metricsText.append(String.format("  * %s: %d f, +%d/-%d l\n", cat, m.fileCount(), m.insertions(), m.deletions()));
                 }
             });
 
             if (!currentMeaningfulAnalysis.warnings().isEmpty()) {
-                metricsText.append("- Contextual Observations:\n");
-                for (String warning : currentMeaningfulAnalysis.warnings()) {
-                    metricsText.append(String.format("  ! %s\n", warning));
-                }
+                metricsText.append("- Observations: ").append(String.join("; ", currentMeaningfulAnalysis.warnings())).append("\n");
             }
             
-            metricsText.append("- Top 10 Changed Files (LOC):\n");
+            metricsText.append("- Top Files:\n");
             currentMeaningfulAnalysis.topChangedFiles().stream().limit(10).forEach(f -> {
                 metricsText.append(String.format("  * %s (+%d/-%d) [%s]\n", f.path(), f.insertions(), f.deletions(), f.category()));
             });
@@ -691,30 +693,52 @@ public class MainApp extends Application {
                         String sectionTitle = entry.getKey().replace(".md", "");
                         String sectionInstructions = entry.getValue();
                         
-                        String prompt = userPromptArea.getText() + "\n\n" + 
+                        String basePrompt = userPromptArea.getText() + "\n\n" + 
                                        "FOCUS SECTION: " + sectionTitle + "\n" +
-                                       "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
-                                       baseMetrics;
-                                       
-                        String sectionResponse = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), prompt);
+                                       "SECTION INSTRUCTIONS: " + sectionInstructions;
                         
-                        // Sanitize sectionResponse to remove markdown code blocks
-                        sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
+                        // Chunking metrics if they are too long instead of truncating
+                        List<String> metricsChunks = chunkMetrics(baseMetrics, 3500);
+                        
+                        for (int i = 0; i < metricsChunks.size(); i++) {
+                            String chunk = metricsChunks.get(i);
+                            String chunkInfo = metricsChunks.size() > 1 ? String.format("\n[METRICS CHUNK %d/%d]\n", i + 1, metricsChunks.size()) : "";
+                            
+                            String fullPrompt = basePrompt + "\n\n" + 
+                                           chunkInfo + chunk;
+                                           
+                            String sectionResponse = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), fullPrompt);
+                            
+                            // Sanitize sectionResponse to remove markdown code blocks
+                            sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
 
-                        fullReport.append("**").append(sectionTitle).append("**\n\n");
-                        fullReport.append(sectionResponse).append("\n\n");
-                        
-                        Platform.runLater(() -> llmResponseArea.setText("Generated section: " + sectionTitle + "..."));
+                            if (i == 0) {
+                                fullReport.append("**").append(sectionTitle).append("**\n\n");
+                            }
+                            fullReport.append(sectionResponse).append("\n\n");
+                            
+                            String progressMsg = String.format("Generated section: %s (Chunk %d/%d)...", sectionTitle, i + 1, metricsChunks.size());
+                            Platform.runLater(() -> llmResponseArea.setText(progressMsg));
+                        }
                     }
                 } else {
                     // Default behavior if no MD sections
-                    String response = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + baseMetrics);
-                    response = response.replaceAll("```markdown", "").replaceAll("```", "").trim();
-                    fullReport.append(response);
+                    List<String> metricsChunks = chunkMetrics(baseMetrics, 3500);
+                    for (int i = 0; i < metricsChunks.size(); i++) {
+                        String chunk = metricsChunks.get(i);
+                        String chunkInfo = metricsChunks.size() > 1 ? String.format("\n[METRICS CHUNK %d/%d]\n", i + 1, metricsChunks.size()) : "";
+                        
+                        String response = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), userPromptArea.getText() + chunkInfo + "\n\n" + chunk);
+                        response = response.replaceAll("```markdown", "").replaceAll("```", "").trim();
+                        fullReport.append(response).append("\n\n");
+                        
+                        String progressMsg = String.format("Generating report (Chunk %d/%d)...", i + 1, metricsChunks.size());
+                        Platform.runLater(() -> llmResponseArea.setText(progressMsg));
+                    }
                 }
 
                 Platform.runLater(() -> {
-                    llmResponseArea.setText(fullReport.toString());
+                    llmResponseArea.setText(fullReport.toString().trim());
                     if (onComplete != null) onComplete.run();
                 });
             } catch (Exception e) {
@@ -727,6 +751,40 @@ public class MainApp extends Application {
         }).start();
     }
 
+    private List<String> chunkMetrics(String metrics, int maxLength) {
+        List<String> chunks = new ArrayList<>();
+        if (metrics.length() <= maxLength) {
+            chunks.add(metrics);
+            return chunks;
+        }
+
+        String[] lines = metrics.split("\n");
+        StringBuilder currentChunk = new StringBuilder();
+        for (String line : lines) {
+            if (currentChunk.length() + line.length() + 1 > maxLength) {
+                if (currentChunk.length() > 0) {
+                    chunks.add(currentChunk.toString());
+                    currentChunk = new StringBuilder();
+                }
+                // If a single line is longer than maxLength (unlikely), force split it
+                if (line.length() > maxLength) {
+                    int start = 0;
+                    while (start < line.length()) {
+                        int end = Math.min(start + maxLength, line.length());
+                        chunks.add(line.substring(start, end));
+                        start = end;
+                    }
+                    continue;
+                }
+            }
+            currentChunk.append(line).append("\n");
+        }
+        if (currentChunk.length() > 0) {
+            chunks.add(currentChunk.toString());
+        }
+        return chunks;
+    }
+
     private String callLlmApi(String apiUrl, String apiKey, String model, String system, String user) throws Exception {
         java.net.URL url = new java.net.URL(apiUrl);
         java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
@@ -737,15 +795,16 @@ public class MainApp extends Application {
         }
         conn.setDoOutput(true);
 
+        String combinedUserContent = system + "\n\n" + user;
+
         String json = String.format("""
             {
               "model": "%s",
               "messages": [
-                {"role": "system", "content": "%s"},
                 {"role": "user", "content": "%s"}
               ]
             }
-            """, model, escapeJson(system), escapeJson(user));
+            """, model, escapeJson(combinedUserContent));
 
         try (java.io.OutputStream os = conn.getOutputStream()) {
             os.write(json.getBytes());
@@ -1113,8 +1172,13 @@ public class MainApp extends Application {
             deletedSeries.setName("Deleted");
 
             for (ContributorStats s : top5) {
-                XYChart.Data<String, Number> addedData = new XYChart.Data<>(s.name(), s.linesAdded());
-                XYChart.Data<String, Number> deletedData = new XYChart.Data<>(s.name(), s.linesDeleted());
+                // Ensure values are added as positive for stacked bar if we want them aligned at 0, 
+                // but usually StackedBarChart handles positive/negative. 
+                // User says "bars are not aligned at 0 they are floating too high". 
+                // This might happen if there's a mix or if the axis is weird.
+                // Let's ensure we are not adding negative values that cause floating if not intended.
+                XYChart.Data<String, Number> addedData = new XYChart.Data<>(s.name(), Math.max(0, s.linesAdded()));
+                XYChart.Data<String, Number> deletedData = new XYChart.Data<>(s.name(), Math.max(0, s.linesDeleted()));
                 addedSeries.getData().add(addedData);
                 deletedSeries.getData().add(deletedData);
             }
@@ -1155,6 +1219,25 @@ public class MainApp extends Application {
                 calendarActivityChart.getData().add(calSeries);
             }
 
+            // Commits per Day Chart
+            commitsPerDayChart.getData().clear();
+            commitsPerDayChart.setAnimated(false);
+            if (recentCommits != null && !recentCommits.isEmpty()) {
+                XYChart.Series<String, Number> cpdSeries = new XYChart.Series<>();
+                cpdSeries.setName("Daily Commits");
+
+                Map<java.time.LocalDate, Integer> dailyCommits = new TreeMap<>();
+                for (CommitInfo ci : recentCommits) {
+                    java.time.LocalDate date = ci.timestamp().toLocalDate();
+                    dailyCommits.merge(date, 1, Integer::sum);
+                }
+
+                for (Map.Entry<java.time.LocalDate, Integer> entry : dailyCommits.entrySet()) {
+                    cpdSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
+                }
+                commitsPerDayChart.getData().add(cpdSeries);
+            }
+
             updateContributorActivityChart(stats, recentCommits);
 
             // Force layout pass and refresh to ensure charts are rendered correctly
@@ -1164,11 +1247,24 @@ public class MainApp extends Application {
                 activityLineChart.layout();
                 calendarActivityChart.layout();
                 contributorActivityChart.layout();
-                commitPieChart.requestLayout();
+                commitsPerDayChart.layout();
+                
+                // Explicitly show legends for ALL charts
+                commitPieChart.setLegendVisible(true);
+                impactBarChart.setLegendVisible(true);
+                activityLineChart.setLegendVisible(true);
+                calendarActivityChart.setLegendVisible(true);
+                contributorActivityChart.setLegendVisible(true);
+                commitsPerDayChart.setLegendVisible(true);
+                
+                // Adjust layout to avoid overlapping
                 impactBarChart.requestLayout();
                 activityLineChart.requestLayout();
                 calendarActivityChart.requestLayout();
                 contributorActivityChart.requestLayout();
+                commitsPerDayChart.requestLayout();
+
+                commitPieChart.requestLayout();
             });
         });
     }
@@ -1230,12 +1326,14 @@ public class MainApp extends Application {
             File lineFile = new File("line_chart.png");
             File calendarFile = new File("calendar_chart.png");
             File contribFile = new File("contrib_activity.png");
+            File cpdFile = new File("commits_per_day.png");
             
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(impactBarChart, barFile);
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calendarFile);
             saveNodeSnapshot(contributorActivityChart, contribFile);
+            saveNodeSnapshot(commitsPerDayChart, cpdFile);
 
             String aiReport = null;
             if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
@@ -1272,7 +1370,7 @@ public class MainApp extends Application {
 
             exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), 
                                       pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
-                                      calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), aiReport, 
+                                      calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), aiReport, 
                                       readMdSections(), coverHtml, coverBasePath, tableLimitSpinner.getValue());
             
             // Cleanup temp files
@@ -1281,6 +1379,7 @@ public class MainApp extends Application {
             lineFile.delete();
             calendarFile.delete();
             contribFile.delete();
+            cpdFile.delete();
 
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {
