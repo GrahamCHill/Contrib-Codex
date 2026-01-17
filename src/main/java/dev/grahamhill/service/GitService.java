@@ -310,12 +310,9 @@ public class GitService {
     }
 
     private double calculateMeaningfulScoreForContributor(StatsBuilder b, String requiredFeatures) {
-        if (b.linesAdded == 0) return 0.0;
+        if (b.linesAdded == 0 && b.linesDeleted == 0) return 0.0;
         
         // Base score on proportion of source code/tests vs total
-        // We don't have full category breakdown per contributor here, but we can estimate
-        // from file counts if we tracked them better. 
-        // For now, let's use a simplified heuristic based on the stats we have.
         double score = 50.0; // Start at 50
         
         // Bonus for iterative work (more commits for same lines)
@@ -327,6 +324,12 @@ public class GitService {
         else if (linesPerCommit > 1000) score -= 20;
         else if (linesPerCommit > 750) score -= 10;
         
+        // Refactoring Recognition: 
+        // If they delete significantly (refactoring), it drops future technical debt.
+        if (b.linesDeleted > b.linesAdded * 0.5) {
+            score += 15; // Reward refactoring
+        }
+        
         // Bonus for testing (rough proxy: files edited/added vs commits)
         if (b.filesEdited > b.commitCount) score += 10;
         
@@ -334,9 +337,7 @@ public class GitService {
         if (requiredFeatures != null && !requiredFeatures.isEmpty()) {
             String[] features = requiredFeatures.toLowerCase().split("\\W+");
             int matches = 0;
-            // Check if contributor worked on files that match feature keywords (if we had filenames)
-            // Or just check if they are very active and project has many features
-            // Let's use a placeholder logic: more features = more complexity, high score here is hard
+            // Placeholder logic: more activity per feature/complexity
             score += Math.min(20, (double)b.commitCount / 2);
         }
 
@@ -425,16 +426,11 @@ public class GitService {
         // Initial commits (first few) or commits in setup are usually NOT AI generated and lack tests.
         // We lower the score for very early commits.
         boolean isEarly = commit.getParentCount() == 0;
+        boolean isMerge = commit.getParentCount() > 1;
         
         double score = 0.0;
         
         // Bloat: 
-        // 1-250: low risk
-        // 250-500: low to medium risk
-        // 500-750: medium risk
-        // 750-1000: medium to high risk
-        // 1000-1500: high risk
-        // > 1500: very high risk
         if (linesAdded > 1500) {
             score += 1.5; // Scale up to emphasize extreme risk
         } else if (linesAdded > 1000) {
@@ -449,6 +445,13 @@ public class GitService {
             score += 0.05;
         }
         
+        // Refactoring vs Bloat: 
+        // If there are many deletions, it's more likely a refactor than bloat.
+        // We discount the "bloat" score if linesDeleted is significant.
+        if (linesDeleted > linesAdded * 0.5) {
+            score *= 0.7; // Refactoring discount
+        }
+        
         // Ratio: AI often writes lots of new code rather than refactoring
         if (linesAdded > 100 && linesDeleted < (linesAdded * 0.05)) {
             score += 0.1;
@@ -461,6 +464,10 @@ public class GitService {
 
         if (isEarly) {
             score *= 0.5; // Significant discount for initial commit
+        }
+
+        if (isMerge) {
+            score *= 0.2; // Merge commits are rarely "AI generated bloat" in this sense
         }
 
         return Math.min(1.0, score);

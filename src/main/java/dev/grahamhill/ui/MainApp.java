@@ -435,6 +435,11 @@ public class MainApp extends Application {
                 "- Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
                 "- Higher lines_added_per_commit = HIGHER RISK. Lower = more iterative, lower risk.\n" +
                 "- DO NOT use file length as risk. Risk is based on changed lines per commit.\n" +
+                "- REFACTORING VS BLOAT:\n" +
+                "  - Refactoring (high deletions relative to additions) is NOT bloat. It reduces future technical debt.\n" +
+                "  - If a contributor has significant deletions (e.g., deletions > 50% of additions), acknowledge this as high-value refactoring and adjust risk downward.\n" +
+                "- MERGE COMMITS:\n" +
+                "  - Flag merge commits (multi-parent) as distinct from regular commits. They often represent integration rather than new code bloat.\n" +
                 "- Reduce risk if tests are present:\n" +
                 "  - If contributor changed files in test folders (\"test\", \"tests\", \"__tests__\"), apply a risk reduction and note it.\n" +
                 "- Contextual adjustment:\n" +
@@ -459,12 +464,14 @@ public class MainApp extends Application {
                 "- Use metrics-driven, evidence-based language.\n" +
                 "- Every claim must cite the metric that supports it (e.g., \"X lines/commit\", \"Y commits\", \"Top changed files: ...\").\n" +
                 "- If you mention any commit ref or tag, you MUST also state the commit author(s) exactly as listed in METRICS.\n" +
+                "- Explicitly distinguish between regular commits and merge commits in your analysis.\n" +
                 "\n" +
                 "MANDATORY SECTIONS:\n" +
                 "1) Executive Summary\n" +
                 "   - Key findings (3–7 bullets)\n" +
                 "   - Highest risk contributor (numerically verified)\n" +
                 "   - Most iterative / lowest risk contributor (numerically verified)\n" +
+                "   - Refactoring impact: Who is reducing technical debt?\n" +
                 "   - Any suspicious patterns (bulk changes, generated artifacts, formatting churn)\n" +
                 "\n" +
                 "2) Repository Overview\n" +
@@ -473,15 +480,17 @@ public class MainApp extends Application {
                 "\n" +
                 "3) Contributor Breakdown (one section per contributor)\n" +
                 "   Include a table with:\n" +
-                "   - total_commits\n" +
+                "   - total_commits (regular)\n" +
+                "   - total_merges\n" +
                 "   - total_lines_added\n" +
+                "   - total_lines_deleted (refactoring indicator)\n" +
                 "   - lines_added_per_commit\n" +
                 "   - tests_touched (yes/no + count if available)\n" +
                 "   - top directories / file types modified\n" +
                 "   Then provide:\n" +
                 "   - impact summary (what areas they changed)\n" +
-                "   - code quality signals (tests, granularity, churn)\n" +
-                "   - risk rating + justification\n" +
+                "   - code quality signals (tests, granularity, churn, refactoring activity)\n" +
+                "   - risk rating + justification (considering refactoring as a positive factor)\n" +
                 "\n" +
                 "4) Suspicious / Low-Signal Change Detection\n" +
                 "   - Identify bulk/generated artifacts (e.g., dist/, build/, *.map, minified, lockfiles)\n" +
@@ -493,7 +502,7 @@ public class MainApp extends Application {
                 "   - Note gaps or misalignment\n" +
                 "\n" +
                 "6) Final Conclusions\n" +
-                "   - Most valuable contributor = lowest lines_added_per_commit + quality signals + requirements alignment\n" +
+                "   - Most valuable contributor = lowest lines_added_per_commit + quality signals + refactoring impact + requirements alignment\n" +
                 "   - Specific next actions for review/testing\n");
         systemPromptArea.setPrefHeight(60);
         userPromptArea = new TextArea("Summarize overall team performance and identify key contributors using ONLY the provided METRICS.\n" +
@@ -505,6 +514,13 @@ public class MainApp extends Application {
                 "- If a value is missing, write: \"Not provided in metrics\" (do not guess).\n" +
                 "- CONSISTENCY CHECK: Any \"highest/lowest\" ranking MUST be numerically correct. If labels conflict with numbers, flag it as:\n" +
                 "  \"Metrics inconsistency detected\" and correct the ranking based on numeric values.\n" +
+                "\n" +
+                "REFACTORING VS BLOAT:\n" +
+                "- Acknowledge refactoring (high deletions) as a positive quality signal that reduces technical debt.\n" +
+                "- Distinguish between new code bloat and high-value architectural cleanup.\n" +
+                "\n" +
+                "MERGE COMMITS:\n" +
+                "- Flag merge commits as distinct events that represent integration rather than individual code contribution spikes.\n" +
                 "\n" +
                 "RISK ASSESSMENT:\n" +
                 "- Calculate risk using: lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
@@ -520,7 +536,7 @@ public class MainApp extends Application {
                 "\n" +
                 "MANDATORY FINAL SECTION:\n" +
                 "- Include a \"Conclusion\" section identifying the most valuable contributor based on:\n" +
-                "  iterative development (LOW lines_added_per_commit), quality signals (tests, granularity), and requirements alignment (if provided).\n");
+                "  iterative development (LOW lines_added_per_commit), quality signals (tests, granularity, refactoring), and requirements alignment (if provided).\n");
         userPromptArea.setPrefHeight(60);
         llmResponseArea = new TextArea();
         llmResponseArea.setEditable(false);

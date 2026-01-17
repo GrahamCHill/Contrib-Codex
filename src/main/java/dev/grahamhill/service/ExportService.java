@@ -186,6 +186,7 @@ public class ExportService {
                         document.add(p);
                         currentText = new StringBuilder();
                     }
+                    document.newPage(); // Each markdown section (top-level header) on a new page
                     Paragraph h1Header = new Paragraph(line.substring(2).trim(), headerFont);
                     h1Header.setSpacingBefore(15f);
                     h1Header.setSpacingAfter(10f);
@@ -578,14 +579,14 @@ public class ExportService {
             PdfContentByte cb = writer.getDirectContent();
             Rectangle pageSize = writer.getPageSize();
             
-            // Header: Logo scaled to 64px height, 16px from top
+            // Header: Logo scaled to 50px height, 16px from top
             if (logoPath != null) {
                 try {
                     java.io.File logoFile = new java.io.File(logoPath);
                     if (logoFile.exists()) {
                         Image logo = Image.getInstance(logoPath);
-                        logo.scaleToFit(500, 64); // Max width 500, height 64
-                        logo.setAbsolutePosition(document.left(), pageSize.getTop() - 16 - 64);
+                        logo.scaleToFit(500, 50); // Max width 500, height 50
+                        logo.setAbsolutePosition(pageSize.getRight() - document.rightMargin() - logo.getScaledWidth(), pageSize.getTop() - 16 - 50);
                         cb.addImage(logo);
                     }
                 } catch (Exception e) {
