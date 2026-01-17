@@ -121,7 +121,10 @@ public class ExportService {
 
         if (mdSections != null) {
             for (String title : mdSections.keySet()) {
-                addIndexRow(indexTable, "External Section: " + title, "md_" + title, currentPage++, normalFont);
+                // Since MD sections are now part of AI review, we can omit them from Index if desired, 
+                // but the user might still want to see the titles in the TOC.
+                // However, they aren't separate sections in the PDF anymore.
+                // addIndexRow(indexTable, "External Section: " + title, "md_" + title, currentPage++, normalFont);
             }
         }
 
@@ -169,7 +172,9 @@ public class ExportService {
         spacing.setSpacingAfter(10f);
         document.add(spacing);
 
-        // MD Sections
+        // MD Sections - These are now instructions for LLM report, so we don't need to append them as text here.
+        // The user says "that is wrong those markdown files are to ask the LLM to provide additional investigations and feedback"
+        /*
         if (mdSections != null) {
             for (java.util.Map.Entry<String, String> entry : mdSections.entrySet()) {
                 document.newPage();
@@ -186,6 +191,7 @@ public class ExportService {
                 }
             }
         }
+        */
 
         // AI Generated Review Section
         if (aiReport != null && !aiReport.isEmpty()) {
@@ -363,8 +369,9 @@ public class ExportService {
         document.add(new Paragraph(" ", normalFont));
 
         Image pieImage = Image.getInstance(piePath);
-        pieImage.scalePercent(100f); // Keep Pie Chart as is
+        pieImage.scaleToFit(800, 500); // Increased size
         pieImage.setAlignment(Image.MIDDLE);
+        pieImage.setSpacingBefore(-20f); // Move up slightly
         document.add(pieImage);
 
         document.newPage();
@@ -372,7 +379,7 @@ public class ExportService {
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
-        barImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
+        barImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
@@ -381,7 +388,7 @@ public class ExportService {
         chartTitle3.setSpacingBefore(15f);
         document.add(chartTitle3);
         Image lineImage = Image.getInstance(linePath);
-        lineImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
+        lineImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
         lineImage.setAlignment(Image.MIDDLE);
         document.add(lineImage);
 
@@ -390,7 +397,7 @@ public class ExportService {
         chartTitle4.setSpacingBefore(15f);
         document.add(chartTitle4);
         Image calendarImage = Image.getInstance(calendarPath);
-        calendarImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
+        calendarImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
         calendarImage.setAlignment(Image.MIDDLE);
         document.add(calendarImage);
 
@@ -399,7 +406,7 @@ public class ExportService {
         chartTitle5.setSpacingBefore(15f);
         document.add(chartTitle5);
         Image contribImage = Image.getInstance(contribPath);
-        contribImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
+        contribImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
         contribImage.setAlignment(Image.MIDDLE);
         document.add(contribImage);
 
@@ -408,12 +415,16 @@ public class ExportService {
         chartTitle6.setSpacingBefore(15f);
         document.add(chartTitle6);
         Image cpdImage = Image.getInstance(cpdPath);
-        cpdImage.scaleToFit(document.getPageSize().getWidth() - 100, (document.getPageSize().getHeight() - 150) / 2);
+        cpdImage.scaleToFit(document.getPageSize().getWidth() - 100, document.getPageSize().getHeight() - 150);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);
+        document.newPage();
+
+        // Set to landscape for the table
+        document.setPageSize(PageSize.A4.rotate());
         document.newPage();
 
         Paragraph detailTitle = new Paragraph("Detailed Contributor Metrics:", sectionFont);
