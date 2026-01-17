@@ -139,7 +139,7 @@ public class GitService {
         if (path.contains("test/") || path.contains("tests/") || path.contains("__tests__") || path.endsWith("test.java") || path.endsWith("spec.js")) return "Tests";
         if (path.startsWith("src/") || path.startsWith("app/") || path.startsWith("lib/") || path.contains("backend/") || path.contains("frontend/")) return "Source Code";
         if (path.startsWith("dist/") || path.startsWith("build/") || path.contains(".next/") || path.contains(".nuxt/") || path.contains("coverage/")) return "Generated/Artifacts";
-        if (path.endsWith("package-lock.json") || path.endsWith("yarn.lock") || path.endsWith("pnpm-lock.yaml")) return "Lockfiles";
+        if (path.endsWith("package-lock.json") || path.endsWith("yarn.lock") || path.endsWith("pnpm-lock.yaml") || path.endsWith("requirements.txt") || path.endsWith("pom.xml")) return "Lockfiles";
         if (path.endsWith(".map") || path.endsWith(".min.js") || path.endsWith(".min.css")) return "Sourcemaps/Minified";
         if (path.endsWith(".json") || path.endsWith(".yml") || path.endsWith(".yaml") || path.endsWith(".toml") || path.endsWith(".xml")) return "Config/Data";
         return "Other";
@@ -192,7 +192,7 @@ public class GitService {
         return sb.toString();
     }
 
-    public List<ContributorStats> getContributorStats(File repoPath, Map<String, String> aliases, Map<String, String> genders, Set<String> ignoredExtensions, Set<String> ignoredFolders) throws Exception {
+    public List<ContributorStats> getContributorStats(File repoPath, Map<String, String> aliases, Map<String, String> genders, Set<String> ignoredExtensions, Set<String> ignoredFolders, String requiredFeatures) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             Map<String, StatsBuilder> statsMap = new HashMap<>();
@@ -231,10 +231,47 @@ public class GitService {
             }
 
             return statsMap.values().stream()
-                    .map(StatsBuilder::build)
+                    .map(b -> {
+                        double mScore = calculateMeaningfulScoreForContributor(b, requiredFeatures);
+                        return b.build(mScore);
+                    })
                     .sorted(Comparator.comparingInt(ContributorStats::commitCount).reversed())
                     .toList();
         }
+    }
+
+    private double calculateMeaningfulScoreForContributor(StatsBuilder b, String requiredFeatures) {
+        if (b.linesAdded == 0) return 0.0;
+        
+        // Base score on proportion of source code/tests vs total
+        // We don't have full category breakdown per contributor here, but we can estimate
+        // from file counts if we tracked them better. 
+        // For now, let's use a simplified heuristic based on the stats we have.
+        double score = 50.0; // Start at 50
+        
+        // Bonus for iterative work (more commits for same lines)
+        double linesPerCommit = (double) b.linesAdded / (b.commitCount > 0 ? b.commitCount : 1);
+        if (linesPerCommit < 250) score += 30;
+        else if (linesPerCommit < 500) score += 15;
+        else if (linesPerCommit > 2000) score -= 40;
+        else if (linesPerCommit > 1500) score -= 30;
+        else if (linesPerCommit > 1000) score -= 20;
+        else if (linesPerCommit > 750) score -= 10;
+        
+        // Bonus for testing (rough proxy: files edited/added vs commits)
+        if (b.filesEdited > b.commitCount) score += 10;
+        
+        // Alignment with requirements (very basic keyword matching)
+        if (requiredFeatures != null && !requiredFeatures.isEmpty()) {
+            String[] features = requiredFeatures.toLowerCase().split("\\W+");
+            int matches = 0;
+            // Check if contributor worked on files that match feature keywords (if we had filenames)
+            // Or just check if they are very active and project has many features
+            // Let's use a placeholder logic: more features = more complexity, high score here is hard
+            score += Math.min(20, (double)b.commitCount / 2);
+        }
+
+        return Math.max(0, Math.min(100, score));
     }
 
     private void analyzeDiff(Repository repository, RevCommit parent, RevCommit commit, StatsBuilder builder, Set<String> ignoredExtensions, Set<String> ignoredFolders, Map<String, Integer> commitLanguages) throws IOException {
@@ -309,24 +346,46 @@ public class GitService {
         // 3. Large number of files changed
         // 4. Lines per commit (as requested: monitor individuals with large lines added with few commits)
         
-        // Initial commits are usually NOT AI generated in this context, and often large.
-        if (commit.getParentCount() == 0) return 0.0;
+        // Initial commits (first few) or commits in setup are usually NOT AI generated and lack tests.
+        // We lower the score for very early commits.
+        boolean isEarly = commit.getParentCount() == 0;
         
         double score = 0.0;
         
-        // Bloat: > 800 lines starts to be suspicious, > 2000 is very suspicious
-        if (linesAdded > 2000) score += 0.6;
-        else if (linesAdded > 800) score += 0.2;
+        // Bloat: 
+        // 1-250: low risk
+        // 250-500: low to medium risk
+        // 500-750: medium risk
+        // 750-1000: medium to high risk
+        // 1000-1500: high risk
+        // > 1500: very high risk
+        if (linesAdded > 1500) {
+            score += 1.5; // Scale up to emphasize extreme risk
+        } else if (linesAdded > 1000) {
+            score += 1.0;
+        } else if (linesAdded > 750) {
+            score += 0.6;
+        } else if (linesAdded > 500) {
+            score += 0.3;
+        } else if (linesAdded > 250) {
+            score += 0.15;
+        } else {
+            score += 0.05;
+        }
         
         // Ratio: AI often writes lots of new code rather than refactoring
-        if (linesAdded > 100 && linesDeleted < (linesAdded * 0.05)) score += 0.3;
+        if (linesAdded > 100 && linesDeleted < (linesAdded * 0.05)) {
+            score += 0.1;
+        }
         
         // Files: AI often touches many files if it's a boilerplate generation
-        if (filesChanged > 20) score += 0.2;
+        if (filesChanged > 20) {
+            score += 0.1;
+        }
 
-        // "Lines per commit" is implicitly handled here because we are evaluating a SINGLE commit.
-        // A single commit with massive lines is exactly what "large lines added with few commits" means at the micro level.
-        // If a contributor does this often, their AVERAGE AI Prob (problematic score) will be higher.
+        if (isEarly) {
+            score *= 0.5; // Significant discount for initial commit
+        }
 
         return Math.min(1.0, score);
     }
@@ -387,6 +446,8 @@ public class GitService {
                         fAdded,
                         fEdited,
                         fDeleted,
+                        linesAdded,
+                        linesDeleted,
                         commit.getParentCount() > 1
                 ));
             }
@@ -446,6 +507,8 @@ public class GitService {
                         fAdded,
                         fEdited,
                         fDeleted,
+                        linesAdded,
+                        linesDeleted,
                         initial.getParentCount() > 1
                 );
             }
@@ -473,8 +536,8 @@ public class GitService {
             this.gender = gender;
         }
 
-        ContributorStats build() {
-            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted);
+        ContributorStats build(double meaningfulChangeScore) {
+            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore);
         }
     }
 }

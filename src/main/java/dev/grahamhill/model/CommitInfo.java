@@ -13,5 +13,7 @@ public record CommitInfo(
     int filesAdded,
     int filesEdited,
     int filesDeleted,
+    int linesAdded,
+    int linesDeleted,
     boolean isMerge
 ) {}

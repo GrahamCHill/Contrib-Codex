@@ -27,14 +27,45 @@ public class DatabaseService {
                     files_added INTEGER DEFAULT 0,
                     files_edited INTEGER DEFAULT 0,
                     files_deleted_count INTEGER DEFAULT 0,
+                    meaningful_change_score REAL DEFAULT 0.0,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS global_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
                 )
                 """);
         }
     }
 
+    public void saveGlobalSetting(String key, String value) throws SQLException {
+        String sql = "INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, key);
+            pstmt.setString(2, value);
+            pstmt.executeUpdate();
+        }
+    }
+
+    public String getGlobalSetting(String key) throws SQLException {
+        String sql = "SELECT value FROM global_settings WHERE key = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, key);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("value");
+                }
+            }
+        }
+        return null;
+    }
+
     public void saveMetrics(List<ContributorStats> stats) throws SQLException {
-        String sql = "INSERT INTO contributor_metrics (name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO contributor_metrics (name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             for (ContributorStats stat : stats) {
@@ -50,6 +81,7 @@ public class DatabaseService {
                 pstmt.setInt(10, stat.filesAdded());
                 pstmt.setInt(11, stat.filesEdited());
                 pstmt.setInt(12, stat.filesDeletedCount());
+                pstmt.setDouble(13, stat.meaningfulChangeScore());
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
@@ -59,7 +91,7 @@ public class DatabaseService {
     public List<ContributorStats> getLatestMetrics() throws SQLException {
         List<ContributorStats> stats = new ArrayList<>();
         // This is a simplified version, just getting the last set of entries
-        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
+        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -76,7 +108,8 @@ public class DatabaseService {
                         rs.getDouble("ai_probability"),
                         rs.getInt("files_added"),
                         rs.getInt("files_edited"),
-                        rs.getInt("files_deleted_count")
+                        rs.getInt("files_deleted_count"),
+                        rs.getDouble("meaningful_change_score")
                 ));
             }
         }

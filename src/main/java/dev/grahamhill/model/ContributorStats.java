@@ -13,7 +13,8 @@ public record ContributorStats(
     double averageAiProbability,
     int filesAdded,
     int filesEdited,
-    int filesDeletedCount
+    int filesDeletedCount,
+    double meaningfulChangeScore
 ) {
     public int getTotalImpact() {
         return linesAdded + linesDeleted;

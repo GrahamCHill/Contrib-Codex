@@ -1,11 +1,9 @@
 package dev.grahamhill.service;
-
-import com.lowagie.text.Document;
+import com.lowagie.text.*;
 import com.lowagie.text.Font;
 import com.lowagie.text.Image;
-import com.lowagie.text.Paragraph;
-import com.lowagie.text.pdf.PdfPTable;
-import com.lowagie.text.pdf.PdfWriter;
+import com.lowagie.text.Rectangle;
+import com.lowagie.text.pdf.*;
 import com.lowagie.text.html.simpleparser.HTMLWorker;
 import com.lowagie.text.html.simpleparser.StyleSheet;
 import dev.grahamhill.model.ContributorStats;
@@ -18,9 +16,23 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
-        Document document = new Document();
-        PdfWriter.getInstance(document, new FileOutputStream(filePath));
+    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
+        Document document = new Document(PageSize.A4);
+        PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
+        
+        // Find logo path if available from cover page or similar
+        String logoPath = null;
+        if (coverHtml != null && coverHtml.contains("<img")) {
+            int srcStart = coverHtml.indexOf("src=\"") + 5;
+            int srcEnd = coverHtml.indexOf("\"", srcStart);
+            if (srcStart > 4 && srcEnd > srcStart) {
+                logoPath = coverHtml.substring(srcStart, srcEnd);
+            }
+        }
+        
+        HeaderFooterEvent event = new HeaderFooterEvent(logoPath);
+        writer.setPageEvent(event);
+        
         document.open();
 
         Font headerFont = new Font(Font.HELVETICA, 18, Font.BOLD);
@@ -28,14 +40,41 @@ public class ExportService {
         Font normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
 
         if (coverHtml != null && !coverHtml.isEmpty()) {
+            event.setCoverPage(true);
             try {
                 StyleSheet styles = new StyleSheet();
-                // Simple parser for HTML/CSS in OpenPDF
-                java.util.HashMap<String, Object> providers = new java.util.HashMap<>();
-                // OpenPDF HTMLWorker might not have IMG_BASEURL constant in some versions or it might be different.
-                // It usually uses an ImageProvider or just looks for images.
+                // Improved stylesheet handling to avoid CSS appearing as text
+                String htmlToParse = coverHtml;
                 
-                List<com.lowagie.text.Element> elements = HTMLWorker.parseToList(new StringReader(coverHtml), styles);
+                // Extract and apply style tags manually if HTMLWorker struggles with them
+                if (htmlToParse.contains("<style>")) {
+                    int startStyle = htmlToParse.indexOf("<style>");
+                    int endStyle = htmlToParse.indexOf("</style>");
+                    if (endStyle > startStyle) {
+                        String css = htmlToParse.substring(startStyle + 7, endStyle).trim();
+                        // OpenPDF StyleSheet.loadTagStyle is one way, or we just rely on standard tags
+                        // For simplicity, we'll strip the style block from the body to prevent it rendering as text
+                        htmlToParse = htmlToParse.substring(0, startStyle) + htmlToParse.substring(endStyle + 8);
+                        
+                        // Basic CSS to StyleSheet mapping
+                        String[] rules = css.split("}");
+                        for (String rule : rules) {
+                            if (rule.contains("{")) {
+                                String[] kv = rule.split("\\{");
+                                String selector = kv[0].trim().replace(".", ""); // Remove dot for class selectors
+                                String props = kv[1].trim();
+                                for (String prop : props.split(";")) {
+                                    if (prop.contains(":")) {
+                                        String[] pk = prop.split(":");
+                                        styles.loadTagStyle(selector, pk[0].trim(), pk[1].trim());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                List<com.lowagie.text.Element> elements = HTMLWorker.parseToList(new StringReader(htmlToParse), styles);
                 for (com.lowagie.text.Element element : elements) {
                     document.add(element);
                 }
@@ -48,24 +87,14 @@ public class ExportService {
             }
             document.newPage();
         }
+        event.setCoverPage(false);
 
         document.add(new Paragraph("Git Contributor Metrics Report", headerFont));
         Paragraph spacing = new Paragraph(" ");
         spacing.setSpacingAfter(10f);
         document.add(spacing);
 
-        // Custom MD Sections
-        if (mdSections != null && !mdSections.isEmpty()) {
-            for (java.util.Map.Entry<String, String> entry : mdSections.entrySet()) {
-                Paragraph pTitle = new Paragraph(entry.getKey(), sectionFont);
-                pTitle.setSpacingBefore(10f);
-                document.add(pTitle);
-                document.add(new Paragraph(entry.getValue(), normalFont));
-                document.add(spacing);
-            }
-        }
-
-        // AI Review Section
+        // Meaningful Change Detection Section
         if (aiReport != null && !aiReport.isEmpty()) {
             Paragraph aiTitle = new Paragraph("AI Generated Review", sectionFont);
             aiTitle.setSpacingBefore(15f);
@@ -171,13 +200,36 @@ public class ExportService {
         pieImage.setAlignment(Image.MIDDLE);
         document.add(pieImage);
 
-        Paragraph chartTitle2 = new Paragraph("Impact Analysis:", sectionFont);
+        Paragraph chartTitle2 = new Paragraph("Impact Analysis (Stacked):", sectionFont);
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
         barImage.scaleToFit(520, 400);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
+
+        Paragraph chartTitle3 = new Paragraph("Recent Commit Activity:", sectionFont);
+        chartTitle3.setSpacingBefore(15f);
+        document.add(chartTitle3);
+        Image lineImage = Image.getInstance(linePath);
+        lineImage.scaleToFit(520, 400);
+        lineImage.setAlignment(Image.MIDDLE);
+        document.add(lineImage);
+
+        // Calendar Activity on a new Landscape page
+        document.setPageSize(PageSize.A4.rotate());
+        document.newPage();
+        Paragraph chartTitle4 = new Paragraph("Daily Activity (Calendar):", sectionFont);
+        chartTitle4.setSpacingBefore(15f);
+        document.add(chartTitle4);
+        Image calendarImage = Image.getInstance(calendarPath);
+        calendarImage.scaleToFit(750, 450);
+        calendarImage.setAlignment(Image.MIDDLE);
+        document.add(calendarImage);
+
+        // Back to Portrait for the rest
+        document.setPageSize(PageSize.A4);
+        document.newPage();
 
         Paragraph detailTitle = new Paragraph("Detailed Contributor Metrics:", sectionFont);
         detailTitle.setSpacingBefore(15f);
@@ -187,7 +239,7 @@ public class ExportService {
         // Group others for the table
         List<ContributorStats> tableStats = groupOthers(stats, tableLimit);
 
-        PdfPTable table = new PdfPTable(11);
+        PdfPTable table = new PdfPTable(12);
         table.setWidthPercentage(100);
         table.setSpacingBefore(5f);
         table.setSpacingAfter(15f);
@@ -202,6 +254,7 @@ public class ExportService {
         table.addCell("Deleted Files");
         table.addCell("File Types");
         table.addCell("AI Prob");
+        table.addCell("Meaningful Score");
 
         for (ContributorStats stat : tableStats) {
             table.addCell(stat.name() + (stat.name().equals("Others") ? "" : " (" + stat.email() + ")"));
@@ -215,26 +268,58 @@ public class ExportService {
             table.addCell(String.valueOf(stat.filesDeletedCount()));
             table.addCell(formatLanguages(stat.languageBreakdown()));
             table.addCell(String.format("%.1f%%", stat.averageAiProbability() * 100));
+            table.addCell(String.format("%.1f/100", stat.meaningfulChangeScore()));
         }
 
         document.add(table);
+        document.close();
+    }
 
-        // Analysis Summary & Conclusion Section
-        if (aiReport != null && !aiReport.isEmpty()) {
-            Paragraph summaryTitle = new Paragraph("Analysis Summary & Conclusion", sectionFont);
-            summaryTitle.setSpacingBefore(15f);
-            document.add(summaryTitle);
-            
-            // Try to extract a "Conclusion" section if it exists, otherwise use the whole report as summary
-            String conclusion = extractConclusion(aiReport);
-            if (!conclusion.isEmpty()) {
-                document.add(new Paragraph(conclusion, normalFont));
-            } else {
-                document.add(new Paragraph("See AI Generated Review section for detailed analysis and findings.", normalFont));
-            }
+    private static class HeaderFooterEvent extends PdfPageEventHelper {
+        private String logoPath;
+        private Font footerFont = new Font(Font.HELVETICA, 8, Font.NORMAL);
+        private boolean isCoverPage = true;
+
+        public HeaderFooterEvent(String logoPath) {
+            this.logoPath = logoPath;
         }
 
-        document.close();
+        public void setCoverPage(boolean coverPage) {
+            isCoverPage = coverPage;
+        }
+
+        @Override
+        public void onEndPage(PdfWriter writer, Document document) {
+            if (isCoverPage) return;
+
+            PdfContentByte cb = writer.getDirectContent();
+            Rectangle pageSize = writer.getPageSize();
+            
+            // Header: Logo scaled to 64px height, 16px from top
+            if (logoPath != null) {
+                try {
+                    java.io.File logoFile = new java.io.File(logoPath);
+                    if (logoFile.exists()) {
+                        Image logo = Image.getInstance(logoPath);
+                        logo.scaleToFit(500, 64); // Max width 500, height 64
+                        logo.setAbsolutePosition(document.left(), pageSize.getTop() - 16 - 64);
+                        cb.addImage(logo);
+                    }
+                } catch (Exception e) {
+                    // Ignore logo errors
+                }
+            }
+
+            // Footer: Page number and AI-generated risk report
+            // Adjust page number to not count cover page
+            int pageNum = writer.getPageNumber() - 1; 
+            String footerText = "AI-generated risk report for the codebase - Page " + pageNum;
+            Phrase footer = new Phrase(footerText, footerFont);
+            ColumnText.showTextAligned(cb, Element.ALIGN_CENTER,
+                    footer,
+                    (pageSize.getRight() - pageSize.getLeft()) / 2 + pageSize.getLeft(),
+                    pageSize.getBottom() + 10, 0);
+        }
     }
 
     private List<ContributorStats> groupOthers(List<ContributorStats> stats, int limit) {
@@ -251,10 +336,12 @@ public class ExportService {
         int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
         double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
 
+        double avgMeaningful = others.stream().mapToDouble(ContributorStats::meaningfulChangeScore).average().orElse(0.0);
+
         java.util.Map<String, Integer> oLangs = new java.util.HashMap<>();
         others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful));
         return top;
     }
 

@@ -53,7 +53,9 @@ public class MainApp extends Application {
     private TextField coverPagePathField;
 
     private PieChart commitPieChart;
-    private BarChart<String, Number> impactBarChart;
+    private StackedBarChart<String, Number> impactBarChart;
+    private LineChart<String, Number> activityLineChart;
+    private LineChart<String, Number> calendarActivityChart;
 
     private List<ContributorStats> currentStats;
     private MeaningfulChangeAnalysis currentMeaningfulAnalysis;
@@ -120,9 +122,9 @@ public class MainApp extends Application {
         commitLimitSpinner.setEditable(true);
         tableLimitSpinner = new Spinner<>(1, 100, 20);
         tableLimitSpinner.setEditable(true);
-        ignoredExtensionsField = new TextField("json,csv");
+        ignoredExtensionsField = new TextField("json,csv,lock,txt");
         ignoredExtensionsField.setPromptText("e.g. json,csv");
-        ignoredFoldersField = new TextField("node_modules,target");
+        ignoredFoldersField = new TextField("node_modules,target,build,dist");
         ignoredFoldersField.setPromptText("e.g. node_modules,target");
         settingsBox.getChildren().addAll(
                 new Label("Git Tree Commits:"), commitLimitSpinner,
@@ -135,8 +137,14 @@ public class MainApp extends Application {
         settingsBox2.setPadding(new Insets(0, 0, 5, 0));
         mdFolderPathField = new TextField();
         mdFolderPathField.setPromptText("Path to .md sections folder");
+        mdFolderPathField.textProperty().addListener((obs, oldVal, newVal) -> {
+            Platform.runLater(this::saveSettings);
+        });
         Button browseMdButton = new Button("Browse...");
-        browseMdButton.setOnAction(e -> browseMdFolder(primaryStage));
+        browseMdButton.setOnAction(e -> {
+            browseMdFolder(primaryStage);
+            saveSettings();
+        });
         Button openMdButton = new Button("Open");
         openMdButton.setOnAction(e -> openMdFolder());
         settingsBox2.getChildren().addAll(
@@ -152,8 +160,14 @@ public class MainApp extends Application {
 
         coverPagePathField = new TextField();
         coverPagePathField.setPromptText("Path to coverpage.html");
+        coverPagePathField.textProperty().addListener((obs, oldVal, newVal) -> {
+            Platform.runLater(this::saveSettings);
+        });
         Button browseCoverButton = new Button("Browse...");
-        browseCoverButton.setOnAction(e -> browseCoverPage(primaryStage));
+        browseCoverButton.setOnAction(e -> {
+            browseCoverPage(primaryStage);
+            saveSettings();
+        });
 
         aiReviewCheckBox = new CheckBox("Include AI Review in PDF");
         Button exportButton = new Button("Export to PDF");
@@ -213,7 +227,7 @@ public class MainApp extends Application {
         
         TableColumn<ContributorStats, String> genderCol = new TableColumn<>("Gender");
         genderCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().gender()));
-        genderCol.setCellFactory(javafx.scene.control.cell.TextFieldTableCell.forTableColumn());
+        genderCol.setCellFactory(javafx.scene.control.cell.ComboBoxTableCell.forTableColumn("male", "female", "non-binary", "they", "unknown"));
         genderCol.setOnEditCommit(event -> {
             ContributorStats stat = event.getRowValue();
             String newGender = event.getNewValue();
@@ -223,7 +237,10 @@ public class MainApp extends Application {
         TableColumn<ContributorStats, String> aiCol = new TableColumn<>("AI Prob");
         aiCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f%%", data.getValue().averageAiProbability() * 100)));
 
-        statsTable.getColumns().addAll(nameCol, genderCol, commitsCol, mergesCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol);
+        TableColumn<ContributorStats, String> scoreCol = new TableColumn<>("Meaningful Score");
+        scoreCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f/100", data.getValue().meaningfulChangeScore())));
+
+        statsTable.getColumns().addAll(nameCol, genderCol, commitsCol, mergesCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol, scoreCol);
         setupStatsTableContextMenu();
 
         statsBox.getChildren().addAll(new Label("Top 10 Contributors (Double-click Gender to edit):"), statsTable);
@@ -240,13 +257,34 @@ public class MainApp extends Application {
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
-        impactBarChart = new BarChart<>(xAxis, yAxis);
+        impactBarChart = new StackedBarChart<>(xAxis, yAxis);
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
         impactBarChart.setMinWidth(300);
+        impactBarChart.setCategoryGap(20);
+        xAxis.setLabel("Contributor");
+        yAxis.setLabel("Lines of Code");
 
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart);
+        CategoryAxis lxAxis = new CategoryAxis();
+        NumberAxis lyAxis = new NumberAxis();
+        activityLineChart = new LineChart<>(lxAxis, lyAxis);
+        activityLineChart.setTitle("Recent Commit Activity");
+        activityLineChart.setMinWidth(300);
+        lxAxis.setLabel("Commit ID");
+        lyAxis.setLabel("Lines Added");
+
+        CategoryAxis cxAxis = new CategoryAxis();
+        NumberAxis cyAxis = new NumberAxis();
+        calendarActivityChart = new LineChart<>(cxAxis, cyAxis);
+        calendarActivityChart.setTitle("Daily Activity (Calendar)");
+        calendarActivityChart.setMinWidth(300);
+        cxAxis.setLabel("Date");
+        cyAxis.setLabel("Total Lines Added");
+
+        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(chartsBox);
 
         statsTabPane.getTabs().addAll(statsTab, visualsTab);
@@ -265,14 +303,29 @@ public class MainApp extends Application {
         // LLM Panel
         VBox llmPanel = new VBox(10);
         llmPanel.setPadding(new Insets(10));
-        systemPromptArea = new TextArea("You are a senior software engineer. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns. " +
-                "High 'lines per commit' (e.g. >2000) is a major risk factor indicating potential bulk generation or problematic behavior, whereas lower values (e.g. <1000) generally indicate more iterative development. " +
-                "The provided 'Additional Context (MD Sections)' contains custom instructions and analysis parameters that you MUST follow as if they were part of your core system instructions. " +
-                "Finally, provide a clear conclusion identifying who added the most valuable features to the project and highlight other valuable metrics.");
+        systemPromptArea = new TextArea("You are a senior software engineer and code auditor. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns.\n" +
+                "CRITICAL RISK SCALE (Lines per Commit - LOWER IS BETTER):\n" +
+                "- 1500+: VERY HIGH RISK (Indicative of bulk generation, unreviewed code bloat, or severe lack of granularity).\n" +
+                "- 1000 - 1500: HIGH RISK.\n" +
+                "- 750 - 1000: MEDIUM TO HIGH RISK.\n" +
+                "- 500 - 750: MEDIUM RISK.\n" +
+                "- 250 - 500: LOW TO MEDIUM RISK.\n" +
+                "- 1 - 250: LOW RISK (Healthy, iterative development).\n" +
+                "MATHEMATICAL TRUTH: 2800 lines/commit is MORE AT RISK than 800 lines/commit. Higher numbers mean HIGHER RISK.\n" +
+                "NOTE: For early project setup (initial commits), risk is naturally lower as project structure is being established and tests may not exist yet.\n" +
+                "CONTEXTUAL ANALYSIS:\n" +
+                "- Language & Location: Consider if the lines changed make sense for the file type and location (e.g., massive changes in documentation or config may be less risky than in core logic).\n" +
+                "- Meaningful Change Score: Use this score to determine if changes represent real functionality vs noise.\n" +
+                "- Requirements Alignment: Evaluate how well the contributions align with the provided project requirements.\n" +
+                "PRONOUN RULE: Use the 'Gender' field: 'male' -> he/him, 'female' -> she/her, 'non-binary'/'they'/'unknown' -> they/them.\n" +
+                "CONCLUSION RULE: Identify the most valuable contributor based on iterative development (LOW lines/commit), quality, and alignment with project requirements.");
         systemPromptArea.setPrefHeight(60);
         userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors. " +
-                "Treat the provided Markdown sections as directives for your analysis. " +
-                "Make sure to include a 'Conclusion' section at the end identifying the most valuable contributor.");
+                "Evaluate risk based on the provided scale: HIGHER lines/commit values (e.g. 2800) are MUCH HIGHER risk than lower values (e.g. 800). " +
+                "Take into account the context of languages and project setup phase. " +
+                "Strictly follow the Risk and Quality rules defined in the system prompt. " +
+                "Treat the provided Markdown sections and project requirements as directives for your analysis. " +
+                "Make sure to include a 'Conclusion' section at the end identifying the most valuable contributor based on the provided criteria.");
         userPromptArea.setPrefHeight(60);
         llmResponseArea = new TextArea();
         llmResponseArea.setEditable(false);
@@ -391,6 +444,16 @@ public class MainApp extends Application {
         prefs.put("selectedProvider", selectedProvider);
         prefs.put("aliases", aliasesArea.getText());
         prefs.put("genders", gendersData);
+        
+        // Save global settings to database as well
+        if (databaseService != null) {
+            try {
+                databaseService.saveGlobalSetting("mdFolderPath", mdFolderPathField.getText());
+                databaseService.saveGlobalSetting("coverPagePath", coverPagePathField.getText());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private void loadSettings() {
@@ -404,6 +467,19 @@ public class MainApp extends Application {
         selectedProvider = prefs.get("selectedProvider", "OpenAI");
         aliasesArea.setText(prefs.get("aliases", ""));
         gendersData = prefs.get("genders", "");
+
+        // Load global settings from database
+        if (databaseService != null) {
+            try {
+                String mdPath = databaseService.getGlobalSetting("mdFolderPath");
+                if (mdPath != null) mdFolderPathField.setText(mdPath);
+                
+                String coverPath = databaseService.getGlobalSetting("coverPagePath");
+                if (coverPath != null) coverPagePathField.setText(coverPath);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private List<String> fetchOllamaModels(String baseUrl) {
@@ -525,25 +601,16 @@ public class MainApp extends Application {
         
         StringBuilder metricsText = new StringBuilder("GIT METRICS DATA FOR ANALYSIS:\n");
         for (ContributorStats s : currentStats) {
-            double linesPerCommit = (double) s.linesAdded() / (s.commitCount() > 0 ? s.commitCount() : 1);
-            metricsText.append(String.format("- %s (%s, Gender: %s): %d commits, %d merges, +%d/-%d lines, %.1f lines/commit (RISK INDICATOR), %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
-                s.name(), s.email(), s.gender(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), linesPerCommit, s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
+            metricsText.append(String.format("- %s (%s, Gender: %s): %d commits, %d merges, +%d/-%d lines, %d new/%d edited/%d deleted files\n",
+                s.name(), s.email(), s.gender(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount()));
         }
 
-        metricsText.append("\nNote for Risk Analysis: A higher 'lines/commit' value (especially >2000) strongly suggests non-iterative, potentially bulk-generated or problematic work, and should be flagged as high risk. A lower value (around 800 or less) is typically indicative of healthier, more granular development and lower risk.\n");
+        metricsText.append("\nNote for Risk Analysis: Calculate lines per commit (Total Lines Added / Total Commits) to evaluate risk: 1500+ is VERY HIGH RISK, 1-250 is LOW RISK. Initial setup commits should have lower risk weight.\n");
 
         String reqFeatures = readRequiredFeatures();
         if (!reqFeatures.isEmpty()) {
             metricsText.append("\nRequired Features for Evaluation:\n");
             metricsText.append(reqFeatures).append("\n");
-        }
-
-        if (!mdSections.isEmpty()) {
-            metricsText.append("\nINSTRUCTIONS AND ADDITIONAL CONTEXT (MD Sections):\n");
-            mdSections.forEach((title, content) -> {
-                metricsText.append(String.format("### SECTION: %s\n%s\n\n", title, content));
-            });
-            metricsText.append("END OF ADDITIONAL CONTEXT. Please apply the above sections to your analysis of the data below.\n");
         }
 
         if (currentMeaningfulAnalysis != null) {
@@ -552,8 +619,6 @@ public class MainApp extends Application {
             metricsText.append(String.format("- Total Insertions: %d\n", currentMeaningfulAnalysis.totalInsertions()));
             metricsText.append(String.format("- Total Deletions: %d\n", currentMeaningfulAnalysis.totalDeletions()));
             metricsText.append(String.format("- Whitespace Churn: %d\n", currentMeaningfulAnalysis.whitespaceChurn()));
-            metricsText.append(String.format("- Meaningful Change Score: %.1f/100\n", currentMeaningfulAnalysis.meaningfulChangeScore()));
-            metricsText.append(String.format("- Summary: %s\n", currentMeaningfulAnalysis.summary()));
             
             metricsText.append("- Category Breakdown:\n");
             currentMeaningfulAnalysis.categoryBreakdown().forEach((cat, m) -> {
@@ -563,7 +628,7 @@ public class MainApp extends Application {
             });
 
             if (!currentMeaningfulAnalysis.warnings().isEmpty()) {
-                metricsText.append("- Warnings:\n");
+                metricsText.append("- Contextual Observations:\n");
                 for (String warning : currentMeaningfulAnalysis.warnings()) {
                     metricsText.append(String.format("  ! %s\n", warning));
                 }
@@ -575,13 +640,47 @@ public class MainApp extends Application {
             });
         }
 
-        Platform.runLater(() -> llmResponseArea.setText("Generating report using " + selectedProvider + "..."));
+        final String finalUrl = url;
+        final String finalApiKey = apiKey;
+        final String finalModel = model;
+        final String baseMetrics = metricsText.toString();
+
+        Platform.runLater(() -> llmResponseArea.setText("Generating multi-section report using " + selectedProvider + "..."));
 
         new Thread(() -> {
             try {
-                String response = callLlmApi(url, apiKey, model, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + metricsText.toString());
+                StringBuilder fullReport = new StringBuilder();
+                
+                // If there are MD sections, call LLM for each one
+                if (!mdSections.isEmpty()) {
+                    for (Map.Entry<String, String> entry : mdSections.entrySet()) {
+                        String sectionTitle = entry.getKey().replace(".md", "");
+                        String sectionInstructions = entry.getValue();
+                        
+                        String prompt = userPromptArea.getText() + "\n\n" + 
+                                       "FOCUS SECTION: " + sectionTitle + "\n" +
+                                       "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
+                                       baseMetrics;
+                                       
+                        String sectionResponse = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), prompt);
+                        
+                        // Sanitize sectionResponse to remove markdown code blocks
+                        sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
+
+                        fullReport.append("**").append(sectionTitle).append("**\n\n");
+                        fullReport.append(sectionResponse).append("\n\n");
+                        
+                        Platform.runLater(() -> llmResponseArea.setText("Generated section: " + sectionTitle + "..."));
+                    }
+                } else {
+                    // Default behavior if no MD sections
+                    String response = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + baseMetrics);
+                    response = response.replaceAll("```markdown", "").replaceAll("```", "").trim();
+                    fullReport.append(response);
+                }
+
                 Platform.runLater(() -> {
-                    llmResponseArea.setText(response);
+                    llmResponseArea.setText(fullReport.toString());
                     if (onComplete != null) onComplete.run();
                 });
             } catch (Exception e) {
@@ -900,7 +999,8 @@ public class MainApp extends Application {
 
         new Thread(() -> {
             try {
-                currentStats = gitService.getContributorStats(repoDir, aliases, genderMap, ignoredExtensions, ignoredFolders);
+                String reqFeatures = readRequiredFeatures();
+                currentStats = gitService.getContributorStats(repoDir, aliases, genderMap, ignoredExtensions, ignoredFolders, reqFeatures);
                 currentMeaningfulAnalysis = gitService.performMeaningfulChangeAnalysis(repoDir, commitLimitSpinner.getValue(), ignoredFolders);
                 List<CommitInfo> recentCommits = gitService.getLastCommits(repoDir, commitLimitSpinner.getValue());
                 CommitInfo initial = gitService.getInitialCommit(repoDir);
@@ -910,7 +1010,7 @@ public class MainApp extends Application {
                 Platform.runLater(() -> {
                     List<ContributorStats> tableStats = groupOthers(currentStats, tableLimitSpinner.getValue());
                     statsTable.setItems(FXCollections.observableArrayList(tableStats));
-                    updateCharts(currentStats);
+                    updateCharts(currentStats, recentCommits);
                     commitList.getItems().clear();
                     for (CommitInfo ci : recentCommits) {
                         String langStr = formatLanguages(ci.languageBreakdown());
@@ -943,43 +1043,94 @@ public class MainApp extends Application {
         int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
         double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
 
+        double avgMeaningful = others.stream().mapToDouble(ContributorStats::meaningfulChangeScore).average().orElse(0.0);
+
         Map<String, Integer> oLangs = new HashMap<>();
         others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful));
         return top;
     }
 
-    private void updateCharts(List<ContributorStats> stats) {
+    private void updateCharts(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         Platform.runLater(() -> {
             // Limited to Top 5 for visuals
             List<ContributorStats> top5 = stats.stream().limit(5).collect(Collectors.toList());
 
-            // Pie Chart
+            // Pie Chart with percentages
+            commitPieChart.getData().clear();
+            commitPieChart.setAnimated(false);
+            int totalCommits = stats.stream().mapToInt(s -> s.commitCount() + s.mergeCount()).sum();
             List<PieChart.Data> pieData = top5.stream()
-                    .map(s -> new PieChart.Data(s.name(), s.commitCount() + s.mergeCount()))
+                    .map(s -> {
+                        double percentage = (totalCommits > 0) ? (double)(s.commitCount() + s.mergeCount()) / totalCommits * 100 : 0;
+                        PieChart.Data data = new PieChart.Data(String.format("%s (%.1f%%)", s.name(), percentage), s.commitCount() + s.mergeCount());
+                        return data;
+                    })
                     .toList();
             commitPieChart.setData(FXCollections.observableArrayList(pieData));
 
-            // Bar Chart
+            // Stacked Bar Chart for Impact
             impactBarChart.getData().clear();
+            impactBarChart.setAnimated(false); // Disable animations for snapshots
             XYChart.Series<String, Number> addedSeries = new XYChart.Series<>();
             addedSeries.setName("Added");
             XYChart.Series<String, Number> deletedSeries = new XYChart.Series<>();
             deletedSeries.setName("Deleted");
 
             for (ContributorStats s : top5) {
-                addedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesAdded()));
-                deletedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesDeleted()));
+                XYChart.Data<String, Number> addedData = new XYChart.Data<>(s.name(), s.linesAdded());
+                XYChart.Data<String, Number> deletedData = new XYChart.Data<>(s.name(), s.linesDeleted());
+                addedSeries.getData().add(addedData);
+                deletedSeries.getData().add(deletedData);
             }
             impactBarChart.getData().addAll(addedSeries, deletedSeries);
+
+            // Activity Line Chart
+            activityLineChart.getData().clear();
+            activityLineChart.setAnimated(false);
+            if (recentCommits != null && !recentCommits.isEmpty()) {
+                XYChart.Series<String, Number> activitySeries = new XYChart.Series<>();
+                activitySeries.setName("Lines Added");
+                // Show in chronological order (recentCommits is usually newest first)
+                List<CommitInfo> chronological = new ArrayList<>(recentCommits);
+                Collections.reverse(chronological);
+                
+                for (CommitInfo ci : chronological) {
+                    activitySeries.getData().add(new XYChart.Data<>(ci.id(), ci.linesAdded()));
+                }
+                activityLineChart.getData().add(activitySeries);
+            }
+
+            // Calendar Activity Line Chart
+            calendarActivityChart.getData().clear();
+            calendarActivityChart.setAnimated(false);
+            if (recentCommits != null && !recentCommits.isEmpty()) {
+                XYChart.Series<String, Number> calSeries = new XYChart.Series<>();
+                calSeries.setName("Daily Impact");
+                
+                Map<java.time.LocalDate, Integer> dailyImpact = new TreeMap<>();
+                for (CommitInfo ci : recentCommits) {
+                    java.time.LocalDate date = ci.timestamp().toLocalDate();
+                    dailyImpact.merge(date, ci.linesAdded(), Integer::sum);
+                }
+                
+                for (Map.Entry<java.time.LocalDate, Integer> entry : dailyImpact.entrySet()) {
+                    calSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
+                }
+                calendarActivityChart.getData().add(calSeries);
+            }
 
             // Force layout pass and refresh to ensure charts are rendered correctly
             Platform.runLater(() -> {
                 commitPieChart.layout();
                 impactBarChart.layout();
+                activityLineChart.layout();
+                calendarActivityChart.layout();
                 commitPieChart.requestLayout();
                 impactBarChart.requestLayout();
+                activityLineChart.requestLayout();
+                calendarActivityChart.requestLayout();
             });
         });
     }
@@ -1007,9 +1158,13 @@ public class MainApp extends Application {
             // Take snapshots of charts
             File pieFile = new File("pie_chart.png");
             File barFile = new File("bar_chart.png");
+            File lineFile = new File("line_chart.png");
+            File calendarFile = new File("calendar_chart.png");
             
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(impactBarChart, barFile);
+            saveNodeSnapshot(activityLineChart, lineFile);
+            saveNodeSnapshot(calendarActivityChart, calendarFile);
 
             String aiReport = null;
             if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
@@ -1045,12 +1200,15 @@ public class MainApp extends Application {
             }
 
             exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), 
-                                      pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport, 
+                                      pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
+                                      calendarFile.getAbsolutePath(), aiReport, 
                                       readMdSections(), coverHtml, coverBasePath, tableLimitSpinner.getValue());
             
             // Cleanup temp files
             pieFile.delete();
             barFile.delete();
+            lineFile.delete();
+            calendarFile.delete();
 
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {
