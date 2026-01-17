@@ -318,6 +318,8 @@ public class GitService {
 
                 int linesAddedBefore = builder.linesAdded;
                 int linesDeletedBefore = builder.linesDeleted;
+                int blankAddedBefore = builder.blankLinesAdded;
+                int blankDeletedBefore = builder.blankLinesDeleted;
 
                 RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
                 
@@ -331,6 +333,20 @@ public class GitService {
                     analyzeDiff(repository, parent, commit, builder, ignoredExtensions, ignoredFolders, null);
                 } else {
                     // For merge commits, we don't add the LOC to their total to avoid skewing.
+                }
+                
+                int linesAdded = builder.linesAdded - linesAddedBefore;
+                int linesDeleted = builder.linesDeleted - linesDeletedBefore;
+                int blankAdded = builder.blankLinesAdded - blankAddedBefore;
+                int blankDeleted = builder.blankLinesDeleted - blankDeletedBefore;
+
+                if (!isMerge && linesAdded == 0 && linesDeleted == 0) {
+                    builder.meaninglessCommits++;
+                } else if (!isMerge && (linesAdded > 0 || linesDeleted > 0)) {
+                    // If almost everything is blank lines, consider it meaningless
+                    if (linesAdded > 0 && blankAdded >= linesAdded * 0.9) {
+                        builder.meaninglessCommits++;
+                    }
                 }
                 
                 // Risk assessment for tests: Check if any file changed by this contributor was a test
@@ -352,9 +368,6 @@ public class GitService {
                     builder.touchedTests = true;
                 }
 
-                int linesAdded = builder.linesAdded - linesAddedBefore;
-                int linesDeleted = builder.linesDeleted - linesDeletedBefore;
-                
                 // Track files changed for AI heuristic (rough estimate based on language breakdown change)
                 // Actually, analyzeDiff doesn't give us files changed easily here without more state.
                 // Let's use a simple version.
@@ -402,6 +415,17 @@ public class GitService {
             int matches = 0;
             // Placeholder logic: more activity per feature/complexity
             score += Math.min(20, (double)b.commitCount / 2);
+        }
+
+        // Meaningless Change Penalties
+        // Deduction for blank lines if they are excessive (> 20% of total lines)
+        if (b.linesAdded > 100 && b.blankLinesAdded > b.linesAdded * 0.2) {
+            score -= Math.min(20, (double)b.blankLinesAdded / b.linesAdded * 50);
+        }
+        
+        // Deduction for meaningless commits (no lines changed or only blank lines)
+        if (b.meaninglessCommits > 0) {
+            score -= Math.min(30, b.meaninglessCommits * 5);
         }
 
         return Math.max(0, Math.min(100, score));
@@ -474,6 +498,34 @@ public class GitService {
                     int deleted = edit.getEndA() - edit.getBeginA();
                     builder.linesAdded += added;
                     builder.linesDeleted += deleted;
+
+                    // Detect blank lines
+                    try {
+                        org.eclipse.jgit.lib.ObjectLoader loaderA = entry.getOldId().toObjectId().equals(ObjectId.zeroId()) ? null : repository.open(entry.getOldId().toObjectId());
+                        org.eclipse.jgit.lib.ObjectLoader loaderB = entry.getNewId().toObjectId().equals(ObjectId.zeroId()) ? null : repository.open(entry.getNewId().toObjectId());
+                        
+                        org.eclipse.jgit.diff.RawText aText = loaderA == null ? null : new org.eclipse.jgit.diff.RawText(loaderA.getCachedBytes());
+                        org.eclipse.jgit.diff.RawText bText = loaderB == null ? null : new org.eclipse.jgit.diff.RawText(loaderB.getCachedBytes());
+                        
+                        if (added > 0 && bText != null) {
+                            for (int i = edit.getBeginB(); i < edit.getEndB(); i++) {
+                                String line = bText.getString(i);
+                                if (line == null || line.trim().isEmpty()) {
+                                    builder.blankLinesAdded++;
+                                }
+                            }
+                        }
+                        if (deleted > 0 && aText != null) {
+                            for (int i = edit.getBeginA(); i < edit.getEndA(); i++) {
+                                String line = aText.getString(i);
+                                if (line == null || line.trim().isEmpty()) {
+                                    builder.blankLinesDeleted++;
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        // fallback or ignore if text cannot be loaded
+                    }
                 }
             }
         }
@@ -550,19 +602,53 @@ public class GitService {
             Map<ObjectId, String> commitToBranch = new HashMap<>();
             List<org.eclipse.jgit.lib.Ref> branches = git.branchList().setListMode(org.eclipse.jgit.api.ListBranchCommand.ListMode.ALL).call();
             
-            // Sort branches so that 'main', 'master', 'develop' come last.
-            // This way, feature branches (where code is likely written) are processed first.
+            // Step 1: Identify "Trunk" commits for each main branch.
+            // A commit is on the trunk if it's reachable from a main branch via FIRST parents only.
+            // These should be attributed to the main branch.
+            Set<ObjectId> trunkCommits = new HashSet<>();
+            
+            for (org.eclipse.jgit.lib.Ref branch : branches) {
+                String fullBranchName = branch.getName();
+                String branchName = repository.shortenRemoteBranchName(fullBranchName);
+                if (branchName != null && (branchName.equals(fullBranchName) || branchName.startsWith("refs/"))) {
+                    if (fullBranchName.startsWith("refs/heads/")) branchName = fullBranchName.substring(11);
+                    else if (fullBranchName.startsWith("refs/remotes/")) branchName = fullBranchName.substring(13);
+                }
+                if (branchName == null) branchName = fullBranchName;
+                
+                if (branchName.startsWith("refs/heads/")) branchName = branchName.substring(11);
+                if (branchName.startsWith("refs/remotes/")) branchName = branchName.substring(13);
+                
+                boolean isMainBranch = branchName.equalsIgnoreCase("main") || branchName.equalsIgnoreCase("master") || branchName.equalsIgnoreCase("develop") || 
+                                     branchName.equalsIgnoreCase("origin/main") || branchName.equalsIgnoreCase("origin/master") || branchName.equalsIgnoreCase("origin/develop");
+                
+                if (isMainBranch) {
+                    try (org.eclipse.jgit.revwalk.RevWalk walk = new org.eclipse.jgit.revwalk.RevWalk(repository)) {
+                        RevCommit current = walk.parseCommit(branch.getObjectId());
+                        while (current != null) {
+                            trunkCommits.add(current.getId());
+                            commitToBranch.put(current.getId(), branchName);
+                            walk.parseHeaders(current);
+                            if (current.getParentCount() > 0) {
+                                current = walk.parseCommit(current.getParent(0).getId());
+                            } else {
+                                current = null;
+                            }
+                        }
+                    } catch (Exception e) {}
+                }
+            }
+
+            // Step 2: Assign ALL commits to branches, using putIfAbsent.
+            // Feature branches should be processed FIRST so they claim their unique commits.
+            // Feature branches are those NOT in trunkCommits (conceptually).
+            // Sort branches so feature branches are first.
             branches.sort((b1, b2) -> {
-                String fullN1 = b1.getName();
-                String fullN2 = b2.getName();
-                String s1 = repository.shortenRemoteBranchName(fullN1);
-                String s2 = repository.shortenRemoteBranchName(fullN2);
+                String n1 = b1.getName();
+                String n2 = b2.getName();
                 
-                String n1 = (s1 != null) ? s1.toLowerCase() : fullN1.toLowerCase();
-                String n2 = (s2 != null) ? s2.toLowerCase() : fullN2.toLowerCase();
-                
-                boolean isMain1 = n1.equals("main") || n1.equals("master") || n1.equals("develop") || n1.equals("origin/main") || n1.equals("origin/master") || n1.equals("origin/develop");
-                boolean isMain2 = n2.equals("main") || n2.equals("master") || n2.equals("develop") || n2.equals("origin/main") || n2.equals("origin/master") || n2.equals("origin/develop");
+                boolean isMain1 = n1.contains("main") || n1.contains("master") || n1.contains("develop");
+                boolean isMain2 = n2.contains("main") || n2.contains("master") || n2.contains("develop");
                 
                 if (isMain1 && !isMain2) return 1;
                 if (!isMain1 && isMain2) return -1;
@@ -571,14 +657,20 @@ public class GitService {
 
             for (org.eclipse.jgit.lib.Ref branch : branches) {
                 String fullBranchName = branch.getName();
-                String shortened = repository.shortenRemoteBranchName(fullBranchName);
-                String branchName = (shortened != null) ? shortened : fullBranchName;
+                String branchName = repository.shortenRemoteBranchName(fullBranchName);
+                if (branchName != null && (branchName.equals(fullBranchName) || branchName.startsWith("refs/"))) {
+                    if (fullBranchName.startsWith("refs/heads/")) branchName = fullBranchName.substring(11);
+                    else if (fullBranchName.startsWith("refs/remotes/")) branchName = fullBranchName.substring(13);
+                }
+                if (branchName == null) branchName = fullBranchName;
                 
-                Iterable<RevCommit> branchCommits = git.log().add(branch.getObjectId()).call();
-                for (RevCommit branchCommit : branchCommits) {
-                    if (branchCommit != null && branchCommit.getId() != null && branchName != null) {
-                        // Use putIfAbsent so the first (most specific/feature) branch name is kept.
-                        commitToBranch.putIfAbsent(branchCommit.getId(), branchName);
+                if (branchName.startsWith("refs/heads/")) branchName = branchName.substring(11);
+                if (branchName.startsWith("refs/remotes/")) branchName = branchName.substring(13);
+
+                Iterable<RevCommit> bCommits = git.log().add(branch.getObjectId()).call();
+                for (RevCommit bCommit : bCommits) {
+                    if (bCommit != null && bCommit.getId() != null) {
+                        commitToBranch.putIfAbsent(bCommit.getId(), branchName);
                     }
                 }
             }
@@ -659,6 +751,63 @@ public class GitService {
         }
     }
 
+    public Map<String, List<FileChange>> getTopFilesPerContributor(File repoPath, int limitPerContributor, Map<String, String> aliases) throws Exception {
+        try (Git git = Git.open(repoPath)) {
+            Repository repository = git.getRepository();
+            Iterable<RevCommit> commits = git.log().all().call();
+            Map<String, Map<String, FileChange>> contributorFileChanges = new HashMap<>();
+            Set<String> processedCommits = new HashSet<>();
+
+            for (RevCommit commit : commits) {
+                if (!processedCommits.add(commit.getName())) {
+                    continue;
+                }
+                if (commit.getParentCount() > 1) {
+                    continue; // Skip merge commits for file attribution
+                }
+
+                String authorEmail = commit.getAuthorIdent().getEmailAddress();
+                String authorName = commit.getAuthorIdent().getName();
+                String targetName = aliases != null ? aliases.getOrDefault(authorEmail, authorName) : authorName;
+
+                Map<String, FileChange> fileMap = contributorFileChanges.computeIfAbsent(targetName, k -> new HashMap<>());
+
+                RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
+                try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+                    df.setRepository(repository);
+                    List<DiffEntry> diffs = parent != null ? df.scan(parent.getTree(), commit.getTree()) : df.scan(null, commit.getTree());
+
+                    for (DiffEntry entry : diffs) {
+                        String path = entry.getNewPath() != null ? entry.getNewPath() : entry.getOldPath();
+                        int ins = 0;
+                        int del = 0;
+                        for (Edit edit : df.toFileHeader(entry).toEditList()) {
+                            ins += edit.getEndB() - edit.getBeginB();
+                            del += edit.getEndA() - edit.getBeginA();
+                        }
+
+                        FileChange existing = fileMap.get(path);
+                        if (existing == null) {
+                            fileMap.put(path, new FileChange(path, ins, del, categorizePath(path), entry.getChangeType().name()));
+                        } else {
+                            fileMap.put(path, new FileChange(path, existing.insertions() + ins, existing.deletions() + del, existing.category(), existing.changeType()));
+                        }
+                    }
+                }
+            }
+
+            Map<String, List<FileChange>> result = new HashMap<>();
+            contributorFileChanges.forEach((contributor, fileMap) -> {
+                List<FileChange> topFiles = fileMap.values().stream()
+                        .sorted(Comparator.comparingInt(FileChange::getTotalChange).reversed())
+                        .limit(limitPerContributor)
+                        .toList();
+                result.put(contributor, topFiles);
+            });
+            return result;
+        }
+    }
+
     public CommitInfo getInitialCommit(File repoPath, Map<String, String> aliases) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
@@ -734,6 +883,9 @@ public class GitService {
         int mergeCount;
         int linesAdded;
         int linesDeleted;
+        int blankLinesAdded;
+        int blankLinesDeleted;
+        int meaninglessCommits;
         Map<String, Integer> languageBreakdown = new HashMap<>();
         double totalAiProbability;
         int filesAdded;

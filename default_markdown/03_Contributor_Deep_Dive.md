@@ -36,6 +36,8 @@ Where XX is the score you calculated. This score should take into account commit
 - Explain WHAT areas this contributor worked on (directories + file types).
 - Describe the nature of the work using evidence:
     - features vs refactors vs formatting vs generated outputs
+- **Functionality Comparison**: Identify the specific functional components or features this contributor is primarily responsible for. Compare their contributions to others to determine who "owns" or created the most functionality in key areas.
+- **Top Files Analysis**: Reference the specific files they touched most frequently or with the most impact. Explain what those files do and how they contribute to the overall project requirements.
 - MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., "update", "fix").
 - FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files (e.g., changes to CSS-in-JS, styled-components, or large chunks of JSX with classes). If a contributor has significant 'Styling' category metrics, call it out specifically.
 - Explicitly differentiate between:

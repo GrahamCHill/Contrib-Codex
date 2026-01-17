@@ -39,3 +39,10 @@ Analyze the directory structure and file distribution provided in the METRICS.
 - Identify overall design patterns (e.g., MVC, Microservices, Layered, Monolithic) based on folder naming and organization.
 - Comment on the tech stack usage observed (e.g., languages, configuration file types).
 - Assess the long-term maintainability of these choices: Are components well-separated? Is the structure intuitive for onboarding and scaling?
+
+### 5) Requirements Alignment & Feature Coverage
+If a list of "Features" or "Requirements" is provided in the METRICS section:
+- Compare the observed file changes and commit messages against the stated requirements.
+- Identify which requirements appear to have the most development evidence (e.g., specific files or modules that map to a requirement).
+- Highlight any requirements that seem to have little to no evidence of implementation in the commit history.
+- Assess the completeness of the implementation based on the breadth of files touched.

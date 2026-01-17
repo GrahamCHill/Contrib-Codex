@@ -66,8 +66,23 @@ mvn javafx:run
     - **MD Folder:** Optional path to a folder containing `.md` files. Each file will be added as a section in the PDF and included as context for the LLM.
 3. **Analyze:** Click "Analyze" to process the repository.
 4. **Merge Users:** Right-click a user in the table to merge them with another identity (useful for multiple emails).
-5. **API Keys:** Use the **Settings -> API Keys...** menu to set your OpenAI or Groq keys for LLM report generation.
+5. **LLM Configuration (Settings -> API Keys...):** 
+    - **API Keys:** Provide your OpenAI or Groq API keys. Keys are stored locally and encrypted.
+    - **Model Selection:** Select or manually enter the model name (e.g., `gpt-4o` for OpenAI or `mixtral-8x7b-32768` for Groq).
+    - **Fetch Models:** For Groq and Ollama, use the "Fetch Models" button to automatically retrieve a list of available models from their respective APIs.
 6. **Export:** Click "Export to PDF" to save a visual and detailed report.
+
+## Contributor Scoring & Penalties
+
+Contrib Codex uses a multi-layered heuristic to calculate a **Meaningful Change Score** (0-100) for every contributor:
+
+- **Iterative Bonus:** Rewarded for smaller, focused commits (< 250-500 lines) rather than bulk "dumps".
+- **Quality Signal:** Points added for touching test files alongside source code.
+- **Refactoring Reward:** Significant points added for net code reduction (deletions > 50% of additions).
+- **Meaningless Change Penalty:**
+    - Contributors are penalized for committing **blank lines** (if they exceed 20% of the total change).
+    - Commits with **zero logic changes** or only whitespace changes result in a deduction from the final score.
+- **AI Refinement:** If an AI report is generated, the LLM further refines these scores based on commit message clarity and qualitative impact.
 
 ## Technical Details
 

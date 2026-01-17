@@ -76,6 +76,7 @@ public class MainApp extends Application {
     private String ollamaUrl = "http://localhost:11434";
     private String ollamaModel = "llama3";
     private List<String> availableOllamaModels = new ArrayList<>();
+    private List<String> availableGroqModels = new ArrayList<>();
     private String selectedProvider = "OpenAI";
 
     private CheckBox aiReviewCheckBox;
@@ -602,8 +603,24 @@ public class MainApp extends Application {
         
         TextField openAiModelField = new TextField(openAiModel);
         openAiModelField.setPromptText("OpenAI Model (e.g. gpt-4o)");
-        TextField groqModelField = new TextField(groqModel);
-        groqModelField.setPromptText("Groq Model (e.g. mixtral-8x7b-32768)");
+        
+        ComboBox<String> groqModelCombo = new ComboBox<>(FXCollections.observableArrayList(availableGroqModels));
+        if (availableGroqModels.isEmpty()) {
+            groqModelCombo.getItems().add(groqModel);
+        }
+        groqModelCombo.setValue(groqModel);
+        groqModelCombo.setEditable(true);
+        groqModelCombo.setPrefWidth(200);
+
+        Button fetchGroqBtn = new Button("Fetch Models");
+        fetchGroqBtn.setOnAction(e -> {
+            List<String> models = fetchGroqModels(groqField.getText());
+            if (!models.isEmpty()) {
+                availableGroqModels = models;
+                groqModelCombo.setItems(FXCollections.observableArrayList(models));
+                groqModelCombo.setValue(models.get(0));
+            }
+        });
 
         TextField ollamaField = new TextField(ollamaUrl);
         ollamaField.setPromptText("Ollama URL (default: http://localhost:11434)");
@@ -634,7 +651,8 @@ public class MainApp extends Application {
         grid.add(new Label("Groq API Key:"), 0, 2);
         grid.add(groqField, 1, 2);
         grid.add(new Label("Groq Model:"), 0, 3);
-        grid.add(groqModelField, 1, 3);
+        HBox groqModelBox = new HBox(5, groqModelCombo, fetchGroqBtn);
+        grid.add(groqModelBox, 1, 3);
 
         grid.add(new Label("Ollama URL:"), 0, 4);
         grid.add(ollamaField, 1, 4);
@@ -649,7 +667,7 @@ public class MainApp extends Application {
                 openAiKey = openAiField.getText();
                 openAiModel = openAiModelField.getText();
                 groqKey = groqField.getText();
-                groqModel = groqModelField.getText();
+                groqModel = groqModelCombo.getValue();
                 ollamaUrl = ollamaField.getText();
                 ollamaModel = ollamaModelCombo.getValue();
                 saveSettings();
@@ -767,6 +785,45 @@ public class MainApp extends Application {
             }
         } catch (Exception e) {
             showAlert("Error", "Could not connect to Ollama: " + e.getMessage());
+        }
+        return models;
+    }
+
+    private List<String> fetchGroqModels(String apiKey) {
+        List<String> models = new ArrayList<>();
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            showAlert("Error", "Groq API Key is required to fetch models.");
+            return models;
+        }
+        try {
+            java.net.URL url = new java.net.URL("https://api.groq.com/openai/v1/models");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            conn.setRequestProperty("Content-Type", "application/json");
+            
+            if (conn.getResponseCode() == 200) {
+                try (java.io.InputStream is = conn.getInputStream()) {
+                    String response = new String(is.readAllBytes());
+                    // Rough manual parsing of JSON like {"data":[{"id":"mixtral-8x7b-32768",...},...]}
+                    int idx = 0;
+                    while ((idx = response.indexOf("\"id\":\"", idx)) != -1) {
+                        idx += 6;
+                        int end = response.indexOf("\"", idx);
+                        if (end != -1) {
+                            models.add(response.substring(idx, end));
+                            idx = end;
+                        }
+                    }
+                }
+            } else {
+                try (java.io.InputStream is = conn.getErrorStream()) {
+                    String err = is != null ? new String(is.readAllBytes()) : "Unknown error";
+                    showAlert("Error", "Failed to fetch Groq models. Status: " + conn.getResponseCode() + "\n" + err);
+                }
+            }
+        } catch (Exception e) {
+            showAlert("Error", "Could not connect to Groq: " + e.getMessage());
         }
         return models;
     }
@@ -992,6 +1049,15 @@ public class MainApp extends Application {
                     ci.linesAdded(), ci.linesDeleted(), ci.filesAdded(), ci.filesEdited(), ci.filesDeleted(),
                     ci.aiProbability() * 100));
             }
+
+            metricsText.append("\nCONTRIBUTOR TOP FILES (Impactful Files per Contributor):\n");
+            Map<String, List<FileChange>> contributorFiles = gitService.getTopFilesPerContributor(repoDir, 10, aliasesMap());
+            contributorFiles.forEach((contributor, files) -> {
+                metricsText.append(String.format("Contributor: %s\n", contributor));
+                files.forEach(f -> {
+                    metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType()));
+                });
+            });
         } catch (Exception e) {
             metricsText.append("\nCould not retrieve commit history: ").append(e.getMessage()).append("\n");
         }
