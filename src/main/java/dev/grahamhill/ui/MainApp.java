@@ -56,6 +56,7 @@ public class MainApp extends Application {
     private StackedBarChart<String, Number> impactBarChart;
     private LineChart<String, Number> activityLineChart;
     private LineChart<String, Number> calendarActivityChart;
+    private LineChart<String, Number> contributorActivityChart;
 
     private List<ContributorStats> currentStats;
     private MeaningfulChangeAnalysis currentMeaningfulAnalysis;
@@ -124,7 +125,7 @@ public class MainApp extends Application {
         tableLimitSpinner.setEditable(true);
         ignoredExtensionsField = new TextField("json,csv,lock,txt");
         ignoredExtensionsField.setPromptText("e.g. json,csv");
-        ignoredFoldersField = new TextField("node_modules,target,build,dist");
+        ignoredFoldersField = new TextField("node_modules,target,build,dist,.git");
         ignoredFoldersField.setPromptText("e.g. node_modules,target");
         settingsBox.getChildren().addAll(
                 new Label("Git Tree Commits:"), commitLimitSpinner,
@@ -249,43 +250,67 @@ public class MainApp extends Application {
 
         Tab visualsTab = new Tab("Visuals");
         visualsTab.setClosable(false);
+        ScrollPane visualsScrollPane = new ScrollPane();
+        visualsScrollPane.setFitToWidth(true);
+        visualsScrollPane.setFitToHeight(true);
         HBox chartsBox = new HBox(10);
         chartsBox.setPadding(new Insets(10));
+        visualsScrollPane.setContent(chartsBox);
+
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
-        commitPieChart.setMinWidth(300);
+        commitPieChart.setMinWidth(500);
+        commitPieChart.setPrefWidth(600);
+        commitPieChart.setLegendSide(javafx.geometry.Side.BOTTOM);
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         impactBarChart = new StackedBarChart<>(xAxis, yAxis);
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
-        impactBarChart.setMinWidth(300);
+        impactBarChart.setMinWidth(500);
+        impactBarChart.setPrefWidth(600);
         impactBarChart.setCategoryGap(20);
         xAxis.setLabel("Contributor");
+        xAxis.setTickLabelRotation(45); // Prevent overlap
         yAxis.setLabel("Lines of Code");
 
         CategoryAxis lxAxis = new CategoryAxis();
         NumberAxis lyAxis = new NumberAxis();
         activityLineChart = new LineChart<>(lxAxis, lyAxis);
         activityLineChart.setTitle("Recent Commit Activity");
-        activityLineChart.setMinWidth(300);
+        activityLineChart.setMinWidth(500);
+        activityLineChart.setPrefWidth(600);
         lxAxis.setLabel("Commit ID");
+        lxAxis.setTickLabelRotation(45); // Prevent overlap
         lyAxis.setLabel("Lines Added");
 
         CategoryAxis cxAxis = new CategoryAxis();
         NumberAxis cyAxis = new NumberAxis();
         calendarActivityChart = new LineChart<>(cxAxis, cyAxis);
-        calendarActivityChart.setTitle("Daily Activity (Calendar)");
-        calendarActivityChart.setMinWidth(300);
+        calendarActivityChart.setTitle("Daily Activity (Total Impact)");
+        calendarActivityChart.setMinWidth(500);
+        calendarActivityChart.setPrefWidth(600);
         cxAxis.setLabel("Date");
+        cxAxis.setTickLabelRotation(45); // Prevent overlap
         cyAxis.setLabel("Total Lines Added");
 
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart);
+        CategoryAxis caxAxis = new CategoryAxis();
+        NumberAxis cayAxis = new NumberAxis();
+        contributorActivityChart = new LineChart<>(caxAxis, cayAxis);
+        contributorActivityChart.setTitle("Daily Activity per Contributor");
+        contributorActivityChart.setMinWidth(500);
+        contributorActivityChart.setPrefWidth(600);
+        caxAxis.setLabel("Date");
+        caxAxis.setTickLabelRotation(45);
+        cayAxis.setLabel("Lines Added");
+
+        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
-        visualsTab.setContent(chartsBox);
+        HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
+        visualsTab.setContent(visualsScrollPane);
 
         statsTabPane.getTabs().addAll(statsTab, visualsTab);
 
@@ -304,6 +329,7 @@ public class MainApp extends Application {
         VBox llmPanel = new VBox(10);
         llmPanel.setPadding(new Insets(10));
         systemPromptArea = new TextArea("You are a senior software engineer and code auditor. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns.\n" +
+                "DO NOT write the response as a letter, email, or correspondence. DO NOT use 'Best regards', 'Sincerely', or similar sign-offs. Use a structured, professional technical report format with clear headings.\n" +
                 "CRITICAL RISK SCALE (Lines per Commit - LOWER IS BETTER):\n" +
                 "- 1500+: VERY HIGH RISK (Indicative of bulk generation, unreviewed code bloat, or severe lack of granularity).\n" +
                 "- 1000 - 1500: HIGH RISK.\n" +
@@ -311,17 +337,25 @@ public class MainApp extends Application {
                 "- 500 - 750: MEDIUM RISK.\n" +
                 "- 250 - 500: LOW TO MEDIUM RISK.\n" +
                 "- 1 - 250: LOW RISK (Healthy, iterative development).\n" +
-                "MATHEMATICAL TRUTH: 2800 lines/commit is MORE AT RISK than 800 lines/commit. Higher numbers mean HIGHER RISK.\n" +
+                "MATHEMATICAL TRUTH: You MUST calculate 'Lines per Commit' yourself (Total Lines Added / Total Commits). \n" +
+                "Example: 2800 lines added in 1 commit = 2800 lines/commit (EXTREME RISK). 800 lines added in 10 commits = 80 lines/commit (HEALTHY).\n" +
+                "Higher lines per commit ALWAYS mean HIGHER RISK. Lower lines per commit ALWAYS mean LOWER RISK.\n" +
+                "If a contributor has 2700+ lines per commit, they are ALWAYS higher risk than someone with 800 lines per commit.\n" +
                 "NOTE: For early project setup (initial commits), risk is naturally lower as project structure is being established and tests may not exist yet.\n" +
+                "STRUCTURED ANALYSIS RULES:\n" +
+                "1. For each contributor, calculate their lines/commit.\n" +
+                "2. Evaluate their risk based on the scale above. State the calculated value and the risk level clearly.\n" +
+                "3. Use the 'Gender' field: 'male' -> he/him, 'female' -> she/her, 'non-binary'/'they'/'unknown' -> they/them.\n" +
+                "4. Identify the most valuable contributor based on iterative development (LOW lines/commit), quality, and alignment with project requirements.\n" +
                 "CONTEXTUAL ANALYSIS:\n" +
                 "- Language & Location: Consider if the lines changed make sense for the file type and location (e.g., massive changes in documentation or config may be less risky than in core logic).\n" +
                 "- Meaningful Change Score: Use this score to determine if changes represent real functionality vs noise.\n" +
-                "- Requirements Alignment: Evaluate how well the contributions align with the provided project requirements.\n" +
-                "PRONOUN RULE: Use the 'Gender' field: 'male' -> he/him, 'female' -> she/her, 'non-binary'/'they'/'unknown' -> they/them.\n" +
-                "CONCLUSION RULE: Identify the most valuable contributor based on iterative development (LOW lines/commit), quality, and alignment with project requirements.");
+                "- Requirements Alignment: Evaluate how well the contributions align with the provided project requirements.");
         systemPromptArea.setPrefHeight(60);
         userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors. " +
-                "Evaluate risk based on the provided scale: HIGHER lines/commit values (e.g. 2800) are MUCH HIGHER risk than lower values (e.g. 800). " +
+                "Evaluate risk by CALCULATING the lines per commit for each contributor and comparing them to the scale. " +
+                "Remember: 2800 lines/commit is MUCH HIGHER risk than 80 lines/commit. " +
+                "DO NOT use a letter format. Use professional report headings. " +
                 "Take into account the context of languages and project setup phase. " +
                 "Strictly follow the Risk and Quality rules defined in the system prompt. " +
                 "Treat the provided Markdown sections and project requirements as directives for your analysis. " +
@@ -1121,18 +1155,53 @@ public class MainApp extends Application {
                 calendarActivityChart.getData().add(calSeries);
             }
 
+            updateContributorActivityChart(stats, recentCommits);
+
             // Force layout pass and refresh to ensure charts are rendered correctly
             Platform.runLater(() -> {
                 commitPieChart.layout();
                 impactBarChart.layout();
                 activityLineChart.layout();
                 calendarActivityChart.layout();
+                contributorActivityChart.layout();
                 commitPieChart.requestLayout();
                 impactBarChart.requestLayout();
                 activityLineChart.requestLayout();
                 calendarActivityChart.requestLayout();
+                contributorActivityChart.requestLayout();
             });
         });
+    }
+
+    private void updateContributorActivityChart(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
+        contributorActivityChart.getData().clear();
+        contributorActivityChart.setAnimated(false);
+        if (recentCommits == null || recentCommits.isEmpty()) return;
+
+        // Group commits by author and then by date
+        Map<String, Map<java.time.LocalDate, Integer>> authorDailyImpact = new HashMap<>();
+        
+        // Use top 5 contributors only to avoid clutter
+        Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
+
+        for (CommitInfo ci : recentCommits) {
+            String author = ci.authorName();
+            if (!topAuthorNames.contains(author)) continue;
+            
+            java.time.LocalDate date = ci.timestamp().toLocalDate();
+            authorDailyImpact.computeIfAbsent(author, k -> new TreeMap<>())
+                             .merge(date, ci.linesAdded(), Integer::sum);
+        }
+
+        for (Map.Entry<String, Map<java.time.LocalDate, Integer>> entry : authorDailyImpact.entrySet()) {
+            XYChart.Series<String, Number> series = new XYChart.Series<>();
+            series.setName(entry.getKey());
+            
+            for (Map.Entry<java.time.LocalDate, Integer> dateEntry : entry.getValue().entrySet()) {
+                series.getData().add(new XYChart.Data<>(dateEntry.getKey().toString(), dateEntry.getValue()));
+            }
+            contributorActivityChart.getData().add(series);
+        }
     }
 
     private void exportToPdf(Stage stage) {
@@ -1160,11 +1229,13 @@ public class MainApp extends Application {
             File barFile = new File("bar_chart.png");
             File lineFile = new File("line_chart.png");
             File calendarFile = new File("calendar_chart.png");
+            File contribFile = new File("contrib_activity.png");
             
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(impactBarChart, barFile);
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calendarFile);
+            saveNodeSnapshot(contributorActivityChart, contribFile);
 
             String aiReport = null;
             if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
@@ -1201,7 +1272,7 @@ public class MainApp extends Application {
 
             exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), 
                                       pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
-                                      calendarFile.getAbsolutePath(), aiReport, 
+                                      calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), aiReport, 
                                       readMdSections(), coverHtml, coverBasePath, tableLimitSpinner.getValue());
             
             // Cleanup temp files
@@ -1209,6 +1280,7 @@ public class MainApp extends Application {
             barFile.delete();
             lineFile.delete();
             calendarFile.delete();
+            contribFile.delete();
 
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {

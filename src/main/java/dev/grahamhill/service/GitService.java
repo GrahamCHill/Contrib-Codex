@@ -130,7 +130,7 @@ public class GitService {
     }
 
     private void initializeCategories(Map<String, MeaningfulChangeAnalysis.CategoryMetrics> map) {
-        String[] cats = {"Source Code", "Tests", "Generated/Artifacts", "Lockfiles", "Sourcemaps/Minified", "Config/Data", "Other"};
+        String[] cats = {"Source Code", "Tests", "Generated/Artifacts", "Lockfiles", "Sourcemaps/Minified", "Config/Data", "Documentation", "Other"};
         for (String c : cats) map.put(c, new MeaningfulChangeAnalysis.CategoryMetrics(0, 0, 0));
     }
 
@@ -142,6 +142,7 @@ public class GitService {
         if (path.endsWith("package-lock.json") || path.endsWith("yarn.lock") || path.endsWith("pnpm-lock.yaml") || path.endsWith("requirements.txt") || path.endsWith("pom.xml")) return "Lockfiles";
         if (path.endsWith(".map") || path.endsWith(".min.js") || path.endsWith(".min.css")) return "Sourcemaps/Minified";
         if (path.endsWith(".json") || path.endsWith(".yml") || path.endsWith(".yaml") || path.endsWith(".toml") || path.endsWith(".xml")) return "Config/Data";
+        if (path.endsWith(".md")) return "Documentation";
         return "Other";
     }
 
@@ -152,6 +153,7 @@ public class GitService {
         MeaningfulChangeAnalysis.CategoryMetrics gen = map.get("Generated/Artifacts");
         MeaningfulChangeAnalysis.CategoryMetrics lock = map.get("Lockfiles");
         MeaningfulChangeAnalysis.CategoryMetrics mapMin = map.get("Sourcemaps/Minified");
+        MeaningfulChangeAnalysis.CategoryMetrics doc = map.get("Documentation");
 
         if (totalIns > 1000 && src.insertions() < (totalIns * 0.1)) {
             warnings.add("Huge LOC change but minimal source code changes detected.");
@@ -159,9 +161,9 @@ public class GitService {
         if (src.insertions() > 500 && test.insertions() == 0) {
             warnings.add("Significant source code changes without accompanying test changes.");
         }
-        int nonMeaningful = gen.insertions() + lock.insertions() + mapMin.insertions();
+        int nonMeaningful = gen.insertions() + lock.insertions() + mapMin.insertions() + doc.insertions();
         if (totalIns > 0 && (double)nonMeaningful / totalIns > 0.7) {
-            warnings.add("Majority of changes appear to be generated artifacts, lockfiles, or minified code.");
+            warnings.add("Majority of changes appear to be generated artifacts, lockfiles, minified code, or documentation.");
         }
         return warnings;
     }

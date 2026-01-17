@@ -16,7 +16,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -42,9 +42,15 @@ public class ExportService {
         if (coverHtml != null && !coverHtml.isEmpty()) {
             event.setCoverPage(true);
             try {
+                // Wrap in full HTML if it's missing to help parser
+                String fullHtml = coverHtml;
+                if (!fullHtml.toLowerCase().contains("<html>")) {
+                    fullHtml = "<html><body>" + fullHtml + "</body></html>";
+                }
+                
                 StyleSheet styles = new StyleSheet();
                 // Improved stylesheet handling to avoid CSS appearing as text
-                String htmlToParse = coverHtml;
+                String htmlToParse = fullHtml;
                 
                 // Extract and apply style tags manually if HTMLWorker struggles with them
                 if (htmlToParse.contains("<style>")) {
@@ -52,8 +58,7 @@ public class ExportService {
                     int endStyle = htmlToParse.indexOf("</style>");
                     if (endStyle > startStyle) {
                         String css = htmlToParse.substring(startStyle + 7, endStyle).trim();
-                        // OpenPDF StyleSheet.loadTagStyle is one way, or we just rely on standard tags
-                        // For simplicity, we'll strip the style block from the body to prevent it rendering as text
+                        // Strip the style block from the body to prevent it rendering as text
                         htmlToParse = htmlToParse.substring(0, startStyle) + htmlToParse.substring(endStyle + 8);
                         
                         // Basic CSS to StyleSheet mapping
@@ -74,6 +79,7 @@ public class ExportService {
                     }
                 }
 
+                // Use more modern HTML parsing if possible, but stay with HTMLWorker for compatibility
                 List<com.lowagie.text.Element> elements = HTMLWorker.parseToList(new StringReader(htmlToParse), styles);
                 for (com.lowagie.text.Element element : elements) {
                     document.add(element);
@@ -90,12 +96,23 @@ public class ExportService {
         event.setCoverPage(false);
 
         document.add(new Paragraph("Git Contributor Metrics Report", headerFont));
+        
+        // Purpose Explanation
+        Paragraph explanation = new Paragraph("This report provides a comprehensive analysis of the Git repository's contribution history. " +
+                "It evaluates contributor impact through line-level metrics, file status changes, and AI-generated probability heuristics. " +
+                "The purpose is to identify meaningful development patterns, assess potential risks associated with bulk code generation, " +
+                "and recognize the most valuable contributions based on iterative and qualitative development standards.", normalFont);
+        explanation.setSpacingBefore(10f);
+        explanation.setSpacingAfter(15f);
+        document.add(explanation);
+
         Paragraph spacing = new Paragraph(" ");
         spacing.setSpacingAfter(10f);
         document.add(spacing);
 
         // Meaningful Change Detection Section
         if (aiReport != null && !aiReport.isEmpty()) {
+            document.newPage(); // Start AI Review on a new page
             Paragraph aiTitle = new Paragraph("AI Generated Review", sectionFont);
             aiTitle.setSpacingBefore(15f);
             document.add(aiTitle);
@@ -139,6 +156,7 @@ public class ExportService {
 
         // Meaningful Change Detection Section
         if (meaningfulAnalysis != null) {
+            document.newPage(); // New page for Meaningful Change Detection
             Paragraph mcTitle = new Paragraph("Meaningful Change Detection", sectionFont);
             mcTitle.setSpacingBefore(15f);
             document.add(mcTitle);
@@ -192,40 +210,51 @@ public class ExportService {
         }
 
         // Add Charts
+        document.setPageSize(PageSize.A4.rotate());
+        document.newPage(); // New page for Visuals
         Paragraph chartTitle1 = new Paragraph("Commit Distribution:", sectionFont);
         chartTitle1.setSpacingBefore(15f);
         document.add(chartTitle1);
         Image pieImage = Image.getInstance(piePath);
-        pieImage.scaleToFit(520, 400);
+        pieImage.scalePercent(100f); // Keep Pie Chart as is
         pieImage.setAlignment(Image.MIDDLE);
         document.add(pieImage);
 
+        document.newPage();
         Paragraph chartTitle2 = new Paragraph("Impact Analysis (Stacked):", sectionFont);
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
-        barImage.scaleToFit(520, 400);
+        barImage.scalePercent(50f); // Shrink by 100% (half size)
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
+        document.newPage();
         Paragraph chartTitle3 = new Paragraph("Recent Commit Activity:", sectionFont);
         chartTitle3.setSpacingBefore(15f);
         document.add(chartTitle3);
         Image lineImage = Image.getInstance(linePath);
-        lineImage.scaleToFit(520, 400);
+        lineImage.scalePercent(50f); // Shrink
         lineImage.setAlignment(Image.MIDDLE);
         document.add(lineImage);
 
-        // Calendar Activity on a new Landscape page
-        document.setPageSize(PageSize.A4.rotate());
         document.newPage();
-        Paragraph chartTitle4 = new Paragraph("Daily Activity (Calendar):", sectionFont);
+        Paragraph chartTitle4 = new Paragraph("Daily Activity (Total Impact):", sectionFont);
         chartTitle4.setSpacingBefore(15f);
         document.add(chartTitle4);
         Image calendarImage = Image.getInstance(calendarPath);
-        calendarImage.scaleToFit(750, 450);
+        calendarImage.scalePercent(50f); // Shrink
         calendarImage.setAlignment(Image.MIDDLE);
         document.add(calendarImage);
+
+        document.newPage();
+        Paragraph chartTitle5 = new Paragraph("Daily Activity per Contributor:", sectionFont);
+        chartTitle5.setSpacingBefore(15f);
+        document.add(chartTitle5);
+        Image contribImage = Image.getInstance(contribPath);
+        contribImage.scalePercent(50f); // Shrink
+        contribImage.setAlignment(Image.MIDDLE);
+        document.add(contribImage);
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);
