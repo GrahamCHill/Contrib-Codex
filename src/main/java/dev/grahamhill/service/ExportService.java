@@ -121,10 +121,12 @@ public class ExportService {
 
         if (mdSections != null) {
             for (String title : mdSections.keySet()) {
+                // Formatting title: swaps underscores for spaces and puts a fullstop after the first number
+                String formattedTitle = title.replace("_", " ").replaceFirst("(\\d+)", "$1.");
                 // Since MD sections are now part of AI review, we can omit them from Index if desired, 
                 // but the user might still want to see the titles in the TOC.
                 // However, they aren't separate sections in the PDF anymore.
-                // addIndexRow(indexTable, "External Section: " + title, "md_" + title, currentPage++, normalFont);
+                // addIndexRow(indexTable, "External Section: " + formattedTitle, "md_" + title, currentPage++, normalFont);
             }
         }
 
@@ -146,6 +148,7 @@ public class ExportService {
         addIndexRow(indexTable, "  - Daily Activity - Total Impact (Line Chart)", "chart4", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Daily Activity per Contributor (Line Chart)", "chart5", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Commits per Day (Line Chart)", "chart6", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Commits per Day per Contributor (Line Chart)", "chart7", currentPage++, normalFont);
         
         addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage++, normalFont);
         
@@ -174,27 +177,7 @@ public class ExportService {
         Paragraph spacing = new Paragraph(" ");
         spacing.setSpacingAfter(10f);
         document.add(spacing);
-
-        // MD Sections - These are now instructions for LLM report, so we don't need to append them as text here.
-        // The user says "that is wrong those markdown files are to ask the LLM to provide additional investigations and feedback"
-        /*
-        if (mdSections != null) {
-            for (java.util.Map.Entry<String, String> entry : mdSections.entrySet()) {
-                document.newPage();
-                Paragraph mdTitle = new Paragraph(entry.getKey(), sectionFont);
-                Anchor mdAnchor = new Anchor(mdTitle);
-                mdAnchor.setName("md_" + entry.getKey());
-                document.add(mdAnchor);
-                document.add(new Paragraph(" ", normalFont));
-                
-                // For simplicity, treating MD as plain text here, but could reuse Markdown parsing
-                String[] lines = entry.getValue().split("\n");
-                for (String line : lines) {
-                    document.add(new Paragraph(line, normalFont));
-                }
-            }
-        }
-        */
+        
 
         // AI Generated Review Section
         if (aiReport != null && !aiReport.isEmpty()) {
@@ -379,13 +362,14 @@ public class ExportService {
         graphList.add(new ListItem("Daily Activity - Total Impact (Line Chart)", normalFont));
         graphList.add(new ListItem("Daily Activity per Contributor (Line Chart)", normalFont));
         graphList.add(new ListItem("Commits per Day (Line Chart)", normalFont));
+        graphList.add(new ListItem("Commits per Day per Contributor (Line Chart)", normalFont));
         document.add(graphList);
         document.add(new Paragraph(" ", normalFont));
 
         Image pieImage = Image.getInstance(piePath);
         pieImage.scaleToFit(1080, 675); // Scaled Pie Chart +35% (800*1.35, 500*1.35)
         pieImage.setAlignment(Image.MIDDLE);
-        pieImage.setSpacingBefore(-100f); // Move up significantly
+        pieImage.setSpacingBefore(-100f);
         document.add(pieImage);
 
         document.newPage();
@@ -393,7 +377,7 @@ public class ExportService {
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
-        barImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        barImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
@@ -402,7 +386,7 @@ public class ExportService {
         chartTitle3.setSpacingBefore(15f);
         document.add(chartTitle3);
         Image lineImage = Image.getInstance(linePath);
-        lineImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        lineImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
         lineImage.setAlignment(Image.MIDDLE);
         document.add(lineImage);
 
@@ -411,7 +395,7 @@ public class ExportService {
         chartTitle4.setSpacingBefore(15f);
         document.add(chartTitle4);
         Image calendarImage = Image.getInstance(calendarPath);
-        calendarImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        calendarImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
         calendarImage.setAlignment(Image.MIDDLE);
         document.add(calendarImage);
 
@@ -420,7 +404,7 @@ public class ExportService {
         chartTitle5.setSpacingBefore(15f);
         document.add(chartTitle5);
         Image contribImage = Image.getInstance(contribPath);
-        contribImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        contribImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
         contribImage.setAlignment(Image.MIDDLE);
         document.add(contribImage);
 
@@ -429,9 +413,20 @@ public class ExportService {
         chartTitle6.setSpacingBefore(15f);
         document.add(chartTitle6);
         Image cpdImage = Image.getInstance(cpdPath);
-        cpdImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        cpdImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
+
+        if (cpdPerContributorPath != null) {
+            document.newPage();
+            Paragraph chartTitle7 = new Paragraph("Commits per Day per Contributor:", sectionFont);
+            chartTitle7.setSpacingBefore(15f);
+            document.add(chartTitle7);
+            Image cpdPerImage = Image.getInstance(cpdPerContributorPath);
+            cpdPerImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
+            cpdPerImage.setAlignment(Image.MIDDLE);
+            document.add(cpdPerImage);
+        }
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);
@@ -469,7 +464,11 @@ public class ExportService {
         table.addCell("Meaningful Score");
 
         for (ContributorStats stat : tableStats) {
-            table.addCell(stat.name() + (stat.name().equals("Others") ? "" : " (" + stat.email() + ")"));
+            String displayName = stat.name();
+            if (displayName.contains("<") && displayName.contains(">")) {
+                displayName = displayName.substring(0, displayName.indexOf("<")).trim();
+            }
+            table.addCell(displayName);
             table.addCell(stat.gender());
             table.addCell(String.valueOf(stat.commitCount()));
             table.addCell(String.valueOf(stat.mergeCount()));
@@ -511,7 +510,12 @@ public class ExportService {
             for (dev.grahamhill.model.CommitInfo ci : allCommits) {
                 String dateStr = ci.timestamp().format(dtf);
                 commitTable.addCell(new Phrase(dateStr, smallFont));
-                commitTable.addCell(new Phrase(ci.authorName(), smallFont));
+                
+                String authorName = ci.authorName();
+                if (authorName.contains("<") && authorName.contains(">")) {
+                    authorName = authorName.substring(0, authorName.indexOf("<")).trim();
+                }
+                commitTable.addCell(new Phrase(authorName, smallFont));
                 commitTable.addCell(new Phrase(ci.message(), smallFont));
                 
                 String filesStr = String.format("+%d / e%d / -%d", ci.filesAdded(), ci.filesEdited(), ci.filesDeleted());
