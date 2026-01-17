@@ -4,12 +4,13 @@ import com.lowagie.text.Font;
 import com.lowagie.text.Image;
 import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.*;
-import com.lowagie.text.html.simpleparser.HTMLWorker;
-import com.lowagie.text.html.simpleparser.StyleSheet;
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import dev.grahamhill.model.ContributorStats;
 import dev.grahamhill.model.MeaningfulChangeAnalysis;
 import dev.grahamhill.model.FileChange;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.StringReader;
 import java.util.List;
@@ -43,51 +44,26 @@ public class ExportService {
         if (coverHtml != null && !coverHtml.isEmpty()) {
             event.setCoverPage(true);
             try {
-                // Background color handling
-                if (coverHtml.contains("background-color:")) {
-                    int bgStart = coverHtml.indexOf("background-color:") + 17;
-                    int bgEnd = coverHtml.indexOf(";", bgStart);
-                    if (bgEnd > bgStart) {
-                        String colorStr = coverHtml.substring(bgStart, bgEnd).trim();
-                        try {
-                            java.awt.Color awtColor = java.awt.Color.decode(colorStr);
-                            PdfContentByte canvas = writer.getDirectContentUnder();
-                            canvas.saveState();
-                            canvas.setColorFill(awtColor);
-                            canvas.rectangle(0, 0, PageSize.A4.getWidth(), PageSize.A4.getHeight());
-                            canvas.fill();
-                            canvas.restoreState();
-                        } catch (Exception ex) {}
-                    }
-                }
+                // Render HTML cover page using OpenHTMLtoPDF to a temporary byte array
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                PdfRendererBuilder builder = new PdfRendererBuilder();
+                builder.useFastMode();
+                builder.withHtmlContent(coverHtml, coverBasePath != null ? new File(coverBasePath).toURI().toString() : "");
+                builder.toStream(baos);
+                builder.run();
 
-                // Parse HTML elements
-                StyleSheet styles = new StyleSheet();
-                styles.loadTagStyle("body", "font-family", "helvetica");
-                styles.loadTagStyle("body", "margin", "50pt");
-                styles.loadTagStyle("h1", "font-size", "32px");
-                styles.loadTagStyle("h1", "font-weight", "bold");
-                styles.loadTagStyle("h1", "text-align", "center");
-                styles.loadTagStyle("h1", "margin-top", "100pt");
-                styles.loadTagStyle("h1", "margin-bottom", "20pt");
-                styles.loadTagStyle("p", "font-size", "14px");
-                styles.loadTagStyle("p", "text-align", "center");
-                styles.loadTagStyle("div", "text-align", "center");
-                
-                // HTMLWorker for rendering. 
-                // To simulate a web page better, we might want to use a more modern approach, 
-                // but without major new dependencies like Flying Saucer, we improve HTMLWorker.
-                java.util.List<Element> elements = HTMLWorker.parseToList(new StringReader(coverHtml), styles);
-                for (Element element : elements) {
-                    if (element instanceof Paragraph p) {
-                        if (p.getAlignment() == Element.ALIGN_UNDEFINED) {
-                            p.setAlignment(Element.ALIGN_CENTER);
-                        }
-                    }
-                    document.add(element);
+                // Import the rendered cover page into our OpenPDF document
+                PdfReader reader = new PdfReader(baos.toByteArray());
+                PdfContentByte cb = writer.getDirectContent();
+                for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                    document.newPage();
+                    PdfImportedPage page = writer.getImportedPage(reader, i);
+                    cb.addTemplate(page, 0, 0);
                 }
             } catch (Exception e) {
+                e.printStackTrace();
                 // Fallback
+                document.newPage();
                 Paragraph coverPara = new Paragraph("Report Cover Page", headerFont);
                 coverPara.setAlignment(Element.ALIGN_CENTER);
                 document.add(coverPara);
@@ -137,7 +113,7 @@ public class ExportService {
             currentPage += aiPages;
         }
 
-        if (meaningfulAnalysis != null) {
+        if (aiReport != null && !aiReport.isEmpty() && meaningfulAnalysis != null) {
             addIndexRow(indexTable, "Meaningful Change Detection", "meaningful", currentPage++, normalFont);
         }
 
@@ -290,7 +266,7 @@ public class ExportService {
         }
 
         // Meaningful Change Detection Section
-        if (meaningfulAnalysis != null) {
+        if (aiReport != null && !aiReport.isEmpty() && meaningfulAnalysis != null) {
             document.newPage(); // New page for Meaningful Change Detection
             Paragraph mcTitle = new Paragraph("Meaningful Change Detection", sectionFont);
         Anchor mcAnchor = new Anchor(mcTitle);
@@ -376,8 +352,18 @@ public class ExportService {
 
         Image pieImage = Image.getInstance(piePath);
         pieImage.scaleToFit(1080, 675); // Scaled Pie Chart +35% (800*1.35, 500*1.35)
-        pieImage.setSpacingBefore(-1950f); // Moved up further from -1200f
-        pieImage.setAlignment(Image.TOP);
+        
+        // Use absolute positioning to center and move up
+        float pageWidth = document.getPageSize().getWidth();
+        float pageHeight = document.getPageSize().getHeight();
+        float imgWidth = pieImage.getScaledWidth();
+        float imgHeight = pieImage.getScaledHeight();
+        
+        // Center horizontally, move up vertically (higher than middle)
+        float x = (pageWidth - imgWidth) / 2;
+        float y = (pageHeight - imgHeight) - 20; // 20 units from the top
+        
+        pieImage.setAbsolutePosition(x, y);
         document.add(pieImage);
 
         document.newPage();
@@ -454,7 +440,7 @@ public class ExportService {
         // Group others for the table
         List<ContributorStats> tableStats = groupOthers(stats, tableLimit);
 
-        PdfPTable table = new PdfPTable(12);
+        PdfPTable table = new PdfPTable(aiReport != null && !aiReport.isEmpty() ? 12 : 10);
         table.setWidthPercentage(100);
         table.setSpacingBefore(5f);
         table.setSpacingAfter(15f);
@@ -468,8 +454,10 @@ public class ExportService {
         table.addCell("Edited Files");
         table.addCell("Deleted Files");
         table.addCell("File Types");
-        table.addCell("AI Prob");
-        table.addCell("Meaningful Score");
+        if (aiReport != null && !aiReport.isEmpty()) {
+            table.addCell("AI Prob");
+            table.addCell("Meaningful Score");
+        }
 
         for (ContributorStats stat : tableStats) {
             String displayName = stat.name();
@@ -486,8 +474,10 @@ public class ExportService {
             table.addCell(String.valueOf(stat.filesEdited()));
             table.addCell(String.valueOf(stat.filesDeletedCount()));
             table.addCell(formatLanguages(stat.languageBreakdown()));
-            table.addCell(String.format("%.1f%%", stat.averageAiProbability() * 100));
-            table.addCell(String.format("%.1f/100", stat.meaningfulChangeScore()));
+            if (aiReport != null && !aiReport.isEmpty()) {
+                table.addCell(String.format("%.1f%%", stat.averageAiProbability() * 100));
+                table.addCell(String.format("%.1f/100", stat.meaningfulChangeScore()));
+            }
         }
 
         document.add(table);

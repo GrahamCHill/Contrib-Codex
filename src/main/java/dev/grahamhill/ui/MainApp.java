@@ -274,9 +274,11 @@ public class MainApp extends Application {
 
         TableColumn<ContributorStats, String> aiCol = new TableColumn<>("AI Prob");
         aiCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f%%", data.getValue().averageAiProbability() * 100)));
+        aiCol.visibleProperty().bind(aiReviewCheckBox.selectedProperty());
 
         TableColumn<ContributorStats, String> scoreCol = new TableColumn<>("Meaningful Score");
         scoreCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f/100", data.getValue().meaningfulChangeScore())));
+        scoreCol.visibleProperty().bind(aiReviewCheckBox.selectedProperty());
 
         statsTable.getColumns().addAll(nameCol, emailCol, genderCol, commitsCol, mergesCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol, scoreCol);
         setupStatsTableContextMenu();
