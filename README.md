@@ -1,17 +1,37 @@
 # Contrib Codex
 
-Contrib Codex is a Java-based Git analytics tool that generates contributor graphs and change metrics from your repositories, then uses an LLM provider (Groq/OpenAI/etc.) to turn those metrics into actionable engineering insights.
+> **Transform Git noise into engineering signal.**  
+> Contrib Codex isn't just a stats generator—it's a repository forensics tool that bridges the gap between raw commit data and actionable technical insights using AI.
+
+Contrib Codex is a Java-based Git analytics tool that generates contributor graphs and change metrics from your repositories, then uses an LLM provider (Groq/OpenAI/etc.) to turn those metrics into engineering audits.
+
+<!-- 
+<p align="center">
+  <img src="docs/images/main_ui_snapshot.png" alt="Contrib Codex UI" width="800">
+</p>
+-->
 
 ## Features
 
-- **Detailed Contributor Stats:** Track commits, lines added/deleted, and file change types (new, edited, deleted).
-- **Language Analysis:** Automatic detection of top languages used per contributor.
-- **AI Detection:** Heuristic-based analysis of likely AI-generated commits.
-- **Visual Charts:** Pie charts for commit distribution and Bar charts for impact analysis.
-- **User Aliases:** Combine multiple git emails into a single identity.
-- **PDF Export:** Generate professional reports including charts and detailed tables.
-- **LLM Integration:** Prepare comprehensive prompts for further analysis by AI models (OpenAI, Groq).
-- **SQLite Persistence:** History of analysis is stored locally.
+- **Meaningful Change Detection:** Heuristic-based scoring that prioritizes core logic and tests over boilerplate and lockfile noise.
+- **Refactoring Recognition:** Rewards technical debt reduction by identifying significant deletions and architectural cleanups.
+- **AI Audit Reports:** Seamlessly integrates with OpenAI, Groq, or Ollama to generate deep-dive contributor reviews and risk assessments.
+- **Visual Analytics:** Interactive Pie, Bar, and Line charts tracking impact, activity, and commit density over time.
+- **Privacy First:** All analysis is performed locally; API keys are encrypted with AES-256, and metrics are stored in a local SQLite database.
+- **Open Source:** Licensed under the GNU General Public License v3.0 (GPL-3.0).
+
+<!-- 
+<p align="center">
+  <img src="docs/images/pdf_report_preview.png" alt="PDF Report Preview" width="600">
+</p>
+-->
+
+## Why Contrib Codex? (Scenarios)
+
+*   **Engineering Leaders:** Perform non-intrusive "health checks" on repositories to identify bottlenecks or high-risk bulk commit patterns.
+*   **Onboarding:** Quickly understand the "who" and "where" of a new codebase by seeing which contributors own specific architectural components.
+*   **Code Quality Audits:** Supplement manual reviews with AI-driven heuristics that highlight suspicious activity or lack of test coverage relative to feature complexity.
+*   **Technical Debt Management:** Identify contributors who excel at refactoring and cleaning up code, not just those adding the most lines.
 
 ## Setup Instructions
 

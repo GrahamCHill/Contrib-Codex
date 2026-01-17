@@ -596,8 +596,8 @@ public class ExportService {
                     java.io.File logoFile = new java.io.File(logoPath);
                     if (logoFile.exists()) {
                         Image logo = Image.getInstance(logoPath);
-                        logo.scaleToFit(500, 30); // Max width 500, height 30
-                        logo.setAbsolutePosition(pageSize.getRight() - document.rightMargin() - logo.getScaledWidth(), pageSize.getTop() - 16 - 30);
+                        logo.scaleToFit(500, 20); // Max width 500, height 20
+                        logo.setAbsolutePosition(pageSize.getRight() - document.rightMargin() - logo.getScaledWidth() + 10, pageSize.getTop() - 16 - 20);
                         cb.addImage(logo);
                     }
                 } catch (Exception e) {
