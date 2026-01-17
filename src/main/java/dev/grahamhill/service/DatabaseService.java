@@ -18,6 +18,7 @@ public class DatabaseService {
                     name TEXT,
                     email TEXT,
                     commits INTEGER,
+                    merges INTEGER DEFAULT 0,
                     lines_added INTEGER,
                     lines_deleted INTEGER,
                     language_breakdown TEXT,
@@ -32,20 +33,21 @@ public class DatabaseService {
     }
 
     public void saveMetrics(List<ContributorStats> stats) throws SQLException {
-        String sql = "INSERT INTO contributor_metrics (name, email, commits, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO contributor_metrics (name, email, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             for (ContributorStats stat : stats) {
                 pstmt.setString(1, stat.name());
                 pstmt.setString(2, stat.email());
                 pstmt.setInt(3, stat.commitCount());
-                pstmt.setInt(4, stat.linesAdded());
-                pstmt.setInt(5, stat.linesDeleted());
-                pstmt.setString(6, stat.languageBreakdown().toString());
-                pstmt.setDouble(7, stat.averageAiProbability());
-                pstmt.setInt(8, stat.filesAdded());
-                pstmt.setInt(9, stat.filesEdited());
-                pstmt.setInt(10, stat.filesDeletedCount());
+                pstmt.setInt(4, stat.mergeCount());
+                pstmt.setInt(5, stat.linesAdded());
+                pstmt.setInt(6, stat.linesDeleted());
+                pstmt.setString(7, stat.languageBreakdown().toString());
+                pstmt.setDouble(8, stat.averageAiProbability());
+                pstmt.setInt(9, stat.filesAdded());
+                pstmt.setInt(10, stat.filesEdited());
+                pstmt.setInt(11, stat.filesDeletedCount());
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
@@ -55,7 +57,7 @@ public class DatabaseService {
     public List<ContributorStats> getLatestMetrics() throws SQLException {
         List<ContributorStats> stats = new ArrayList<>();
         // This is a simplified version, just getting the last set of entries
-        String sql = "SELECT name, email, commits, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
+        String sql = "SELECT name, email, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -64,6 +66,7 @@ public class DatabaseService {
                         rs.getString("name"),
                         rs.getString("email"),
                         rs.getInt("commits"),
+                        rs.getInt("merges"),
                         rs.getInt("lines_added"),
                         rs.getInt("lines_deleted"),
                         parseLanguageBreakdown(rs.getString("language_breakdown")),

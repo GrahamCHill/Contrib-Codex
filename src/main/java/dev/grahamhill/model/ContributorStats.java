@@ -5,6 +5,7 @@ public record ContributorStats(
     String name,
     String email,
     int commitCount,
+    int mergeCount,
     int linesAdded,
     int linesDeleted,
     Map<String, Integer> languageBreakdown,

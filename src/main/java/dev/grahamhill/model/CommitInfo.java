@@ -12,5 +12,6 @@ public record CommitInfo(
     double aiProbability,
     int filesAdded,
     int filesEdited,
-    int filesDeleted
+    int filesDeleted,
+    boolean isMerge
 ) {}

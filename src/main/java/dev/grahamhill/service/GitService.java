@@ -205,7 +205,13 @@ public class GitService {
                 String targetName = aliases.getOrDefault(email, name);
                 
                 StatsBuilder builder = statsMap.computeIfAbsent(targetName, k -> new StatsBuilder(targetName, email));
-                builder.commitCount++;
+                
+                boolean isMerge = commit.getParentCount() > 1;
+                if (isMerge) {
+                    builder.mergeCount++;
+                } else {
+                    builder.commitCount++;
+                }
 
                 int linesAddedBefore = builder.linesAdded;
                 int linesDeletedBefore = builder.linesDeleted;
@@ -226,7 +232,6 @@ public class GitService {
             return statsMap.values().stream()
                     .map(StatsBuilder::build)
                     .sorted(Comparator.comparingInt(ContributorStats::commitCount).reversed())
-                    .limit(10)
                     .toList();
         }
     }
@@ -381,7 +386,8 @@ public class GitService {
                         aiProb,
                         fAdded,
                         fEdited,
-                        fDeleted
+                        fDeleted,
+                        commit.getParentCount() > 1
                 ));
             }
             return result;
@@ -439,7 +445,8 @@ public class GitService {
                         aiProb,
                         fAdded,
                         fEdited,
-                        fDeleted
+                        fDeleted,
+                        initial.getParentCount() > 1
                 );
             }
             return null;
@@ -450,6 +457,7 @@ public class GitService {
         String name;
         String email;
         int commitCount;
+        int mergeCount;
         int linesAdded;
         int linesDeleted;
         Map<String, Integer> languageBreakdown = new HashMap<>();
@@ -464,7 +472,7 @@ public class GitService {
         }
 
         ContributorStats build() {
-            return new ContributorStats(name, email, commitCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / commitCount, filesAdded, filesEdited, filesDeleted);
+            return new ContributorStats(name, email, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted);
         }
     }
 }

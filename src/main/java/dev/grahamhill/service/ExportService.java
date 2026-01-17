@@ -15,7 +15,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String aiReport, java.util.Map<String, String> mdSections) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, int tableLimit) throws Exception {
         Document document = new Document();
         PdfWriter.getInstance(document, new FileOutputStream(filePath));
         document.open();
@@ -24,42 +24,63 @@ public class ExportService {
         Font sectionFont = new Font(Font.HELVETICA, 14, Font.BOLD);
         Font normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
 
+        if (coverHtml != null && !coverHtml.isEmpty()) {
+            // Very basic HTML text extraction for the cover page
+            // Since we don't have a full HTML renderer, we just strip tags and add it as a paragraph
+            // but the user expects it to be a cover page.
+            String plainText = coverHtml.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
+            Paragraph coverPara = new Paragraph(plainText, headerFont);
+            coverPara.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
+            document.add(coverPara);
+            document.newPage();
+        }
+
         document.add(new Paragraph("Git Contributor Metrics Report", headerFont));
-        document.add(new Paragraph(" "));
+        Paragraph spacing = new Paragraph(" ");
+        spacing.setSpacingAfter(10f);
+        document.add(spacing);
 
         // Custom MD Sections
         if (mdSections != null && !mdSections.isEmpty()) {
             for (java.util.Map.Entry<String, String> entry : mdSections.entrySet()) {
-                document.add(new Paragraph(entry.getKey(), sectionFont));
+                Paragraph pTitle = new Paragraph(entry.getKey(), sectionFont);
+                pTitle.setSpacingBefore(10f);
+                document.add(pTitle);
                 document.add(new Paragraph(entry.getValue(), normalFont));
-                document.add(new Paragraph(" "));
+                document.add(spacing);
             }
         }
 
         // AI Review Section
         if (aiReport != null && !aiReport.isEmpty()) {
-            document.add(new Paragraph("AI Generated Review", sectionFont));
+            Paragraph aiTitle = new Paragraph("AI Generated Review", sectionFont);
+            aiTitle.setSpacingBefore(15f);
+            document.add(aiTitle);
             document.add(new Paragraph(aiReport, normalFont));
-            document.add(new Paragraph(" "));
+            document.add(spacing);
         }
 
         // Meaningful Change Detection Section
         if (meaningfulAnalysis != null) {
-            document.add(new Paragraph("Meaningful Change Detection", sectionFont));
-            document.add(new Paragraph("Commit Range: " + meaningfulAnalysis.commitRange()));
-            document.add(new Paragraph("Meaningful Change Score: " + String.format("%.1f/100", meaningfulAnalysis.meaningfulChangeScore())));
-            document.add(new Paragraph("Summary: " + meaningfulAnalysis.summary()));
+            Paragraph mcTitle = new Paragraph("Meaningful Change Detection", sectionFont);
+            mcTitle.setSpacingBefore(15f);
+            document.add(mcTitle);
+            document.add(new Paragraph("Commit Range: " + meaningfulAnalysis.commitRange(), normalFont));
+            document.add(new Paragraph("Meaningful Change Score: " + String.format("%.1f/100", meaningfulAnalysis.meaningfulChangeScore()), normalFont));
+            document.add(new Paragraph("Summary: " + meaningfulAnalysis.summary(), normalFont));
             
             if (!meaningfulAnalysis.warnings().isEmpty()) {
-                document.add(new Paragraph("Warnings:"));
+                document.add(new Paragraph("Warnings:", normalFont));
                 for (String warning : meaningfulAnalysis.warnings()) {
-                    document.add(new Paragraph("  • " + warning));
+                    document.add(new Paragraph("  • " + warning, normalFont));
                 }
             }
-            document.add(new Paragraph(" "));
+            document.add(spacing);
 
-            document.add(new Paragraph("Category Breakdown:"));
+            document.add(new Paragraph("Category Breakdown:", normalFont));
             PdfPTable catTable = new PdfPTable(4);
+            catTable.setSpacingBefore(5f);
+            catTable.setSpacingAfter(10f);
             catTable.setWidthPercentage(100);
             catTable.addCell("Category");
             catTable.addCell("File Count");
@@ -74,10 +95,11 @@ public class ExportService {
                 }
             });
             document.add(catTable);
-            document.add(new Paragraph(" "));
 
-            document.add(new Paragraph("Top Changed Files (by LOC):"));
+            document.add(new Paragraph("Top Changed Files (by LOC):", normalFont));
             PdfPTable fileTable = new PdfPTable(4);
+            fileTable.setSpacingBefore(5f);
+            fileTable.setSpacingAfter(10f);
             fileTable.setWidthPercentage(100);
             fileTable.addCell("File Path");
             fileTable.addCell("Insertions");
@@ -90,29 +112,40 @@ public class ExportService {
                 fileTable.addCell(fc.category());
             }
             document.add(fileTable);
-            document.add(new Paragraph(" "));
         }
 
         // Add Charts
-        document.add(new Paragraph("Commit Distribution:", sectionFont));
+        Paragraph chartTitle1 = new Paragraph("Commit Distribution:", sectionFont);
+        chartTitle1.setSpacingBefore(15f);
+        document.add(chartTitle1);
         Image pieImage = Image.getInstance(piePath);
         pieImage.scaleToFit(520, 400);
         pieImage.setAlignment(Image.MIDDLE);
         document.add(pieImage);
 
-        document.add(new Paragraph("Impact Analysis:", sectionFont));
+        Paragraph chartTitle2 = new Paragraph("Impact Analysis:", sectionFont);
+        chartTitle2.setSpacingBefore(15f);
+        document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
         barImage.scaleToFit(520, 400);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
-        document.add(new Paragraph("Detailed Contributor Metrics:", sectionFont));
-        document.add(new Paragraph(" "));
+        Paragraph detailTitle = new Paragraph("Detailed Contributor Metrics:", sectionFont);
+        detailTitle.setSpacingBefore(15f);
+        document.add(detailTitle);
+        document.add(spacing);
 
-        PdfPTable table = new PdfPTable(9);
+        // Group others for the table
+        List<ContributorStats> tableStats = groupOthers(stats, tableLimit);
+
+        PdfPTable table = new PdfPTable(10);
         table.setWidthPercentage(100);
+        table.setSpacingBefore(5f);
+        table.setSpacingAfter(15f);
         table.addCell("Contributor");
         table.addCell("Commits");
+        table.addCell("Merges");
         table.addCell("Lines Added");
         table.addCell("Lines Deleted");
         table.addCell("New Files");
@@ -121,9 +154,10 @@ public class ExportService {
         table.addCell("File Types");
         table.addCell("AI Prob");
 
-        for (ContributorStats stat : stats) {
-            table.addCell(stat.name() + " (" + stat.email() + ")");
+        for (ContributorStats stat : tableStats) {
+            table.addCell(stat.name() + (stat.name().equals("Others") ? "" : " (" + stat.email() + ")"));
             table.addCell(String.valueOf(stat.commitCount()));
+            table.addCell(String.valueOf(stat.mergeCount()));
             table.addCell(String.valueOf(stat.linesAdded()));
             table.addCell(String.valueOf(stat.linesDeleted()));
             table.addCell(String.valueOf(stat.filesAdded()));
@@ -137,8 +171,9 @@ public class ExportService {
 
         // Analysis Summary & Conclusion Section
         if (aiReport != null && !aiReport.isEmpty()) {
-            document.add(new Paragraph(" "));
-            document.add(new Paragraph("Analysis Summary & Conclusion", sectionFont));
+            Paragraph summaryTitle = new Paragraph("Analysis Summary & Conclusion", sectionFont);
+            summaryTitle.setSpacingBefore(15f);
+            document.add(summaryTitle);
             
             // Try to extract a "Conclusion" section if it exists, otherwise use the whole report as summary
             String conclusion = extractConclusion(aiReport);
@@ -150,6 +185,36 @@ public class ExportService {
         }
 
         document.close();
+    }
+
+    private List<ContributorStats> groupOthers(List<ContributorStats> stats, int limit) {
+        if (stats.size() <= limit) return stats;
+        java.util.List<ContributorStats> top = new java.util.ArrayList<>(stats.subList(0, limit));
+        java.util.List<ContributorStats> others = stats.subList(limit, stats.size());
+
+        int oCommits = others.stream().mapToInt(ContributorStats::commitCount).sum();
+        int oMerges = others.stream().mapToInt(ContributorStats::mergeCount).sum();
+        int oAdded = others.stream().mapToInt(ContributorStats::linesAdded).sum();
+        int oDeleted = others.stream().mapToInt(ContributorStats::linesDeleted).sum();
+        int oFAdded = others.stream().mapToInt(ContributorStats::filesAdded).sum();
+        int oFEdited = others.stream().mapToInt(ContributorStats::filesEdited).sum();
+        int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
+        double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
+
+        java.util.Map<String, Integer> oLangs = new java.util.HashMap<>();
+        others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
+
+        top.add(new ContributorStats("Others", "others@example.com", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
+        return top;
+    }
+
+    private String formatLanguages(java.util.Map<String, Integer> languages) {
+        if (languages == null || languages.isEmpty()) return "N/A";
+        return languages.entrySet().stream()
+                .sorted(java.util.Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(3)
+                .map(e -> e.getKey() + "(" + e.getValue() + ")")
+                .collect(java.util.stream.Collectors.joining(", "));
     }
 
     private String extractConclusion(String report) {
@@ -165,14 +230,5 @@ public class ExportService {
             return report.substring(index).trim();
         }
         return "";
-    }
-
-    private String formatLanguages(java.util.Map<String, Integer> languages) {
-        if (languages == null || languages.isEmpty()) return "N/A";
-        return languages.entrySet().stream()
-                .sorted(java.util.Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(5)
-                .map(e -> e.getKey() + "(" + e.getValue() + ")")
-                .collect(java.util.stream.Collectors.joining(", "));
     }
 }

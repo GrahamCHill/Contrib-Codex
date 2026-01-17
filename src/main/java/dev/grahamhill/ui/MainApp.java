@@ -43,10 +43,13 @@ public class MainApp extends Application {
     private Label initialCommitLabel;
     private TextField repoPathField;
     private Spinner<Integer> commitLimitSpinner;
+    private Spinner<Integer> tableLimitSpinner;
     private TextArea aliasesArea;
     private TextField ignoredExtensionsField;
     private TextField ignoredFoldersField;
     private TextField mdFolderPathField;
+    private TextField requiredFeaturesPathField;
+    private TextField coverPagePathField;
 
     private PieChart commitPieChart;
     private BarChart<String, Number> impactBarChart;
@@ -106,24 +109,47 @@ public class MainApp extends Application {
         HBox settingsBox = new HBox(10);
         commitLimitSpinner = new Spinner<>(0, 1000, 10);
         commitLimitSpinner.setEditable(true);
+        tableLimitSpinner = new Spinner<>(1, 100, 20);
+        tableLimitSpinner.setEditable(true);
         ignoredExtensionsField = new TextField("json,csv");
         ignoredExtensionsField.setPromptText("e.g. json,csv");
         ignoredFoldersField = new TextField("node_modules,target");
         ignoredFoldersField.setPromptText("e.g. node_modules,target");
+        settingsBox.getChildren().addAll(
+                new Label("Git Tree Commits:"), commitLimitSpinner,
+                new Label("Table Limit:"), tableLimitSpinner,
+                new Label("Ignore Extensions:"), ignoredExtensionsField,
+                new Label("Ignore Folders:"), ignoredFoldersField
+        );
         
+        HBox settingsBox2 = new HBox(10);
         mdFolderPathField = new TextField();
         mdFolderPathField.setPromptText("Path to .md sections folder");
         Button browseMdButton = new Button("Browse...");
         browseMdButton.setOnAction(e -> browseMdFolder(primaryStage));
+        Button openMdButton = new Button("Open");
+        openMdButton.setOnAction(e -> openMdFolder());
+
+        requiredFeaturesPathField = new TextField();
+        requiredFeaturesPathField.setPromptText("Path to features.md/csv");
+        Button browseReqButton = new Button("Browse...");
+        browseReqButton.setOnAction(e -> browseRequiredFeatures(primaryStage));
+        Button genReqButton = new Button("Gen Template");
+        genReqButton.setOnAction(e -> generateRequiredFeaturesTemplate());
+
+        coverPagePathField = new TextField();
+        coverPagePathField.setPromptText("Path to coverpage.html");
+        Button browseCoverButton = new Button("Browse...");
+        browseCoverButton.setOnAction(e -> browseCoverPage(primaryStage));
 
         aiReviewCheckBox = new CheckBox("Include AI Review in PDF");
         Button exportButton = new Button("Export to PDF");
         exportButton.setOnAction(e -> exportToPdf(primaryStage));
-        settingsBox.getChildren().addAll(
-                new Label("Git Tree Commits:"), commitLimitSpinner,
-                new Label("Ignore Extensions:"), ignoredExtensionsField,
-                new Label("Ignore Folders:"), ignoredFoldersField,
-                new Label("MD Folder:"), mdFolderPathField, browseMdButton,
+        
+        settingsBox2.getChildren().addAll(
+                new Label("MD Folder:"), mdFolderPathField, browseMdButton, openMdButton,
+                new Label("Features:"), requiredFeaturesPathField, browseReqButton, genReqButton,
+                new Label("Coverpage:"), coverPagePathField, browseCoverButton,
                 aiReviewCheckBox,
                 exportButton
         );
@@ -134,7 +160,7 @@ public class MainApp extends Application {
         aliasesArea.setPrefHeight(60);
         aliasBox.getChildren().addAll(new Label("User Aliases (email=Combined Name):"), aliasesArea);
 
-        topBox.getChildren().addAll(repoBox, settingsBox, aliasBox);
+        topBox.getChildren().addAll(repoBox, settingsBox, settingsBox2, aliasBox);
         contentBox.getChildren().add(topBox);
 
         // SplitPane for Main Content and LLM Panel
@@ -150,6 +176,8 @@ public class MainApp extends Application {
         nameCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().name()));
         TableColumn<ContributorStats, Integer> commitsCol = new TableColumn<>("Commits");
         commitsCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().commitCount()).asObject());
+        TableColumn<ContributorStats, Integer> mergesCol = new TableColumn<>("Merges");
+        mergesCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().mergeCount()).asObject());
         TableColumn<ContributorStats, Integer> addedCol = new TableColumn<>("Added");
         addedCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().linesAdded()).asObject());
         TableColumn<ContributorStats, Integer> deletedCol = new TableColumn<>("Deleted");
@@ -167,7 +195,7 @@ public class MainApp extends Application {
         TableColumn<ContributorStats, String> aiCol = new TableColumn<>("AI Prob");
         aiCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f%%", data.getValue().averageAiProbability() * 100)));
 
-        statsTable.getColumns().addAll(nameCol, commitsCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol);
+        statsTable.getColumns().addAll(nameCol, commitsCol, mergesCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol);
         setupStatsTableContextMenu();
 
         HBox chartsBox = new HBox(10);
@@ -253,8 +281,24 @@ public class MainApp extends Application {
         groqField.setPromptText("Groq API Key");
         TextField ollamaField = new TextField(ollamaUrl);
         ollamaField.setPromptText("Ollama URL (default: http://localhost:11434)");
-        TextField ollamaModelField = new TextField(ollamaModel);
-        ollamaModelField.setPromptText("Ollama Model (default: llama3)");
+        
+        ComboBox<String> ollamaModelCombo = new ComboBox<>(FXCollections.observableArrayList(availableOllamaModels));
+        if (availableOllamaModels.isEmpty()) {
+            ollamaModelCombo.getItems().add(ollamaModel);
+        }
+        ollamaModelCombo.setValue(ollamaModel);
+        ollamaModelCombo.setEditable(true);
+        ollamaModelCombo.setPrefWidth(200);
+
+        Button fetchModelsBtn = new Button("Fetch Models");
+        fetchModelsBtn.setOnAction(e -> {
+            List<String> models = fetchOllamaModels(ollamaField.getText());
+            if (!models.isEmpty()) {
+                availableOllamaModels = models;
+                ollamaModelCombo.setItems(FXCollections.observableArrayList(models));
+                ollamaModelCombo.setValue(models.get(0));
+            }
+        });
 
         grid.add(new Label("OpenAI API Key:"), 0, 0);
         grid.add(openAiField, 1, 0);
@@ -263,7 +307,8 @@ public class MainApp extends Application {
         grid.add(new Label("Ollama URL:"), 0, 2);
         grid.add(ollamaField, 1, 2);
         grid.add(new Label("Ollama Model:"), 0, 3);
-        grid.add(ollamaModelField, 1, 3);
+        HBox ollamaModelBox = new HBox(5, ollamaModelCombo, fetchModelsBtn);
+        grid.add(ollamaModelBox, 1, 3);
 
         dialog.getDialogPane().setContent(grid);
 
@@ -272,9 +317,38 @@ public class MainApp extends Application {
                 openAiKey = openAiField.getText();
                 groqKey = groqField.getText();
                 ollamaUrl = ollamaField.getText();
-                ollamaModel = ollamaModelField.getText();
+                ollamaModel = ollamaModelCombo.getValue();
             }
         });
+    }
+
+    private List<String> fetchOllamaModels(String baseUrl) {
+        List<String> models = new ArrayList<>();
+        try {
+            java.net.URL url = new java.net.URL(baseUrl + "/api/tags");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            if (conn.getResponseCode() == 200) {
+                try (java.io.InputStream is = conn.getInputStream()) {
+                    String response = new String(is.readAllBytes());
+                    // Rough manual parsing of JSON like {"models":[{"name":"llama3:latest",...},...]}
+                    int idx = 0;
+                    while ((idx = response.indexOf("\"name\":\"", idx)) != -1) {
+                        idx += 8;
+                        int end = response.indexOf("\"", idx);
+                        if (end != -1) {
+                            models.add(response.substring(idx, end));
+                            idx = end;
+                        }
+                    }
+                }
+            } else {
+                showAlert("Error", "Failed to fetch Ollama models. Status: " + conn.getResponseCode());
+            }
+        } catch (Exception e) {
+            showAlert("Error", "Could not connect to Ollama: " + e.getMessage());
+        }
+        return models;
     }
 
     private void setupStatsTableContextMenu() {
@@ -343,8 +417,14 @@ public class MainApp extends Application {
         
         StringBuilder metricsText = new StringBuilder("Git Metrics Data:\n");
         for (ContributorStats s : currentStats) {
-            metricsText.append(String.format("- %s (%s): %d commits, +%d/-%d lines, %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
-                s.name(), s.email(), s.commitCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
+            metricsText.append(String.format("- %s (%s): %d commits, %d merges, +%d/-%d lines, %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
+                s.name(), s.email(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
+        }
+
+        String reqFeatures = readRequiredFeatures();
+        if (!reqFeatures.isEmpty()) {
+            metricsText.append("\nRequired Features for Evaluation:\n");
+            metricsText.append(reqFeatures).append("\n");
         }
 
         if (!mdSections.isEmpty()) {
@@ -435,23 +515,29 @@ public class MainApp extends Application {
 
         try (java.io.InputStream is = conn.getInputStream()) {
             String response = new String(is.readAllBytes());
-            // Improved basic JSON parsing for OpenAI/Groq format
-            int start = response.indexOf("\"content\": \"");
+            // Improved basic JSON parsing for OpenAI/Groq/Ollama format
+            // Handle both "content": "..." and "content":"..."
+            int start = response.indexOf("\"content\":");
             if (start != -1) {
-                start += 12;
-                // Find the end of the content string, respecting escaped quotes
-                int end = -1;
-                for (int i = start; i < response.length(); i++) {
-                    if (response.charAt(i) == '\"' && response.charAt(i - 1) != '\\') {
-                        end = i;
-                        break;
+                start = response.indexOf("\"", start + 10); // Find the opening quote of the content value
+                if (start != -1) {
+                    start += 1; // Move past the opening quote
+                    // Find the end of the content string, respecting escaped quotes
+                    int end = -1;
+                    for (int i = start; i < response.length(); i++) {
+                        if (response.charAt(i) == '\"' && response.charAt(i - 1) != '\\') {
+                            end = i;
+                            break;
+                        }
                     }
-                }
-                if (end > start) {
-                    return response.substring(start, end)
-                            .replace("\\n", "\n")
-                            .replace("\\\"", "\"")
-                            .replace("\\\\", "\\");
+                    if (end > start) {
+                        return response.substring(start, end)
+                                .replace("\\n", "\n")
+                                .replace("\\\"", "\"")
+                                .replace("\\\\", "\\")
+                                .replace("\\u003c", "<")
+                                .replace("\\u003e", ">");
+                    }
                 }
             }
             return response;
@@ -483,26 +569,122 @@ public class MainApp extends Application {
         }
     }
 
+    private void browseRequiredFeatures(Stage stage) {
+        FileChooser chooser = new FileChooser();
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Markdown files", "*.md"),
+                new FileChooser.ExtensionFilter("CSV files", "*.csv")
+        );
+        File selected = chooser.showOpenDialog(stage);
+        if (selected != null) {
+            requiredFeaturesPathField.setText(selected.getAbsolutePath());
+        }
+    }
+
+    private void generateRequiredFeaturesTemplate() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Save Required Features Template");
+        chooser.setInitialFileName("required_features.md");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Markdown files", "*.md"));
+        File file = chooser.showSaveDialog(null);
+        if (file != null) {
+            try {
+                String template = "# Required Features\n" +
+                        "List the features required for this project below. The AI will use this to evaluate contributor impact.\n\n" +
+                        "- Feature 1: Description\n" +
+                        "- Feature 2: Description\n";
+                java.nio.file.Files.writeString(file.toPath(), template);
+                requiredFeaturesPathField.setText(file.getAbsolutePath());
+            } catch (Exception e) {
+                e.printStackTrace();
+                showAlert("Error", "Could not generate template: " + e.getMessage());
+            }
+        }
+    }
+
+    private void openMdFolder() {
+        String path = mdFolderPathField.getText();
+        if (path == null || path.isEmpty()) {
+            showAlert("Error", "MD Folder path is empty.");
+            return;
+        }
+        File folder = new File(path);
+        if (!folder.exists()) {
+            if (confirmDialog("Folder does not exist", "The MD folder does not exist. Would you like to create it and add default sections?")) {
+                folder.mkdirs();
+                createDefaultMdFiles(folder);
+            } else {
+                return;
+            }
+        }
+        getHostServices().showDocument(folder.toURI().toString());
+    }
+
+    private void createDefaultMdFiles(File folder) {
+        try {
+            java.nio.file.Files.writeString(new File(folder, "01_Introduction.md").toPath(), "# Introduction\nThis report analyzes the git repository and contributor activity.");
+            java.nio.file.Files.writeString(new File(folder, "02_Methodology.md").toPath(), "# Methodology\nWe use JGit for analysis and AI heuristics for detecting code patterns.");
+            
+            // Also update the UI field to show the path if it was empty
+            if (mdFolderPathField.getText().isEmpty()) {
+                mdFolderPathField.setText(folder.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private Map<String, String> readMdSections() {
         Map<String, String> sections = new TreeMap<>();
         String path = mdFolderPathField.getText();
         if (path == null || path.isEmpty()) return sections;
-        
+
         File folder = new File(path);
-        if (!folder.exists() || !folder.isDirectory()) return sections;
-        
-        File[] files = folder.listFiles((dir, name) -> name.toLowerCase().endsWith(".md"));
-        if (files != null) {
-            for (File file : files) {
-                try {
-                    String content = java.nio.file.Files.readString(file.toPath());
-                    sections.put(file.getName(), content);
-                } catch (Exception e) {
-                    System.err.println("Failed to read " + file.getName() + ": " + e.getMessage());
+        if (folder.exists() && folder.isDirectory()) {
+            File[] files = folder.listFiles((dir, name) -> name.toLowerCase().endsWith(".md"));
+            if (files != null) {
+                for (File f : files) {
+                    try {
+                        String content = java.nio.file.Files.readString(f.toPath());
+                        sections.put(f.getName(), content);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         }
         return sections;
+    }
+
+    private String readRequiredFeatures() {
+        String path = requiredFeaturesPathField.getText();
+        if (path == null || path.isEmpty()) return "";
+        File f = new File(path);
+        if (f.exists() && f.isFile()) {
+            try {
+                return java.nio.file.Files.readString(f.toPath());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return "";
+    }
+
+    private void browseCoverPage(Stage stage) {
+        FileChooser chooser = new FileChooser();
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML files", "*.html"));
+        File selected = chooser.showOpenDialog(stage);
+        if (selected != null) {
+            coverPagePathField.setText(selected.getAbsolutePath());
+        }
+    }
+
+    private boolean confirmDialog(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        return alert.showAndWait().filter(r -> r == ButtonType.OK).isPresent();
     }
 
     private void analyzeRepo() {
@@ -543,7 +725,8 @@ public class MainApp extends Application {
                 databaseService.saveMetrics(currentStats);
 
                 Platform.runLater(() -> {
-                    statsTable.setItems(FXCollections.observableArrayList(currentStats));
+                    List<ContributorStats> tableStats = groupOthers(currentStats, tableLimitSpinner.getValue());
+                    statsTable.setItems(FXCollections.observableArrayList(tableStats));
                     updateCharts(currentStats);
                     commitList.getItems().clear();
                     for (CommitInfo ci : recentCommits) {
@@ -562,11 +745,36 @@ public class MainApp extends Application {
         }).start();
     }
 
+    private List<ContributorStats> groupOthers(List<ContributorStats> stats, int limit) {
+        if (stats.size() <= limit) return stats;
+
+        List<ContributorStats> top = stats.stream().limit(limit).collect(Collectors.toList());
+        List<ContributorStats> others = stats.stream().skip(limit).toList();
+
+        int oCommits = others.stream().mapToInt(ContributorStats::commitCount).sum();
+        int oMerges = others.stream().mapToInt(ContributorStats::mergeCount).sum();
+        int oAdded = others.stream().mapToInt(ContributorStats::linesAdded).sum();
+        int oDeleted = others.stream().mapToInt(ContributorStats::linesDeleted).sum();
+        int oFAdded = others.stream().mapToInt(ContributorStats::filesAdded).sum();
+        int oFEdited = others.stream().mapToInt(ContributorStats::filesEdited).sum();
+        int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
+        double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
+
+        Map<String, Integer> oLangs = new HashMap<>();
+        others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
+
+        top.add(new ContributorStats("Others", "others@example.com", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
+        return top;
+    }
+
     private void updateCharts(List<ContributorStats> stats) {
         Platform.runLater(() -> {
+            // Limited to Top 5 for visuals
+            List<ContributorStats> top5 = stats.stream().limit(5).collect(Collectors.toList());
+
             // Pie Chart
-            List<PieChart.Data> pieData = stats.stream()
-                    .map(s -> new PieChart.Data(s.name(), s.commitCount()))
+            List<PieChart.Data> pieData = top5.stream()
+                    .map(s -> new PieChart.Data(s.name(), s.commitCount() + s.mergeCount()))
                     .toList();
             commitPieChart.setData(FXCollections.observableArrayList(pieData));
 
@@ -577,7 +785,7 @@ public class MainApp extends Application {
             XYChart.Series<String, Number> deletedSeries = new XYChart.Series<>();
             deletedSeries.setName("Deleted");
 
-            for (ContributorStats s : stats) {
+            for (ContributorStats s : top5) {
                 addedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesAdded()));
                 deletedSeries.getData().add(new XYChart.Data<>(s.name(), s.linesDeleted()));
             }
@@ -625,7 +833,18 @@ public class MainApp extends Application {
                 aiReport = llmResponseArea.getText();
             }
 
-            exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport, readMdSections());
+            String coverHtml = null;
+            if (coverPagePathField.getText() != null && !coverPagePathField.getText().isEmpty()) {
+                File coverFile = new File(coverPagePathField.getText());
+                if (coverFile.exists()) {
+                    coverHtml = java.nio.file.Files.readString(coverFile.toPath());
+                    coverHtml = coverHtml.replace("{{generated_on}}", java.time.LocalDate.now().toString())
+                            .replace("{{user}}", System.getProperty("user.name"))
+                            .replace("{{project}}", new File(repoPathField.getText()).getName());
+                }
+            }
+
+            exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport, readMdSections(), coverHtml, tableLimitSpinner.getValue());
             
             // Cleanup temp files
             pieFile.delete();
@@ -639,7 +858,9 @@ public class MainApp extends Application {
     }
 
     private void saveNodeSnapshot(javafx.scene.Node node, File file) throws Exception {
-        WritableImage image = node.snapshot(new SnapshotParameters(), null);
+        SnapshotParameters params = new SnapshotParameters();
+        params.setTransform(javafx.scene.transform.Transform.scale(2, 2)); // Increase resolution
+        WritableImage image = node.snapshot(params, null);
         ImageIO.write(SwingFXUtils.fromFXImage(image, null), "png", file);
     }
 
