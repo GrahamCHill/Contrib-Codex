@@ -224,6 +224,17 @@ public class ExportService {
                     h4Header.setSpacingBefore(8f);
                     h4Header.setSpacingAfter(4f);
                     document.add(h4Header);
+                } else if (line.startsWith("##### ")) {
+                    if (currentText.length() > 0) {
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
+                        currentText = new StringBuilder();
+                    }
+                    Paragraph h5Header = new Paragraph(line.substring(6).trim(), new Font(Font.HELVETICA, 10, Font.BOLD));
+                    h5Header.setSpacingBefore(6f);
+                    h5Header.setSpacingAfter(2f);
+                    document.add(h5Header);
                 } else if (line.startsWith("**") && line.endsWith("**") && line.length() > 4) {
                     if (currentText.length() > 0) {
                         Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
@@ -585,8 +596,8 @@ public class ExportService {
                     java.io.File logoFile = new java.io.File(logoPath);
                     if (logoFile.exists()) {
                         Image logo = Image.getInstance(logoPath);
-                        logo.scaleToFit(500, 50); // Max width 500, height 50
-                        logo.setAbsolutePosition(pageSize.getRight() - document.rightMargin() - logo.getScaledWidth(), pageSize.getTop() - 16 - 50);
+                        logo.scaleToFit(500, 30); // Max width 500, height 30
+                        logo.setAbsolutePosition(pageSize.getRight() - document.rightMargin() - logo.getScaledWidth(), pageSize.getTop() - 16 - 30);
                         cb.addImage(logo);
                     }
                 } catch (Exception e) {

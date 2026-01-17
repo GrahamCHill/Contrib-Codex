@@ -5,8 +5,10 @@ Evaluation of project stability and potential technical debt based on commit pat
 Use ONLY the contributor names, file paths, commit refs, and numeric values provided in the METRICS section.
 - Do NOT invent contributors, commits, file names, or numbers.
 - If a value is missing, write: **"Not provided in metrics"**.
+- IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.
 - Any ranking (highest/lowest risk) MUST be numerically correct. If the METRICS are inconsistent, explicitly flag:
   **"Metrics inconsistency detected"**, then correct the ranking using the numeric values.
+- STRICT DATA STRUCTURE: The Risk Table MUST contain exactly these columns: Contributor, Commits, Lines Added, Lines Added/Commit, Tests Touched, Risk Band, Justification. Do not combine, add, or skip columns.
 
 ## Required Output
 ### 1) Risk Table (all contributors)

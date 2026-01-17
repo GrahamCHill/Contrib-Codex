@@ -88,7 +88,7 @@ public class MainApp extends Application {
         commitLimitSpinner.setEditable(true);
         tableLimitSpinner = new Spinner<>(1, 100, 20);
         tableLimitSpinner.setEditable(true);
-        ignoredExtensionsField = new TextField("json,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml");
+        ignoredExtensionsField = new TextField("json,xml,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml");
         ignoredFoldersField = new TextField("node_modules,target,build,dist,.git");
         mdFolderPathField = new TextField();
         requiredFeaturesPathField = new TextField();
@@ -426,10 +426,12 @@ public class MainApp extends Application {
                 "1) Use ONLY the contributor names, commit refs, file paths, and numeric values explicitly provided in the METRICS.\n" +
                 "   - Do NOT invent or assume any contributor, commit id, branch name, tag, file name, or metric.\n" +
                 "   - If a value is missing from METRICS, write \"Not provided in metrics\" (do not guess).\n" +
+                "   - IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals. It should not influence risk or impact assessments.\n" +
                 "2) All rankings (highest/lowest) MUST be numerically correct.\n" +
                 "   - CONSISTENCY CHECK: Before writing conclusions, verify that \"highest\" corresponds to the largest numeric value and \"lowest\" to the smallest.\n" +
                 "   - If the provided METRICS labels contradict the numbers, explicitly flag it as: \"Metrics inconsistency detected\" and correct the ranking using the numeric values.\n" +
                 "3) Do not repeat the same points across sections. Prefer dense, high-signal writing.\n" +
+                "4) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
                 "\n" +
                 "RISK MODEL (Lines Added per Commit):\n" +
                 "- Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
@@ -512,6 +514,8 @@ public class MainApp extends Application {
                 "- Use ONLY contributor names, commit refs, file paths, and numeric values explicitly provided in METRICS.\n" +
                 "- Do NOT invent/hallucinate names, commits, metrics, tags, branches, or files.\n" +
                 "- If a value is missing, write: \"Not provided in metrics\" (do not guess).\n" +
+                "- IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.\n" +
+                "- STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns.\n" +
                 "- CONSISTENCY CHECK: Any \"highest/lowest\" ranking MUST be numerically correct. If labels conflict with numbers, flag it as:\n" +
                 "  \"Metrics inconsistency detected\" and correct the ranking based on numeric values.\n" +
                 "\n" +
@@ -709,7 +713,7 @@ public class MainApp extends Application {
         repoPathField.setText(prefs.get("repoPath", ""));
         commitLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("commitLimit", "10")));
         tableLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("tableLimit", "20")));
-        ignoredExtensionsField.setText(prefs.get("ignoredExtensions", "json,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml"));
+        ignoredExtensionsField.setText(prefs.get("ignoredExtensions", "json,xml,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml"));
         ignoredFoldersField.setText(prefs.get("ignoredFolders", "node_modules,target,build,dist,.git"));
 
         // Load global settings from database
@@ -1359,6 +1363,8 @@ public class MainApp extends Application {
                     "Evaluation of project stability and potential technical debt based on commit patterns.\n\n" +
                     "INSTRUCTIONS FOR AI:\n" +
                     "- Create a detailed Risk Table for all contributors.\n" +
+                    "- Columns: Contributor, Commits, Lines Added, Lines Added/Commit, Tests Touched, Risk Band, Justification.\n" +
+                    "- IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.\n" +
                     "- Explain the reasoning behind each risk level.\n" +
                     "- Identify patterns of 'Bulk Commits' vs 'Iterative Refinement'.\n" +
                     "- Highlighting areas where test coverage is lacking relative to feature complexity.");
