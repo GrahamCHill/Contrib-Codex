@@ -1,6 +1,6 @@
-# Git Contributor Metrics
+# Contrib Codex
 
-A desktop application to analyze Git repositories and generate contributor metrics, including visual charts and PDF reports.
+Contrib Codex is a Java-based Git analytics tool that generates contributor graphs and change metrics from your repositories, then uses an LLM provider (Groq/OpenAI/etc.) to turn those metrics into actionable engineering insights.
 
 ## Features
 

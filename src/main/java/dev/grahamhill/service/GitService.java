@@ -429,7 +429,7 @@ public class GitService {
         return Math.min(1.0, score);
     }
 
-    public List<CommitInfo> getLastCommits(File repoPath, int limit) throws Exception {
+    public List<CommitInfo> getLastCommits(File repoPath, int limit, Map<String, String> aliases) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             var logCommand = git.log();
@@ -446,6 +446,10 @@ public class GitService {
                 int fEdited = 0;
                 int fDeleted = 0;
                 
+                String authorEmail = commit.getAuthorIdent().getEmailAddress();
+                String authorName = commit.getAuthorIdent().getName();
+                String targetName = aliases != null ? aliases.getOrDefault(authorEmail, authorName) : authorName;
+
                 RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
                 try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
                     df.setRepository(repository);
@@ -477,7 +481,7 @@ public class GitService {
 
                 result.add(new CommitInfo(
                         commit.getName().substring(0, 7),
-                        commit.getAuthorIdent().getName(),
+                        targetName,
                         commit.getShortMessage(),
                         LocalDateTime.ofInstant(commit.getAuthorIdent().getWhenAsInstant(), ZoneId.systemDefault()),
                         languages,
@@ -494,7 +498,7 @@ public class GitService {
         }
     }
 
-    public CommitInfo getInitialCommit(File repoPath) throws Exception {
+    public CommitInfo getInitialCommit(File repoPath, Map<String, String> aliases) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             Iterable<RevCommit> commits = git.log().all().call();
@@ -509,6 +513,11 @@ public class GitService {
                 int fAdded = 0;
                 int fEdited = 0;
                 int fDeleted = 0;
+
+                String authorEmail = initial.getAuthorIdent().getEmailAddress();
+                String authorName = initial.getAuthorIdent().getName();
+                String targetName = aliases != null ? aliases.getOrDefault(authorEmail, authorName) : authorName;
+
                 try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
                     df.setRepository(repository);
                     List<DiffEntry> diffs = df.scan(null, initial.getTree());
@@ -538,7 +547,7 @@ public class GitService {
 
                 return new CommitInfo(
                         initial.getName().substring(0, 7),
-                        initial.getAuthorIdent().getName(),
+                        targetName,
                         initial.getShortMessage(),
                         LocalDateTime.ofInstant(initial.getAuthorIdent().getWhenAsInstant(), ZoneId.systemDefault()),
                         languages,
