@@ -42,6 +42,8 @@ mvn javafx:run
 2. **Configure Settings:**
     - **Git Tree Commits:** Set the number of recent commits to display. Set to `0` to view all commits back to the initial commit.
     - **Ignore Extensions:** Comma-separated list of file extensions to exclude from analysis (e.g., `json, csv`).
+    - **Ignore Folders:** Comma-separated list of folders to exclude from analysis (e.g., `node_modules, target`).
+    - **MD Folder:** Optional path to a folder containing `.md` files. Each file will be added as a section in the PDF and included as context for the LLM.
 3. **Analyze:** Click "Analyze" to process the repository.
 4. **Merge Users:** Right-click a user in the table to merge them with another identity (useful for multiple emails).
 5. **API Keys:** Use the **Settings -> API Keys...** menu to set your OpenAI or Groq keys for LLM report generation.

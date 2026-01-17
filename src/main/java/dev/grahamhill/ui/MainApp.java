@@ -45,6 +45,8 @@ public class MainApp extends Application {
     private Spinner<Integer> commitLimitSpinner;
     private TextArea aliasesArea;
     private TextField ignoredExtensionsField;
+    private TextField ignoredFoldersField;
+    private TextField mdFolderPathField;
 
     private PieChart commitPieChart;
     private BarChart<String, Number> impactBarChart;
@@ -59,6 +61,8 @@ public class MainApp extends Application {
     private String openAiKey = "";
     private String groqKey = "";
     private String ollamaUrl = "http://localhost:11434";
+    private String ollamaModel = "llama3";
+    private List<String> availableOllamaModels = new ArrayList<>();
     private String selectedProvider = "OpenAI";
 
     private CheckBox aiReviewCheckBox;
@@ -104,12 +108,22 @@ public class MainApp extends Application {
         commitLimitSpinner.setEditable(true);
         ignoredExtensionsField = new TextField("json,csv");
         ignoredExtensionsField.setPromptText("e.g. json,csv");
+        ignoredFoldersField = new TextField("node_modules,target");
+        ignoredFoldersField.setPromptText("e.g. node_modules,target");
+        
+        mdFolderPathField = new TextField();
+        mdFolderPathField.setPromptText("Path to .md sections folder");
+        Button browseMdButton = new Button("Browse...");
+        browseMdButton.setOnAction(e -> browseMdFolder(primaryStage));
+
         aiReviewCheckBox = new CheckBox("Include AI Review in PDF");
         Button exportButton = new Button("Export to PDF");
         exportButton.setOnAction(e -> exportToPdf(primaryStage));
         settingsBox.getChildren().addAll(
                 new Label("Git Tree Commits:"), commitLimitSpinner,
                 new Label("Ignore Extensions:"), ignoredExtensionsField,
+                new Label("Ignore Folders:"), ignoredFoldersField,
+                new Label("MD Folder:"), mdFolderPathField, browseMdButton,
                 aiReviewCheckBox,
                 exportButton
         );
@@ -202,7 +216,7 @@ public class MainApp extends Application {
         providerCombo.setOnAction(e -> selectedProvider = providerCombo.getValue());
         
         Button generateLlmReportBtn = new Button("Generate LLM Report");
-        generateLlmReportBtn.setOnAction(e -> generateLlmReport());
+        generateLlmReportBtn.setOnAction(e -> generateLlmReport(null));
         llmActionBox.getChildren().addAll(new Label("Provider:"), providerCombo, generateLlmReportBtn);
 
         llmPanel.getChildren().addAll(
@@ -239,6 +253,8 @@ public class MainApp extends Application {
         groqField.setPromptText("Groq API Key");
         TextField ollamaField = new TextField(ollamaUrl);
         ollamaField.setPromptText("Ollama URL (default: http://localhost:11434)");
+        TextField ollamaModelField = new TextField(ollamaModel);
+        ollamaModelField.setPromptText("Ollama Model (default: llama3)");
 
         grid.add(new Label("OpenAI API Key:"), 0, 0);
         grid.add(openAiField, 1, 0);
@@ -246,6 +262,8 @@ public class MainApp extends Application {
         grid.add(groqField, 1, 1);
         grid.add(new Label("Ollama URL:"), 0, 2);
         grid.add(ollamaField, 1, 2);
+        grid.add(new Label("Ollama Model:"), 0, 3);
+        grid.add(ollamaModelField, 1, 3);
 
         dialog.getDialogPane().setContent(grid);
 
@@ -254,6 +272,7 @@ public class MainApp extends Application {
                 openAiKey = openAiField.getText();
                 groqKey = groqField.getText();
                 ollamaUrl = ollamaField.getText();
+                ollamaModel = ollamaModelField.getText();
             }
         });
     }
@@ -289,9 +308,10 @@ public class MainApp extends Application {
         });
     }
 
-    private void generateLlmReport() {
+    private void generateLlmReport(Runnable onComplete) {
         if (currentStats == null || currentStats.isEmpty()) {
             showAlert("Error", "No metrics to analyze. Run analysis first.");
+            if (onComplete != null) onComplete.run();
             return;
         }
 
@@ -310,18 +330,28 @@ public class MainApp extends Application {
         } else { // Ollama
             apiKey = "ollama"; // dummy
             url = ollamaUrl + "/v1/chat/completions";
-            model = "llama3";
+            model = ollamaModel;
         }
 
         if (apiKey.isEmpty() && !selectedProvider.equals("Ollama")) {
             showAlert("Error", "API Key for " + selectedProvider + " is not set.");
+            if (onComplete != null) onComplete.run();
             return;
         }
 
+        Map<String, String> mdSections = readMdSections();
+        
         StringBuilder metricsText = new StringBuilder("Git Metrics Data:\n");
         for (ContributorStats s : currentStats) {
             metricsText.append(String.format("- %s (%s): %d commits, +%d/-%d lines, %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
                 s.name(), s.email(), s.commitCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
+        }
+
+        if (!mdSections.isEmpty()) {
+            metricsText.append("\nAdditional Context (MD Sections):\n");
+            mdSections.forEach((title, content) -> {
+                metricsText.append(String.format("### %s\n%s\n\n", title, content));
+            });
         }
 
         if (currentMeaningfulAnalysis != null) {
@@ -353,17 +383,21 @@ public class MainApp extends Application {
             });
         }
 
-        llmResponseArea.setText("Generating report using " + selectedProvider + "...");
-
-        String finalPrompt = "SYSTEM: " + systemPromptArea.getText() + "\n\nUSER: " + userPromptArea.getText() + "\n\nDATA: " + metricsText.toString();
+        Platform.runLater(() -> llmResponseArea.setText("Generating report using " + selectedProvider + "..."));
 
         new Thread(() -> {
             try {
                 String response = callLlmApi(url, apiKey, model, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + metricsText.toString());
-                Platform.runLater(() -> llmResponseArea.setText(response));
+                Platform.runLater(() -> {
+                    llmResponseArea.setText(response);
+                    if (onComplete != null) onComplete.run();
+                });
             } catch (Exception e) {
                 e.printStackTrace();
-                Platform.runLater(() -> llmResponseArea.setText("Error: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    llmResponseArea.setText("Error: " + e.getMessage());
+                    if (onComplete != null) onComplete.run();
+                });
             }
         }).start();
     }
@@ -441,6 +475,36 @@ public class MainApp extends Application {
         }
     }
 
+    private void browseMdFolder(Stage stage) {
+        DirectoryChooser chooser = new DirectoryChooser();
+        File selected = chooser.showDialog(stage);
+        if (selected != null) {
+            mdFolderPathField.setText(selected.getAbsolutePath());
+        }
+    }
+
+    private Map<String, String> readMdSections() {
+        Map<String, String> sections = new TreeMap<>();
+        String path = mdFolderPathField.getText();
+        if (path == null || path.isEmpty()) return sections;
+        
+        File folder = new File(path);
+        if (!folder.exists() || !folder.isDirectory()) return sections;
+        
+        File[] files = folder.listFiles((dir, name) -> name.toLowerCase().endsWith(".md"));
+        if (files != null) {
+            for (File file : files) {
+                try {
+                    String content = java.nio.file.Files.readString(file.toPath());
+                    sections.put(file.getName(), content);
+                } catch (Exception e) {
+                    System.err.println("Failed to read " + file.getName() + ": " + e.getMessage());
+                }
+            }
+        }
+        return sections;
+    }
+
     private void analyzeRepo() {
         String path = repoPathField.getText();
         File repoDir = new File(path);
@@ -464,10 +528,15 @@ public class MainApp extends Application {
                 .map(s -> s.startsWith(".") ? s : "." + s)
                 .collect(Collectors.toSet());
 
+        Set<String> ignoredFolders = Arrays.stream(ignoredFoldersField.getText().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+
         new Thread(() -> {
             try {
-                currentStats = gitService.getContributorStats(repoDir, aliases, ignoredExtensions);
-                currentMeaningfulAnalysis = gitService.performMeaningfulChangeAnalysis(repoDir, commitLimitSpinner.getValue());
+                currentStats = gitService.getContributorStats(repoDir, aliases, ignoredExtensions, ignoredFolders);
+                currentMeaningfulAnalysis = gitService.performMeaningfulChangeAnalysis(repoDir, commitLimitSpinner.getValue(), ignoredFolders);
                 List<CommitInfo> recentCommits = gitService.getLastCommits(repoDir, commitLimitSpinner.getValue());
                 CommitInfo initial = gitService.getInitialCommit(repoDir);
 
@@ -534,30 +603,38 @@ public class MainApp extends Application {
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
         File file = chooser.showSaveDialog(stage);
         if (file != null) {
-            try {
-                // Take snapshots of charts
-                File pieFile = new File("pie_chart.png");
-                File barFile = new File("bar_chart.png");
-                
-                saveNodeSnapshot(commitPieChart, pieFile);
-                saveNodeSnapshot(impactBarChart, barFile);
-
-                String aiReport = null;
-                if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
-                    aiReport = llmResponseArea.getText();
-                }
-
-                exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport);
-                
-                // Cleanup temp files
-                pieFile.delete();
-                barFile.delete();
-
-                showAlert("Success", "Report exported to " + file.getAbsolutePath());
-            } catch (Exception e) {
-                e.printStackTrace();
-                showAlert("Error", "Export failed: " + e.getMessage());
+            if (aiReviewCheckBox.isSelected()) {
+                generateLlmReport(() -> performPdfExport(file));
+            } else {
+                performPdfExport(file);
             }
+        }
+    }
+
+    private void performPdfExport(File file) {
+        try {
+            // Take snapshots of charts
+            File pieFile = new File("pie_chart.png");
+            File barFile = new File("bar_chart.png");
+            
+            saveNodeSnapshot(commitPieChart, pieFile);
+            saveNodeSnapshot(impactBarChart, barFile);
+
+            String aiReport = null;
+            if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
+                aiReport = llmResponseArea.getText();
+            }
+
+            exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport, readMdSections());
+            
+            // Cleanup temp files
+            pieFile.delete();
+            barFile.delete();
+
+            Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            Platform.runLater(() -> showAlert("Error", "Export failed: " + e.getMessage()));
         }
     }
 

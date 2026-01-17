@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 
 public class GitService {
 
-    public MeaningfulChangeAnalysis performMeaningfulChangeAnalysis(File repoPath, int limit) throws Exception {
+    public MeaningfulChangeAnalysis performMeaningfulChangeAnalysis(File repoPath, int limit, Set<String> ignoredFolders) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             var logCommand = git.log();
@@ -70,6 +70,9 @@ public class GitService {
                 List<DiffEntry> diffs = df.scan(baseTree, newestTree);
                 for (DiffEntry entry : diffs) {
                     String path = entry.getNewPath().equals(DiffEntry.DEV_NULL) ? entry.getOldPath() : entry.getNewPath();
+                    
+                    if (isIgnoredFolder(path, ignoredFolders)) continue;
+
                     String category = categorizePath(path);
                     
                     int ins = 0;
@@ -114,6 +117,16 @@ public class GitService {
                 top20, categoryMap, warnings, summary, score
             );
         }
+    }
+
+    private boolean isIgnoredFolder(String path, Set<String> ignoredFolders) {
+        if (ignoredFolders == null || ignoredFolders.isEmpty()) return false;
+        for (String folder : ignoredFolders) {
+            if (path.startsWith(folder + "/") || path.equals(folder) || path.contains("/" + folder + "/")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void initializeCategories(Map<String, MeaningfulChangeAnalysis.CategoryMetrics> map) {
@@ -179,7 +192,7 @@ public class GitService {
         return sb.toString();
     }
 
-    public List<ContributorStats> getContributorStats(File repoPath, Map<String, String> aliases, Set<String> ignoredExtensions) throws Exception {
+    public List<ContributorStats> getContributorStats(File repoPath, Map<String, String> aliases, Set<String> ignoredExtensions, Set<String> ignoredFolders) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             Map<String, StatsBuilder> statsMap = new HashMap<>();
@@ -198,7 +211,7 @@ public class GitService {
                 int linesDeletedBefore = builder.linesDeleted;
 
                 RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
-                analyzeDiff(repository, parent, commit, builder, ignoredExtensions, null);
+                analyzeDiff(repository, parent, commit, builder, ignoredExtensions, ignoredFolders, null);
                 
                 int linesAdded = builder.linesAdded - linesAddedBefore;
                 int linesDeleted = builder.linesDeleted - linesDeletedBefore;
@@ -218,7 +231,7 @@ public class GitService {
         }
     }
 
-    private void analyzeDiff(Repository repository, RevCommit parent, RevCommit commit, StatsBuilder builder, Set<String> ignoredExtensions, Map<String, Integer> commitLanguages) throws IOException {
+    private void analyzeDiff(Repository repository, RevCommit parent, RevCommit commit, StatsBuilder builder, Set<String> ignoredExtensions, Set<String> ignoredFolders, Map<String, Integer> commitLanguages) throws IOException {
         try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
             df.setRepository(repository);
             df.setDiffComparator(RawTextComparator.DEFAULT);
@@ -239,6 +252,7 @@ public class GitService {
                 }
 
                 if (path != null && !path.equals(DiffEntry.DEV_NULL)) {
+                    if (isIgnoredFolder(path, ignoredFolders)) continue;
                     String ext = "";
                     int lastDot = path.lastIndexOf('.');
                     if (lastDot > 0) {

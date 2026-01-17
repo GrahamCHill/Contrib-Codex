@@ -15,7 +15,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String aiReport) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String aiReport, java.util.Map<String, String> mdSections) throws Exception {
         Document document = new Document();
         PdfWriter.getInstance(document, new FileOutputStream(filePath));
         document.open();
@@ -26,6 +26,15 @@ public class ExportService {
 
         document.add(new Paragraph("Git Contributor Metrics Report", headerFont));
         document.add(new Paragraph(" "));
+
+        // Custom MD Sections
+        if (mdSections != null && !mdSections.isEmpty()) {
+            for (java.util.Map.Entry<String, String> entry : mdSections.entrySet()) {
+                document.add(new Paragraph(entry.getKey(), sectionFont));
+                document.add(new Paragraph(entry.getValue(), normalFont));
+                document.add(new Paragraph(" "));
+            }
+        }
 
         // AI Review Section
         if (aiReport != null && !aiReport.isEmpty()) {
@@ -87,12 +96,14 @@ public class ExportService {
         // Add Charts
         document.add(new Paragraph("Commit Distribution:", sectionFont));
         Image pieImage = Image.getInstance(piePath);
-        pieImage.scaleToFit(500, 300);
+        pieImage.scaleToFit(520, 400);
+        pieImage.setAlignment(Image.MIDDLE);
         document.add(pieImage);
 
         document.add(new Paragraph("Impact Analysis:", sectionFont));
         Image barImage = Image.getInstance(barPath);
-        barImage.scaleToFit(500, 300);
+        barImage.scaleToFit(520, 400);
+        barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
         document.add(new Paragraph("Detailed Contributor Metrics:", sectionFont));
