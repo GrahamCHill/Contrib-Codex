@@ -290,6 +290,7 @@ public class MainApp extends Application {
         impactBarChart.setLegendSide(javafx.geometry.Side.RIGHT);
         xAxis.setLabel("Contributor");
         xAxis.setTickLabelRotation(45); // Prevent overlap
+        xAxis.setTickLabelGap(10);
         yAxis.setLabel("Lines of Code");
 
         CategoryAxis lxAxis = new CategoryAxis();
@@ -302,6 +303,7 @@ public class MainApp extends Application {
         activityLineChart.setLegendSide(javafx.geometry.Side.RIGHT);
         lxAxis.setLabel("Commit ID");
         lxAxis.setTickLabelRotation(45); // Prevent overlap
+        lxAxis.setTickLabelGap(10);
         lyAxis.setLabel("Lines Added");
 
         CategoryAxis cxAxis = new CategoryAxis();
@@ -314,6 +316,7 @@ public class MainApp extends Application {
         calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
         cxAxis.setLabel("Date");
         cxAxis.setTickLabelRotation(45); // Prevent overlap
+        cxAxis.setTickLabelGap(10);
         cyAxis.setLabel("Total Lines Added");
 
         CategoryAxis caxAxis = new CategoryAxis();
@@ -326,6 +329,7 @@ public class MainApp extends Application {
         contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
         caxAxis.setLabel("Date");
         caxAxis.setTickLabelRotation(45);
+        caxAxis.setTickLabelGap(10);
         cayAxis.setLabel("Lines Added");
 
         CategoryAxis cpdXAxis = new CategoryAxis();
@@ -338,6 +342,7 @@ public class MainApp extends Application {
         commitsPerDayChart.setLegendSide(javafx.geometry.Side.RIGHT);
         cpdXAxis.setLabel("Date");
         cpdXAxis.setTickLabelRotation(45);
+        cpdXAxis.setTickLabelGap(10);
         cpdYAxis.setLabel("Commit Count");
 
         chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart);
@@ -784,9 +789,28 @@ public class MainApp extends Application {
                                            
                             String sectionResponse = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), fullPrompt);
                             
-                            // Sanitize sectionResponse to remove markdown code blocks
+                            // Sanitize sectionResponse to remove markdown code blocks and duplicate titles
                             sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
+                            
+                            // Remove repeated section titles if the LLM provided them at the start of the response
+                            String normalizedResponse = sectionResponse.toLowerCase();
+                            String normalizedTitle = sectionTitle.toLowerCase().replace("_", " ");
+                            if (normalizedResponse.startsWith("# " + normalizedTitle) || normalizedResponse.startsWith("## " + normalizedTitle)) {
+                                int firstNewline = sectionResponse.indexOf("\n");
+                                if (firstNewline != -1) {
+                                    sectionResponse = sectionResponse.substring(firstNewline + 1).trim();
+                                }
+                            } else if (normalizedResponse.startsWith(normalizedTitle)) {
+                                int firstNewline = sectionResponse.indexOf("\n");
+                                if (firstNewline != -1) {
+                                    sectionResponse = sectionResponse.substring(firstNewline + 1).trim();
+                                }
+                            }
 
+                            // Only add the section title if it's the first chunk of this section
+                            if (i == 0) {
+                                fullReport.append("# ").append(sectionTitle.replace("_", " ")).append("\n\n");
+                            }
                             fullReport.append(sectionResponse).append("\n\n");
                             
                             String progressMsg = String.format("Generated section: %s (Chunk %d/%d)...", sectionTitle, i + 1, metricsChunks.size());
@@ -1412,13 +1436,16 @@ public class MainApp extends Application {
             calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
             contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
             commitsPerDayChart.setLegendSide(javafx.geometry.Side.RIGHT);
+
+            // Ensure charts have enough internal padding for legends
+            impactBarChart.setPadding(new Insets(10, 20, 10, 10));
+            activityLineChart.setPadding(new Insets(10, 20, 10, 10));
+            calendarActivityChart.setPadding(new Insets(10, 20, 10, 10));
+            contributorActivityChart.setPadding(new Insets(10, 20, 10, 10));
+            commitsPerDayChart.setPadding(new Insets(10, 20, 10, 10));
                 
-                // Increase legend spacing/size if possible or ensure it has enough room
-                // In JavaFX, Legend is a skin property, hard to access directly easily, 
-                // but setting LegendSide to BOTTOM helps.
-                
-                // Adjust layout to avoid overlapping
-                impactBarChart.requestLayout();
+            // Adjust layout to avoid overlapping
+            impactBarChart.requestLayout();
                 activityLineChart.requestLayout();
                 calendarActivityChart.requestLayout();
                 contributorActivityChart.requestLayout();

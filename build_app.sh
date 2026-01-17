@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Build script for Contrib Metric app
+# Build script for Contrib Codex app
 # Creates .app for Mac and .exe for Windows (when run on respective platforms)
 
-echo "Building Contrib Metric..."
+echo "Building Contrib Codex..."
 
 # 1. Clean and Package with dependencies
 mvn clean package -DskipTests
@@ -39,15 +39,15 @@ if [ "${PLATFORM}" == "macos" ]; then
       --type app-image \
       --input target \
       --dest dist \
-      --name "ContribMetric" \
+      --name "ContribCodex" \
       --main-jar "contrib_metric-${APP_VERSION}.jar" \
       --main-class ${MAIN_CLASS} \
       --module-path "${LIBS_DIR}" \
       --add-modules javafx.controls,javafx.fxml,javafx.swing \
       --vendor "Graham Hill" \
-      --description "Git Contributor Metrics Tool" \
+      --description "Contrib Codex Git Analytics" \
       --app-version "1.0.0" \
-      --mac-package-name "ContribMetric"
+      --mac-package-name "ContribCodex"
     
     # Also create a DMG if needed: --type dmg
     
@@ -57,13 +57,13 @@ elif [ "${PLATFORM}" == "windows" ]; then
       --type exe \
       --input target \
       --dest dist \
-      --name "ContribMetric" \
+      --name "ContribCodex" \
       --main-jar "contrib_metric-${APP_VERSION}.jar" \
       --main-class ${MAIN_CLASS} \
       --module-path "${LIBS_DIR}" \
       --add-modules javafx.controls,javafx.fxml,javafx.swing \
       --vendor "Graham Hill" \
-      --description "Git Contributor Metrics Tool" \
+      --description "Contrib Codex Git Analytics" \
       --app-version "1.0.0" \
       --win-dir-chooser \
       --win-shortcut \

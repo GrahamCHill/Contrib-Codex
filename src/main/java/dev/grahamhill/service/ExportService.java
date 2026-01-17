@@ -157,7 +157,7 @@ public class ExportService {
         document.newPage();
 
         // Introduction
-        Paragraph introHeader = new Paragraph("Git Contributor Metrics Report", headerFont);
+        Paragraph introHeader = new Paragraph("Contrib Codex Report", headerFont);
         Anchor introAnchor = new Anchor(introHeader);
         introAnchor.setName("intro");
         document.add(introAnchor);
@@ -385,7 +385,7 @@ public class ExportService {
         Image pieImage = Image.getInstance(piePath);
         pieImage.scaleToFit(1080, 675); // Scaled Pie Chart +35% (800*1.35, 500*1.35)
         pieImage.setAlignment(Image.MIDDLE);
-        pieImage.setSpacingBefore(-40f); // Move up slightly more due to size
+        pieImage.setSpacingBefore(-100f); // Move up significantly
         document.add(pieImage);
 
         document.newPage();
@@ -393,7 +393,7 @@ public class ExportService {
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
-        barImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        barImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
@@ -402,7 +402,7 @@ public class ExportService {
         chartTitle3.setSpacingBefore(15f);
         document.add(chartTitle3);
         Image lineImage = Image.getInstance(linePath);
-        lineImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        lineImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         lineImage.setAlignment(Image.MIDDLE);
         document.add(lineImage);
 
@@ -411,7 +411,7 @@ public class ExportService {
         chartTitle4.setSpacingBefore(15f);
         document.add(chartTitle4);
         Image calendarImage = Image.getInstance(calendarPath);
-        calendarImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        calendarImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         calendarImage.setAlignment(Image.MIDDLE);
         document.add(calendarImage);
 
@@ -420,7 +420,7 @@ public class ExportService {
         chartTitle5.setSpacingBefore(15f);
         document.add(chartTitle5);
         Image contribImage = Image.getInstance(contribPath);
-        contribImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        contribImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         contribImage.setAlignment(Image.MIDDLE);
         document.add(contribImage);
 
@@ -429,7 +429,7 @@ public class ExportService {
         chartTitle6.setSpacingBefore(15f);
         document.add(chartTitle6);
         Image cpdImage = Image.getInstance(cpdPath);
-        cpdImage.scaleToFit((document.getPageSize().getWidth() - 200) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        cpdImage.scaleToFit((document.getPageSize().getWidth() - 300) * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
 
