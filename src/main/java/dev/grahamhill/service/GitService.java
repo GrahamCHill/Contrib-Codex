@@ -192,7 +192,7 @@ public class GitService {
         return sb.toString();
     }
 
-    public List<ContributorStats> getContributorStats(File repoPath, Map<String, String> aliases, Set<String> ignoredExtensions, Set<String> ignoredFolders) throws Exception {
+    public List<ContributorStats> getContributorStats(File repoPath, Map<String, String> aliases, Map<String, String> genders, Set<String> ignoredExtensions, Set<String> ignoredFolders) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             Map<String, StatsBuilder> statsMap = new HashMap<>();
@@ -203,8 +203,9 @@ public class GitService {
                 String name = commit.getAuthorIdent().getName();
                 
                 String targetName = aliases.getOrDefault(email, name);
+                String gender = genders.getOrDefault(email, genders.getOrDefault(targetName, "unknown"));
                 
-                StatsBuilder builder = statsMap.computeIfAbsent(targetName, k -> new StatsBuilder(targetName, email));
+                StatsBuilder builder = statsMap.computeIfAbsent(targetName, k -> new StatsBuilder(targetName, email, gender));
                 
                 boolean isMerge = commit.getParentCount() > 1;
                 if (isMerge) {
@@ -302,31 +303,30 @@ public class GitService {
     }
 
     private double calculateAIProbability(RevCommit commit, int linesAdded, int linesDeleted, int filesChanged) {
-        // Heuristic for AI generation probability
+        // Heuristic for AI generation probability and problematic behavior
         // 1. Code bloat: massive additions in a single commit
         // 2. High addition-to-deletion ratio
         // 3. Large number of files changed
+        // 4. Lines per commit (as requested: monitor individuals with large lines added with few commits)
         
         // Initial commits are usually NOT AI generated in this context, and often large.
         if (commit.getParentCount() == 0) return 0.0;
         
         double score = 0.0;
         
-        // Bloat: > 500 lines is suspicious, > 2000 is very suspicious
-        if (linesAdded > 2000) score += 0.5;
-        else if (linesAdded > 500) score += 0.2;
+        // Bloat: > 800 lines starts to be suspicious, > 2000 is very suspicious
+        if (linesAdded > 2000) score += 0.6;
+        else if (linesAdded > 800) score += 0.2;
         
         // Ratio: AI often writes lots of new code rather than refactoring
         if (linesAdded > 100 && linesDeleted < (linesAdded * 0.05)) score += 0.3;
         
         // Files: AI often touches many files if it's a boilerplate generation
         if (filesChanged > 20) score += 0.2;
-        
-        // Commit message length: very short or very generic messages sometimes come from automation
-        String msg = commit.getShortMessage().toLowerCase();
-        if (msg.contains("update") || msg.contains("fix") || msg.length() < 10) {
-             // slight increase, but very weak signal
-        }
+
+        // "Lines per commit" is implicitly handled here because we are evaluating a SINGLE commit.
+        // A single commit with massive lines is exactly what "large lines added with few commits" means at the micro level.
+        // If a contributor does this often, their AVERAGE AI Prob (problematic score) will be higher.
 
         return Math.min(1.0, score);
     }
@@ -456,6 +456,7 @@ public class GitService {
     private static class StatsBuilder {
         String name;
         String email;
+        String gender;
         int commitCount;
         int mergeCount;
         int linesAdded;
@@ -466,13 +467,14 @@ public class GitService {
         int filesEdited;
         int filesDeleted;
 
-        StatsBuilder(String name, String email) {
+        StatsBuilder(String name, String email, String gender) {
             this.name = name;
             this.email = email;
+            this.gender = gender;
         }
 
         ContributorStats build() {
-            return new ContributorStats(name, email, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted);
+            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted);
         }
     }
 }

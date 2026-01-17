@@ -6,16 +6,19 @@ import com.lowagie.text.Image;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
+import com.lowagie.text.html.simpleparser.HTMLWorker;
+import com.lowagie.text.html.simpleparser.StyleSheet;
 import dev.grahamhill.model.ContributorStats;
 import dev.grahamhill.model.MeaningfulChangeAnalysis;
 import dev.grahamhill.model.FileChange;
 
 import java.io.FileOutputStream;
+import java.io.StringReader;
 import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, int tableLimit) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
         Document document = new Document();
         PdfWriter.getInstance(document, new FileOutputStream(filePath));
         document.open();
@@ -25,13 +28,24 @@ public class ExportService {
         Font normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
 
         if (coverHtml != null && !coverHtml.isEmpty()) {
-            // Very basic HTML text extraction for the cover page
-            // Since we don't have a full HTML renderer, we just strip tags and add it as a paragraph
-            // but the user expects it to be a cover page.
-            String plainText = coverHtml.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
-            Paragraph coverPara = new Paragraph(plainText, headerFont);
-            coverPara.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
-            document.add(coverPara);
+            try {
+                StyleSheet styles = new StyleSheet();
+                // Simple parser for HTML/CSS in OpenPDF
+                java.util.HashMap<String, Object> providers = new java.util.HashMap<>();
+                // OpenPDF HTMLWorker might not have IMG_BASEURL constant in some versions or it might be different.
+                // It usually uses an ImageProvider or just looks for images.
+                
+                List<com.lowagie.text.Element> elements = HTMLWorker.parseToList(new StringReader(coverHtml), styles);
+                for (com.lowagie.text.Element element : elements) {
+                    document.add(element);
+                }
+            } catch (Exception e) {
+                // Fallback to plain text if HTML parsing fails
+                String plainText = coverHtml.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
+                Paragraph coverPara = new Paragraph(plainText, headerFont);
+                coverPara.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
+                document.add(coverPara);
+            }
             document.newPage();
         }
 
@@ -56,7 +70,41 @@ public class ExportService {
             Paragraph aiTitle = new Paragraph("AI Generated Review", sectionFont);
             aiTitle.setSpacingBefore(15f);
             document.add(aiTitle);
-            document.add(new Paragraph(aiReport, normalFont));
+            
+            // Split by Markdown-style headers (e.g. **Header** or # Header)
+            String[] parts = aiReport.split("(?=\n\\*\\*|\\n# )");
+            for (String part : parts) {
+                part = part.trim();
+                if (part.isEmpty()) continue;
+                
+                if (part.startsWith("**") && part.contains("**")) {
+                    int endBold = part.indexOf("**", 2);
+                    if (endBold != -1) {
+                        String subTitle = part.substring(2, endBold);
+                        Paragraph pSub = new Paragraph(subTitle, new Font(Font.HELVETICA, 12, Font.BOLD));
+                        pSub.setSpacingBefore(5f);
+                        document.add(pSub);
+                        String subContent = part.substring(endBold + 2).trim();
+                        if (!subContent.isEmpty()) {
+                            document.add(new Paragraph(subContent, normalFont));
+                        }
+                        continue;
+                    }
+                } else if (part.startsWith("#")) {
+                    int contentStart = 0;
+                    while (contentStart < part.length() && part.charAt(contentStart) == '#') contentStart++;
+                    int lineEnd = part.indexOf("\n");
+                    if (lineEnd != -1) {
+                        String subTitle = part.substring(contentStart, lineEnd).trim();
+                        Paragraph pSub = new Paragraph(subTitle, new Font(Font.HELVETICA, 12, Font.BOLD));
+                        pSub.setSpacingBefore(5f);
+                        document.add(pSub);
+                        document.add(new Paragraph(part.substring(lineEnd).trim(), normalFont));
+                        continue;
+                    }
+                }
+                document.add(new Paragraph(part, normalFont));
+            }
             document.add(spacing);
         }
 
@@ -139,11 +187,12 @@ public class ExportService {
         // Group others for the table
         List<ContributorStats> tableStats = groupOthers(stats, tableLimit);
 
-        PdfPTable table = new PdfPTable(10);
+        PdfPTable table = new PdfPTable(11);
         table.setWidthPercentage(100);
         table.setSpacingBefore(5f);
         table.setSpacingAfter(15f);
         table.addCell("Contributor");
+        table.addCell("Gender");
         table.addCell("Commits");
         table.addCell("Merges");
         table.addCell("Lines Added");
@@ -156,6 +205,7 @@ public class ExportService {
 
         for (ContributorStats stat : tableStats) {
             table.addCell(stat.name() + (stat.name().equals("Others") ? "" : " (" + stat.email() + ")"));
+            table.addCell(stat.gender());
             table.addCell(String.valueOf(stat.commitCount()));
             table.addCell(String.valueOf(stat.mergeCount()));
             table.addCell(String.valueOf(stat.linesAdded()));
@@ -204,7 +254,7 @@ public class ExportService {
         java.util.Map<String, Integer> oLangs = new java.util.HashMap<>();
         others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
 
-        top.add(new ContributorStats("Others", "others@example.com", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
         return top;
     }
 

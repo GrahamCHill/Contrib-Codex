@@ -4,6 +4,7 @@ import java.util.Map;
 public record ContributorStats(
     String name,
     String email,
+    String gender,
     int commitCount,
     int mergeCount,
     int linesAdded,

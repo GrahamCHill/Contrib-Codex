@@ -45,6 +45,7 @@ public class MainApp extends Application {
     private Spinner<Integer> commitLimitSpinner;
     private Spinner<Integer> tableLimitSpinner;
     private TextArea aliasesArea;
+    private String gendersData = "";
     private TextField ignoredExtensionsField;
     private TextField ignoredFoldersField;
     private TextField mdFolderPathField;
@@ -62,7 +63,9 @@ public class MainApp extends Application {
     private TextArea llmResponseArea;
 
     private String openAiKey = "";
+    private String openAiModel = "gpt-4o";
     private String groqKey = "";
+    private String groqModel = "mixtral-8x7b-32768";
     private String ollamaUrl = "http://localhost:11434";
     private String ollamaModel = "llama3";
     private List<String> availableOllamaModels = new ArrayList<>();
@@ -87,7 +90,13 @@ public class MainApp extends Application {
         Menu settingsMenu = new Menu("Settings");
         MenuItem apiKeysItem = new MenuItem("API Keys...");
         apiKeysItem.setOnAction(e -> showApiKeysDialog());
-        settingsMenu.getItems().add(apiKeysItem);
+        MenuItem genDefaultMdItem = new MenuItem("Generate Default MDs");
+        genDefaultMdItem.setOnAction(e -> generateDefaultMds());
+        MenuItem genDefaultCoverItem = new MenuItem("Generate Default Cover");
+        genDefaultCoverItem.setOnAction(e -> generateDefaultCoverPage());
+        MenuItem genFeaturesTemplateItem = new MenuItem("Generate Features Template");
+        genFeaturesTemplateItem.setOnAction(e -> generateRequiredFeaturesTemplate());
+        settingsMenu.getItems().addAll(apiKeysItem, new SeparatorMenuItem(), genDefaultMdItem, genDefaultCoverItem, genFeaturesTemplateItem);
         menuBar.getMenus().add(settingsMenu);
         root.setTop(new VBox(menuBar));
 
@@ -123,19 +132,23 @@ public class MainApp extends Application {
         );
         
         HBox settingsBox2 = new HBox(10);
+        settingsBox2.setPadding(new Insets(0, 0, 5, 0));
         mdFolderPathField = new TextField();
         mdFolderPathField.setPromptText("Path to .md sections folder");
         Button browseMdButton = new Button("Browse...");
         browseMdButton.setOnAction(e -> browseMdFolder(primaryStage));
         Button openMdButton = new Button("Open");
         openMdButton.setOnAction(e -> openMdFolder());
+        settingsBox2.getChildren().addAll(
+                new Label("MD Folder:"), mdFolderPathField, browseMdButton, openMdButton
+        );
 
+        HBox settingsBox3 = new HBox(10);
+        settingsBox3.setPadding(new Insets(0, 0, 5, 0));
         requiredFeaturesPathField = new TextField();
         requiredFeaturesPathField.setPromptText("Path to features.md/csv");
         Button browseReqButton = new Button("Browse...");
         browseReqButton.setOnAction(e -> browseRequiredFeatures(primaryStage));
-        Button genReqButton = new Button("Gen Template");
-        genReqButton.setOnAction(e -> generateRequiredFeaturesTemplate());
 
         coverPagePathField = new TextField();
         coverPagePathField.setPromptText("Path to coverpage.html");
@@ -146,9 +159,8 @@ public class MainApp extends Application {
         Button exportButton = new Button("Export to PDF");
         exportButton.setOnAction(e -> exportToPdf(primaryStage));
         
-        settingsBox2.getChildren().addAll(
-                new Label("MD Folder:"), mdFolderPathField, browseMdButton, openMdButton,
-                new Label("Features:"), requiredFeaturesPathField, browseReqButton, genReqButton,
+        settingsBox3.getChildren().addAll(
+                new Label("Features:"), requiredFeaturesPathField, browseReqButton,
                 new Label("Coverpage:"), coverPagePathField, browseCoverButton,
                 aiReviewCheckBox,
                 exportButton
@@ -159,19 +171,25 @@ public class MainApp extends Application {
         aliasesArea.setPromptText("Enter email=Name mappings (one per line)");
         aliasesArea.setPrefHeight(60);
         aliasBox.getChildren().addAll(new Label("User Aliases (email=Combined Name):"), aliasesArea);
+        HBox.setHgrow(aliasBox, javafx.scene.layout.Priority.ALWAYS);
 
-        topBox.getChildren().addAll(repoBox, settingsBox, settingsBox2, aliasBox);
-        contentBox.getChildren().add(topBox);
+        contentBox.getChildren().addAll(repoBox, settingsBox, settingsBox2, settingsBox3, aliasBox);
+
+        loadSettings(); // Moved here after UI components are initialized
 
         // SplitPane for Main Content and LLM Panel
         SplitPane mainSplit = new SplitPane();
         mainSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
 
-        // Center: Stats Table and Charts
-        VBox centerBox = new VBox(10);
-        centerBox.setPadding(new Insets(10, 10, 10, 10));
+        // Center: Stats Table and Charts in Tabs
+        TabPane statsTabPane = new TabPane();
+        Tab statsTab = new Tab("Statistics");
+        statsTab.setClosable(false);
+        VBox statsBox = new VBox(10);
+        statsBox.setPadding(new Insets(10));
         
         statsTable = new TableView<>();
+        statsTable.setEditable(true);
         TableColumn<ContributorStats, String> nameCol = new TableColumn<>("Name");
         nameCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().name()));
         TableColumn<ContributorStats, Integer> commitsCol = new TableColumn<>("Commits");
@@ -192,13 +210,30 @@ public class MainApp extends Application {
 
         TableColumn<ContributorStats, String> languagesCol = new TableColumn<>("File Types");
         languagesCol.setCellValueFactory(data -> new SimpleStringProperty(formatLanguages(data.getValue().languageBreakdown())));
+        
+        TableColumn<ContributorStats, String> genderCol = new TableColumn<>("Gender");
+        genderCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().gender()));
+        genderCol.setCellFactory(javafx.scene.control.cell.TextFieldTableCell.forTableColumn());
+        genderCol.setOnEditCommit(event -> {
+            ContributorStats stat = event.getRowValue();
+            String newGender = event.getNewValue();
+            updateContributorGender(stat, newGender);
+        });
+
         TableColumn<ContributorStats, String> aiCol = new TableColumn<>("AI Prob");
         aiCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f%%", data.getValue().averageAiProbability() * 100)));
 
-        statsTable.getColumns().addAll(nameCol, commitsCol, mergesCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol);
+        statsTable.getColumns().addAll(nameCol, genderCol, commitsCol, mergesCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol);
         setupStatsTableContextMenu();
 
+        statsBox.getChildren().addAll(new Label("Top 10 Contributors (Double-click Gender to edit):"), statsTable);
+        VBox.setVgrow(statsTable, javafx.scene.layout.Priority.ALWAYS);
+        statsTab.setContent(statsBox);
+
+        Tab visualsTab = new Tab("Visuals");
+        visualsTab.setClosable(false);
         HBox chartsBox = new HBox(10);
+        chartsBox.setPadding(new Insets(10));
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
         commitPieChart.setMinWidth(300);
@@ -212,9 +247,9 @@ public class MainApp extends Application {
         chartsBox.getChildren().addAll(commitPieChart, impactBarChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
+        visualsTab.setContent(chartsBox);
 
-        centerBox.getChildren().addAll(new Label("Top 10 Contributors:"), statsTable, chartsBox);
-        VBox.setVgrow(statsTable, javafx.scene.layout.Priority.ALWAYS);
+        statsTabPane.getTabs().addAll(statsTab, visualsTab);
 
         // Right side: Commits
         VBox rightBox = new VBox(10);
@@ -224,15 +259,20 @@ public class MainApp extends Application {
         rightBox.getChildren().addAll(new Label("Recent Commits:"), commitList, initialCommitLabel);
         VBox.setVgrow(commitList, javafx.scene.layout.Priority.ALWAYS);
 
-        SplitPane horizontalSplit = new SplitPane(centerBox, rightBox);
+        SplitPane horizontalSplit = new SplitPane(statsTabPane, rightBox);
         horizontalSplit.setDividerPositions(0.7);
 
         // LLM Panel
         VBox llmPanel = new VBox(10);
         llmPanel.setPadding(new Insets(10));
-        systemPromptArea = new TextArea("You are a senior software engineer. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns. Finally, provide a clear conclusion identifying who added the most valuable features to the project and highlight other valuable metrics.");
+        systemPromptArea = new TextArea("You are a senior software engineer. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns. " +
+                "High 'lines per commit' (e.g. >2000) is a major risk factor indicating potential bulk generation or problematic behavior, whereas lower values (e.g. <1000) generally indicate more iterative development. " +
+                "The provided 'Additional Context (MD Sections)' contains custom instructions and analysis parameters that you MUST follow as if they were part of your core system instructions. " +
+                "Finally, provide a clear conclusion identifying who added the most valuable features to the project and highlight other valuable metrics.");
         systemPromptArea.setPrefHeight(60);
-        userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors. Make sure to include a 'Conclusion' section at the end identifying the most valuable contributor.");
+        userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors. " +
+                "Treat the provided Markdown sections as directives for your analysis. " +
+                "Make sure to include a 'Conclusion' section at the end identifying the most valuable contributor.");
         userPromptArea.setPrefHeight(60);
         llmResponseArea = new TextArea();
         llmResponseArea.setEditable(false);
@@ -241,7 +281,10 @@ public class MainApp extends Application {
         HBox llmActionBox = new HBox(10);
         ComboBox<String> providerCombo = new ComboBox<>(FXCollections.observableArrayList("OpenAI", "Groq", "Ollama"));
         providerCombo.setValue(selectedProvider);
-        providerCombo.setOnAction(e -> selectedProvider = providerCombo.getValue());
+        providerCombo.setOnAction(e -> {
+            selectedProvider = providerCombo.getValue();
+            saveSettings();
+        });
         
         Button generateLlmReportBtn = new Button("Generate LLM Report");
         generateLlmReportBtn.setOnAction(e -> generateLlmReport(null));
@@ -279,6 +322,12 @@ public class MainApp extends Application {
         openAiField.setPromptText("OpenAI API Key");
         TextField groqField = new TextField(groqKey);
         groqField.setPromptText("Groq API Key");
+        
+        TextField openAiModelField = new TextField(openAiModel);
+        openAiModelField.setPromptText("OpenAI Model (e.g. gpt-4o)");
+        TextField groqModelField = new TextField(groqModel);
+        groqModelField.setPromptText("Groq Model (e.g. mixtral-8x7b-32768)");
+
         TextField ollamaField = new TextField(ollamaUrl);
         ollamaField.setPromptText("Ollama URL (default: http://localhost:11434)");
         
@@ -302,24 +351,59 @@ public class MainApp extends Application {
 
         grid.add(new Label("OpenAI API Key:"), 0, 0);
         grid.add(openAiField, 1, 0);
-        grid.add(new Label("Groq API Key:"), 0, 1);
-        grid.add(groqField, 1, 1);
-        grid.add(new Label("Ollama URL:"), 0, 2);
-        grid.add(ollamaField, 1, 2);
-        grid.add(new Label("Ollama Model:"), 0, 3);
+        grid.add(new Label("OpenAI Model:"), 0, 1);
+        grid.add(openAiModelField, 1, 1);
+
+        grid.add(new Label("Groq API Key:"), 0, 2);
+        grid.add(groqField, 1, 2);
+        grid.add(new Label("Groq Model:"), 0, 3);
+        grid.add(groqModelField, 1, 3);
+
+        grid.add(new Label("Ollama URL:"), 0, 4);
+        grid.add(ollamaField, 1, 4);
+        grid.add(new Label("Ollama Model:"), 0, 5);
         HBox ollamaModelBox = new HBox(5, ollamaModelCombo, fetchModelsBtn);
-        grid.add(ollamaModelBox, 1, 3);
+        grid.add(ollamaModelBox, 1, 5);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
                 openAiKey = openAiField.getText();
+                openAiModel = openAiModelField.getText();
                 groqKey = groqField.getText();
+                groqModel = groqModelField.getText();
                 ollamaUrl = ollamaField.getText();
                 ollamaModel = ollamaModelCombo.getValue();
+                saveSettings();
             }
         });
+    }
+
+    private void saveSettings() {
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(MainApp.class);
+        prefs.put("openAiKey", openAiKey);
+        prefs.put("openAiModel", openAiModel);
+        prefs.put("groqKey", groqKey);
+        prefs.put("groqModel", groqModel);
+        prefs.put("ollamaUrl", ollamaUrl);
+        prefs.put("ollamaModel", ollamaModel);
+        prefs.put("selectedProvider", selectedProvider);
+        prefs.put("aliases", aliasesArea.getText());
+        prefs.put("genders", gendersData);
+    }
+
+    private void loadSettings() {
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(MainApp.class);
+        openAiKey = prefs.get("openAiKey", "");
+        openAiModel = prefs.get("openAiModel", "gpt-4o");
+        groqKey = prefs.get("groqKey", "");
+        groqModel = prefs.get("groqModel", "mixtral-8x7b-32768");
+        ollamaUrl = prefs.get("ollamaUrl", "http://localhost:11434");
+        ollamaModel = prefs.get("ollamaModel", "llama3");
+        selectedProvider = prefs.get("selectedProvider", "OpenAI");
+        aliasesArea.setText(prefs.get("aliases", ""));
+        gendersData = prefs.get("genders", "");
     }
 
     private List<String> fetchOllamaModels(String baseUrl) {
@@ -364,6 +448,30 @@ public class MainApp extends Application {
         statsTable.setContextMenu(contextMenu);
     }
 
+    private void updateContributorGender(ContributorStats stat, String newGender) {
+        String currentGenders = gendersData;
+        String mapping = stat.email() + "=" + newGender;
+        
+        String[] lines = currentGenders.split("\n");
+        StringBuilder newGenders = new StringBuilder();
+        boolean found = false;
+        for (String line : lines) {
+            if (line.trim().isEmpty()) continue;
+            if (line.startsWith(stat.email() + "=") || line.startsWith(stat.name() + "=")) {
+                newGenders.append(mapping).append("\n");
+                found = true;
+            } else {
+                newGenders.append(line).append("\n");
+            }
+        }
+        if (!found) {
+            newGenders.append(mapping).append("\n");
+        }
+        gendersData = newGenders.toString().trim();
+        saveSettings();
+        analyzeRepo(); // Refresh data with new gender
+    }
+
     private void showMergeDialog(ContributorStats selected) {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Merge User");
@@ -396,11 +504,11 @@ public class MainApp extends Application {
         if (selectedProvider.equals("OpenAI")) {
             apiKey = openAiKey;
             url = "https://api.openai.com/v1/chat/completions";
-            model = "gpt-4o";
+            model = openAiModel;
         } else if (selectedProvider.equals("Groq")) {
             apiKey = groqKey;
             url = "https://api.groq.com/openai/v1/chat/completions";
-            model = "mixtral-8x7b-32768";
+            model = groqModel;
         } else { // Ollama
             apiKey = "ollama"; // dummy
             url = ollamaUrl + "/v1/chat/completions";
@@ -415,11 +523,14 @@ public class MainApp extends Application {
 
         Map<String, String> mdSections = readMdSections();
         
-        StringBuilder metricsText = new StringBuilder("Git Metrics Data:\n");
+        StringBuilder metricsText = new StringBuilder("GIT METRICS DATA FOR ANALYSIS:\n");
         for (ContributorStats s : currentStats) {
-            metricsText.append(String.format("- %s (%s): %d commits, %d merges, +%d/-%d lines, %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
-                s.name(), s.email(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
+            double linesPerCommit = (double) s.linesAdded() / (s.commitCount() > 0 ? s.commitCount() : 1);
+            metricsText.append(String.format("- %s (%s, Gender: %s): %d commits, %d merges, +%d/-%d lines, %.1f lines/commit (RISK INDICATOR), %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
+                s.name(), s.email(), s.gender(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), linesPerCommit, s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
         }
+
+        metricsText.append("\nNote for Risk Analysis: A higher 'lines/commit' value (especially >2000) strongly suggests non-iterative, potentially bulk-generated or problematic work, and should be flagged as high risk. A lower value (around 800 or less) is typically indicative of healthier, more granular development and lower risk.\n");
 
         String reqFeatures = readRequiredFeatures();
         if (!reqFeatures.isEmpty()) {
@@ -428,10 +539,11 @@ public class MainApp extends Application {
         }
 
         if (!mdSections.isEmpty()) {
-            metricsText.append("\nAdditional Context (MD Sections):\n");
+            metricsText.append("\nINSTRUCTIONS AND ADDITIONAL CONTEXT (MD Sections):\n");
             mdSections.forEach((title, content) -> {
-                metricsText.append(String.format("### %s\n%s\n\n", title, content));
+                metricsText.append(String.format("### SECTION: %s\n%s\n\n", title, content));
             });
+            metricsText.append("END OF ADDITIONAL CONTEXT. Please apply the above sections to your analysis of the data below.\n");
         }
 
         if (currentMeaningfulAnalysis != null) {
@@ -602,6 +714,21 @@ public class MainApp extends Application {
         }
     }
 
+    private void generateDefaultMds() {
+        String path = mdFolderPathField.getText();
+        if (path == null || path.isEmpty()) {
+            // Default to 'md_sections' in current directory if empty
+            path = "md_sections";
+            mdFolderPathField.setText(path);
+        }
+        File folder = new File(path);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        createDefaultMdFiles(folder);
+        showAlert("Success", "Default Markdown files created in: " + folder.getAbsolutePath());
+    }
+
     private void openMdFolder() {
         String path = mdFolderPathField.getText();
         if (path == null || path.isEmpty()) {
@@ -679,6 +806,53 @@ public class MainApp extends Application {
         }
     }
 
+    private void generateDefaultCoverPage() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Save Default Cover Page");
+        chooser.setInitialFileName("coverpage.html");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML files", "*.html"));
+        File file = chooser.showSaveDialog(null);
+        if (file != null) {
+            try {
+                String template = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <style>
+                        body { font-family: 'Helvetica', sans-serif; text-align: center; padding-top: 50px; }
+                        h1 { color: #2c3e50; font-size: 36px; }
+                        .info { font-size: 18px; color: #7f8c8d; margin-top: 20px; }
+                        .footer { margin-top: 100px; font-style: italic; color: #bdc3c7; }
+                        .logo { width: 200px; margin-bottom: 30px; }
+                    </style>
+                    </head>
+                    <body>
+                        <div class="logo">
+                            <!-- You can add an image tag here: <img src="path/to/logo.png" width="200" /> -->
+                            <h2 style="color: #3498db;">[Project Logo Placeholder]</h2>
+                        </div>
+                        <h1>Git Metrics Report</h1>
+                        <div class="info">
+                            <p><strong>Project:</strong> {{project}}</p>
+                            <p><strong>Generated By:</strong> {{user}}</p>
+                            <p><strong>Date:</strong> {{generated_on}}</p>
+                        </div>
+                        <div class="footer">
+                            <p>Generated by Git Contributor Metrics App</p>
+                        </div>
+                    </body>
+                    </html>
+                    """;
+                java.nio.file.Files.writeString(file.toPath(), template);
+                coverPagePathField.setText(file.getAbsolutePath());
+                showAlert("Success", "Default cover page template created.");
+            } catch (Exception e) {
+                e.printStackTrace();
+                showAlert("Error", "Could not generate cover page: " + e.getMessage());
+            }
+        }
+    }
+
     private boolean confirmDialog(String title, String content) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle(title);
@@ -704,6 +878,15 @@ public class MainApp extends Application {
             }
         }
 
+        Map<String, String> genderMap = new HashMap<>();
+        String[] gLines = gendersData.split("\n");
+        for (String line : gLines) {
+            if (line.contains("=")) {
+                String[] parts = line.split("=", 2);
+                genderMap.put(parts[0].trim(), parts[1].trim());
+            }
+        }
+
         Set<String> ignoredExtensions = Arrays.stream(ignoredExtensionsField.getText().split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -717,7 +900,7 @@ public class MainApp extends Application {
 
         new Thread(() -> {
             try {
-                currentStats = gitService.getContributorStats(repoDir, aliases, ignoredExtensions, ignoredFolders);
+                currentStats = gitService.getContributorStats(repoDir, aliases, genderMap, ignoredExtensions, ignoredFolders);
                 currentMeaningfulAnalysis = gitService.performMeaningfulChangeAnalysis(repoDir, commitLimitSpinner.getValue(), ignoredFolders);
                 List<CommitInfo> recentCommits = gitService.getLastCommits(repoDir, commitLimitSpinner.getValue());
                 CommitInfo initial = gitService.getInitialCommit(repoDir);
@@ -763,7 +946,7 @@ public class MainApp extends Application {
         Map<String, Integer> oLangs = new HashMap<>();
         others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
 
-        top.add(new ContributorStats("Others", "others@example.com", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted));
         return top;
     }
 
@@ -834,6 +1017,7 @@ public class MainApp extends Application {
             }
 
             String coverHtml = null;
+            String coverBasePath = null;
             if (coverPagePathField.getText() != null && !coverPagePathField.getText().isEmpty()) {
                 File coverFile = new File(coverPagePathField.getText());
                 if (coverFile.exists()) {
@@ -841,10 +1025,28 @@ public class MainApp extends Application {
                     coverHtml = coverHtml.replace("{{generated_on}}", java.time.LocalDate.now().toString())
                             .replace("{{user}}", System.getProperty("user.name"))
                             .replace("{{project}}", new File(repoPathField.getText()).getName());
+                    
+                    // Convert relative image paths to absolute paths so OpenPDF can find them
+                    coverBasePath = coverFile.getParentFile().getAbsolutePath();
+                    String pattern = "(<img\\s+[^>]*src=\")([^\"]+)(\"[^>]*>)";
+                    java.util.regex.Pattern r = java.util.regex.Pattern.compile(pattern);
+                    java.util.regex.Matcher m = r.matcher(coverHtml);
+                    StringBuilder sb = new StringBuilder();
+                    while (m.find()) {
+                        String src = m.group(2);
+                        if (!src.startsWith("http") && !src.startsWith("file:") && !new File(src).isAbsolute()) {
+                            src = new File(coverBasePath, src).getAbsolutePath();
+                        }
+                        m.appendReplacement(sb, m.group(1) + src + m.group(3));
+                    }
+                    m.appendTail(sb);
+                    coverHtml = sb.toString();
                 }
             }
 
-            exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport, readMdSections(), coverHtml, tableLimitSpinner.getValue());
+            exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), 
+                                      pieFile.getAbsolutePath(), barFile.getAbsolutePath(), aiReport, 
+                                      readMdSections(), coverHtml, coverBasePath, tableLimitSpinner.getValue());
             
             // Cleanup temp files
             pieFile.delete();
