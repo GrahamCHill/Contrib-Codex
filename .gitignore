@@ -39,3 +39,4 @@ build/
 .DS_Store
 metrics.db
 .output.txt
+/requirements.md
