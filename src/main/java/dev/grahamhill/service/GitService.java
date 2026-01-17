@@ -549,12 +549,36 @@ public class GitService {
             // Pre-calculate branch mappings
             Map<ObjectId, String> commitToBranch = new HashMap<>();
             List<org.eclipse.jgit.lib.Ref> branches = git.branchList().setListMode(org.eclipse.jgit.api.ListBranchCommand.ListMode.ALL).call();
+            
+            // Sort branches so that 'main', 'master', 'develop' come last.
+            // This way, feature branches (where code is likely written) are processed first.
+            branches.sort((b1, b2) -> {
+                String fullN1 = b1.getName();
+                String fullN2 = b2.getName();
+                String s1 = repository.shortenRemoteBranchName(fullN1);
+                String s2 = repository.shortenRemoteBranchName(fullN2);
+                
+                String n1 = (s1 != null) ? s1.toLowerCase() : fullN1.toLowerCase();
+                String n2 = (s2 != null) ? s2.toLowerCase() : fullN2.toLowerCase();
+                
+                boolean isMain1 = n1.equals("main") || n1.equals("master") || n1.equals("develop") || n1.equals("origin/main") || n1.equals("origin/master") || n1.equals("origin/develop");
+                boolean isMain2 = n2.equals("main") || n2.equals("master") || n2.equals("develop") || n2.equals("origin/main") || n2.equals("origin/master") || n2.equals("origin/develop");
+                
+                if (isMain1 && !isMain2) return 1;
+                if (!isMain1 && isMain2) return -1;
+                return n1.compareTo(n2);
+            });
+
             for (org.eclipse.jgit.lib.Ref branch : branches) {
-                String branchName = repository.shortenRemoteBranchName(branch.getName());
+                String fullBranchName = branch.getName();
+                String shortened = repository.shortenRemoteBranchName(fullBranchName);
+                String branchName = (shortened != null) ? shortened : fullBranchName;
+                
                 Iterable<RevCommit> branchCommits = git.log().add(branch.getObjectId()).call();
                 for (RevCommit branchCommit : branchCommits) {
                     if (branchCommit != null && branchCommit.getId() != null && branchName != null) {
-                        commitToBranch.merge(branchCommit.getId(), branchName, (old, val) -> old.contains(val) ? old : old + ", " + val);
+                        // Use putIfAbsent so the first (most specific/feature) branch name is kept.
+                        commitToBranch.putIfAbsent(branchCommit.getId(), branchName);
                     }
                 }
             }

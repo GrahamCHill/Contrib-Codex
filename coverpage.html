@@ -1,245 +1,124 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8" />
-<style>
-    /* CSS 2.1 safe */
-    body {
-        margin: 0;
-        font-family: Helvetica, Arial, sans-serif;
-        background: none; /* PDF engines often ignore body background */
-    }
+    <meta charset="utf-8" />
+    <style>
+        /* CSS 2.1 safe */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Helvetica, Arial, sans-serif;
+            background: #ffffff;
+            color: #2c3e50;
+        }
 
-    .page {
-        position: relative;
-        width: 100%;
-        height: 1000px; /* adjust for your cover page */
-        overflow: hidden;
-        padding-top: 50px;
-        text-align: center;
+        /* Do NOT set height/width: let PDF engine handle page sizing */
+        .page {
+            padding: 70px 75px;
+        }
 
-        /* ✅ This one usually works (wrapper background) */
-        background-color: bisque;
-    }
+        /* Small top context line */
+        .topline {
+            font-size: 11px;
+            color: #7f8c8d;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            overflow: hidden;
+            margin-bottom: 70px;
+        }
+        .topline .left { float: left; }
+        .topline .right { float: right; }
 
-    /* Background SVG layer */
-    .bg {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 0;
-    }
+        /* Logo added */
+        .logo {
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 12px;
+        }
+        .logo img {
+            height: 18px;
+            width: auto;
+            display: inline-block;
+            vertical-align: middle;
+        }
 
-    /* Card container */
-    .card {
-        position: relative;
-        z-index: 2;
-        width: 760px;
-        margin: 0 auto;
-        background: #ffffff;
-        border: 1px solid #e6e6e6;
-        padding: 40px 45px 30px 45px;
-        text-align: left;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.10);
-        border-radius: 18px;
-    }
+        /* Chapter heading style */
+        .chapter-label {
+            font-size: 12px;
+            letter-spacing: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #5f6f7a;
+            margin-bottom: 14px;
+        }
 
-    /* Header row using table layout (CSS 2.1 safe) */
-    .header {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 25px;
-    }
-    .header td {
-        vertical-align: middle;
-    }
+        /* Big title */
+        h1 {
+            margin: 0;
+            font-size: 52px;
+            line-height: 1.08;
+            font-weight: bold;
+            color: #2c3e50;
+        }
 
-    .logo {
-        width: auto;
-        height: 20px;
-        margin-left: 20px;
-        border: none;
-        background: none;
-        box-shadow: none;
-        text-align: left;
-    }
-    .logo img {
-        height: 20px;
-        width: auto;
-        display: block;
-    }
+        /* Accent rule */
+        .rule {
+            width: 140px;
+            height: 5px;
+            background: #3498db;
+            margin: 22px 0 0 0;
+        }
 
-    h1 {
-        margin: 0;
-        color: #2c3e50;
-        font-size: 38px;
-        line-height: 1.1;
-    }
-    .subtitle {
-        margin-top: 8px;
-        color: #5f6f7a;
-        font-size: 14px;
-    }
+        /* Subtitle */
+        .subtitle {
+            margin-top: 18px;
+            font-size: 15px;
+            line-height: 1.65;
+            color: #5f6f7a;
+            width: 92%;
+        }
 
-    .badge {
-        display: inline-block;
-        margin-top: 14px;
-        padding: 7px 12px;
-        font-size: 12px;
-        border-radius: 999px;
-        background: #eef6fd;
-        border: 1px solid #d4e9fb;
-        color: #2c3e50;
-        font-weight: bold;
-    }
+        /* Footer */
+        .footer {
+            margin-top: 110px;
+            padding-top: 14px;
+            border-top: 1px solid #e6e6e6;
+            font-size: 11px;
+            color: #7f8c8d;
+            overflow: hidden;
+        }
+        .footer .left { float: left; }
+        .footer .right { float: right; }
 
-    .info {
-        margin-top: 18px;
-        border-radius: 12px;
-        padding: 14px 14px;
-        background: #fbfbfb;
-        border: 1px solid #eeeeee;
-    }
-
-    .row {
-        width: 100%;
-        border-bottom: 1px dashed #d9d9d9;
-        padding: 10px 0;
-        font-size: 16px;
-        overflow: hidden; /* contains floats */
-    }
-    .row.last { border-bottom: none; }
-
-    .label {
-        float: left;
-        color: #53626d;
-        font-weight: bold;
-        width: 140px;
-    }
-    .value {
-        float: right;
-        color: #2c3e50;
-        font-weight: bold;
-        width: 520px;
-        text-align: right;
-    }
-
-    .footer {
-        margin-top: 22px;
-        font-size: 12px;
-        font-style: italic;
-        color: #7f8c8d;
-        overflow: hidden;
-    }
-    .footer .left { float: left; }
-    .footer .right { float: right; }
-</style>
+    </style>
 </head>
 
 <body>
 <div class="page">
 
-    <!-- Background decorations (SVG, CSS 2.1 friendly) -->
-    <svg class="bg" viewBox="0 0 1000 1000" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-
-        <!-- ✅ HARD GUARANTEE background fill -->
-        <!-- Use ANY color here to set the page background -->
-        <rect x="0" y="0" width="1000" height="1000" fill="bisque"/>
-
-        <!-- Angled band -->
-        <polygon points="-50,0 1050,0 1050,170 -50,260"
-                 fill="#3498db" opacity="0.95"/>
-        <polygon points="-50,0 1050,0 1050,130 -50,210"
-                 fill="#9b59b6" opacity="0.35"/>
-
-        <!-- Dots pattern -->
-        <g opacity="0.20" fill="#ffffff">
-            <circle cx="60" cy="90" r="2"/>
-            <circle cx="100" cy="90" r="2"/>
-            <circle cx="140" cy="90" r="2"/>
-            <circle cx="180" cy="90" r="2"/>
-            <circle cx="220" cy="90" r="2"/>
-            <circle cx="260" cy="90" r="2"/>
-            <circle cx="300" cy="90" r="2"/>
-            <circle cx="340" cy="90" r="2"/>
-            <circle cx="380" cy="90" r="2"/>
-            <circle cx="420" cy="90" r="2"/>
-            <circle cx="460" cy="90" r="2"/>
-            <circle cx="500" cy="90" r="2"/>
-            <circle cx="540" cy="90" r="2"/>
-            <circle cx="580" cy="90" r="2"/>
-            <circle cx="620" cy="90" r="2"/>
-            <circle cx="660" cy="90" r="2"/>
-            <circle cx="700" cy="90" r="2"/>
-            <circle cx="740" cy="90" r="2"/>
-            <circle cx="780" cy="90" r="2"/>
-            <circle cx="820" cy="90" r="2"/>
-            <circle cx="860" cy="90" r="2"/>
-            <circle cx="900" cy="90" r="2"/>
-        </g>
-
-        <!-- Soft blobs -->
-        <circle cx="930" cy="310" r="160" fill="#ffffff" opacity="0.55"/>
-        <circle cx="70" cy="880" r="210" fill="#3498db" opacity="0.18"/>
-        <circle cx="190" cy="910" r="170" fill="#9b59b6" opacity="0.12"/>
-
-        <!-- Accent circle -->
-        <circle cx="865" cy="820" r="40" fill="#3498db" opacity="0.18"/>
-        <circle cx="865" cy="820" r="40" fill="none" stroke="#3498db" stroke-width="2" opacity="0.35"/>
-
-        <!-- Chip -->
-        <g transform="translate(90,235) rotate(-8)">
-            <rect x="0" y="0" width="160" height="42" rx="12" ry="12"
-                  fill="#ffffff" opacity="0.40" stroke="#ffffff" stroke-width="1"/>
-        </g>
-
-        <!-- Bottom wave -->
-        <path d="M0,860
-                 C120,820 240,900 360,860
-                 C480,820 620,920 760,860
-                 C860,820 940,880 1000,860
-                 L1000,1000 L0,1000 Z"
-              fill="#ffffff" opacity="0.55"/>
-    </svg>
-
-    <!-- Main content -->
-    <div class="card">
-        <table class="header">
-            <tr>
-                <td style="width: 150px;">
-                    <div class="logo">
-                        <img src="spike-spiegel.jpg" alt="Logo" />
-                    </div>
-                </td>
-                <td>
-                    <h1>Git Metrics Report</h1>
-                    <div class="subtitle">Contributor activity • risk profile • repository insights</div>
-                    <div class="badge">Contrib Codex / Git Contributor Metrics App</div>
-                </td>
-            </tr>
-        </table>
-
-        <div class="info">
-            <div class="row">
-                <div class="label">Project</div>
-                <div class="value">{{project}}</div>
-            </div>
-            <div class="row">
-                <div class="label">Generated By</div>
-                <div class="value">{{user}}</div>
-            </div>
-            <div class="row last">
-                <div class="label">Date</div>
-                <div class="value">{{generated_on}}</div>
-            </div>
+    <div class="topline">
+        <div class="left">
+            <span class="logo">
+                <img src="logo.png" alt="Logo" />
+            </span>
+            {{project}}
         </div>
+        <div class="right">{{generated_on}}</div>
+    </div>
 
-        <div class="footer">
-            <div class="left">Generated automatically</div>
-            <div class="right">Git Repository Audit</div>
-        </div>
+    <div class="chapter-label">Section</div>
+
+    <!-- Chapter-style title -->
+    <h1>Git Metrics Report</h1>
+    <div class="rule"></div>
+
+    <div class="subtitle">
+        Contributor activity, risk profile, and repository insights derived from the project history.
+    </div>
+
+    <div class="footer">
+        <div class="left">Generated by {{user}}</div>
+        <div class="right">Git Repository Audit</div>
     </div>
 
 </div>
