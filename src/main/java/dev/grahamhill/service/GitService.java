@@ -25,14 +25,43 @@ public class GitService {
 
     public String getProjectStructure(File repoPath, Set<String> ignoredFolders) {
         StringBuilder sb = new StringBuilder();
-        sb.append("PROJECT STRUCTURE:\n");
-        listDirectory(repoPath, "", sb, ignoredFolders, 0);
+        sb.append("PROJECT STRUCTURE (with creation commit IDs):\n");
+        try (Git git = Git.open(repoPath)) {
+            Repository repository = git.getRepository();
+            Map<String, String> creationCommits = getFileCreationCommits(git);
+            listDirectory(repoPath, repoPath, "", sb, ignoredFolders, 0, creationCommits);
+        } catch (Exception e) {
+            sb.append("Error reading project structure: ").append(e.getMessage());
+        }
         return sb.toString();
     }
 
-    private void listDirectory(File dir, String indent, StringBuilder sb, Set<String> ignoredFolders, int depth) {
+    private Map<String, String> getFileCreationCommits(Git git) throws Exception {
+        Map<String, String> map = new HashMap<>();
+        Iterable<RevCommit> commits = git.log().all().call();
+        List<RevCommit> commitList = new ArrayList<>();
+        commits.forEach(commitList::add);
+        Collections.reverse(commitList); // Oldest first
+
+        try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+            df.setRepository(git.getRepository());
+            for (RevCommit commit : commitList) {
+                RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
+                List<DiffEntry> diffs = df.scan(parent == null ? null : parent.getTree(), commit.getTree());
+                for (DiffEntry entry : diffs) {
+                    if (entry.getChangeType() == DiffEntry.ChangeType.ADD) {
+                        String path = entry.getNewPath();
+                        map.putIfAbsent(path, commit.getName().substring(0, 7));
+                    }
+                }
+            }
+        }
+        return map;
+    }
+
+    private void listDirectory(File baseDir, File currentDir, String indent, StringBuilder sb, Set<String> ignoredFolders, int depth, Map<String, String> creationCommits) {
         if (depth > 5) return; // Limit depth to avoid too much context
-        File[] files = dir.listFiles();
+        File[] files = currentDir.listFiles();
         if (files == null) return;
         
         // Sort files to have consistent output
@@ -46,9 +75,17 @@ public class GitService {
             if (file.getName().startsWith(".") && !file.getName().equals(".gitignore")) continue;
             if (isIgnoredFolder(file.getName(), ignoredFolders)) continue;
             
-            sb.append(indent).append(file.isDirectory() ? "[D] " : "[F] ").append(file.getName()).append("\n");
+            String relativePath = baseDir.toPath().relativize(file.toPath()).toString().replace("\\", "/");
+            String commitId = creationCommits.getOrDefault(relativePath, "Unknown");
+
+            sb.append(indent).append(file.isDirectory() ? "[D] " : "[F] ").append(file.getName());
+            if (!file.isDirectory()) {
+                sb.append(" (Created in: ").append(commitId).append(")");
+            }
+            sb.append("\n");
+
             if (file.isDirectory()) {
-                listDirectory(file, indent + "  ", sb, ignoredFolders, depth + 1);
+                listDirectory(baseDir, file, indent + "  ", sb, ignoredFolders, depth + 1, creationCommits);
             }
         }
     }

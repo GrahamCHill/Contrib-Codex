@@ -1304,7 +1304,10 @@ public class MainApp extends Application {
                     "- Explain the 'Lines Added per Commit' risk scoring system (1500+ VERY HIGH to <250 LOW).\n" +
                     "- Describe how the presence of tests (files in 'test' directories) mitigates risk scores.\n" +
                     "- Explicitly state that risk is based on average lines added per commit, not lines in a single file.\n" +
-                    "- Detail the 'Meaningful Change' detection logic which filters out boilerplate and automated code generation.");
+                    "- Detail the 'Meaningful Change' score logic:\n" +
+                    "  - Repository-wide score: Weighted by Source Code (70%) and Tests (30%) insertions.\n" +
+                    "  - Contributor-level score: Evaluates iterative development (bonus for <250-500 lines per commit), testing activity, and requirements alignment.\n" +
+                    "  - Filters out boilerplate, generated artifacts, and documentation noise.");
 
                 java.nio.file.Files.writeString(new File(folder, "03_Contributor_Deep_Dive.md").toPath(),
                     "# Contributor Impact Analysis\n" +

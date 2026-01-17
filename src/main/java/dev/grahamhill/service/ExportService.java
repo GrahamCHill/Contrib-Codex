@@ -309,6 +309,14 @@ public class ExportService {
             }
             document.add(spacing);
 
+            Paragraph mcExplanation = new Paragraph("The Meaningful Change Score is a heuristic metric used to evaluate the quality and impact of code changes. " +
+                    "For the repository as a whole, it is calculated based on the proportion of 'Source Code' (70%) and 'Tests' (30%) relative to total insertions, " +
+                    "filtering out non-meaningful changes like generated artifacts, lockfiles, and documentation. " +
+                    "For individual contributors, the score also considers iterative development patterns (bonus for smaller, more frequent commits), " +
+                    "testing activity (bonus for modifying more files than commits), and potential alignment with stated project requirements.", normalFont);
+            mcExplanation.setSpacingAfter(15f);
+            document.add(mcExplanation);
+
             document.add(new Paragraph("Category Breakdown:", normalFont));
             PdfPTable catTable = new PdfPTable(4);
             catTable.setSpacingBefore(5f);
@@ -368,8 +376,8 @@ public class ExportService {
 
         Image pieImage = Image.getInstance(piePath);
         pieImage.scaleToFit(1080, 675); // Scaled Pie Chart +35% (800*1.35, 500*1.35)
-        pieImage.setAlignment(Image.MIDDLE);
-        pieImage.setSpacingBefore(-100f);
+        pieImage.setSpacingBefore(-1950f); // Moved up further from -1200f
+        pieImage.setAlignment(Image.TOP);
         document.add(pieImage);
 
         document.newPage();
