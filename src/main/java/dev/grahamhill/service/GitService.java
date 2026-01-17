@@ -23,6 +23,36 @@ import java.util.stream.Collectors;
 
 public class GitService {
 
+    public String getProjectStructure(File repoPath, Set<String> ignoredFolders) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("PROJECT STRUCTURE:\n");
+        listDirectory(repoPath, "", sb, ignoredFolders, 0);
+        return sb.toString();
+    }
+
+    private void listDirectory(File dir, String indent, StringBuilder sb, Set<String> ignoredFolders, int depth) {
+        if (depth > 5) return; // Limit depth to avoid too much context
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        
+        // Sort files to have consistent output
+        Arrays.sort(files, (a, b) -> {
+            if (a.isDirectory() && !b.isDirectory()) return -1;
+            if (!a.isDirectory() && b.isDirectory()) return 1;
+            return a.getName().compareTo(b.getName());
+        });
+
+        for (File file : files) {
+            if (file.getName().startsWith(".") && !file.getName().equals(".gitignore")) continue;
+            if (isIgnoredFolder(file.getName(), ignoredFolders)) continue;
+            
+            sb.append(indent).append(file.isDirectory() ? "[D] " : "[F] ").append(file.getName()).append("\n");
+            if (file.isDirectory()) {
+                listDirectory(file, indent + "  ", sb, ignoredFolders, depth + 1);
+            }
+        }
+    }
+
     public MeaningfulChangeAnalysis performMeaningfulChangeAnalysis(File repoPath, int limit, Set<String> ignoredFolders) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();

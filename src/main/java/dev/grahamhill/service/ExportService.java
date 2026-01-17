@@ -16,7 +16,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String cpdPerContributorPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -43,72 +43,53 @@ public class ExportService {
         if (coverHtml != null && !coverHtml.isEmpty()) {
             event.setCoverPage(true);
             try {
-                // Wrap in full HTML if it's missing to help parser
-                String fullHtml = coverHtml;
-                if (!fullHtml.toLowerCase().contains("<html>")) {
-                    fullHtml = "<html><body>" + fullHtml + "</body></html>";
-                }
-                
-                StyleSheet styles = new StyleSheet();
-                // Improved stylesheet handling to avoid CSS appearing as text
-                String htmlToParse = fullHtml;
-                
-                // Extract and apply style tags manually if HTMLWorker struggles with them
-                if (htmlToParse.contains("<style>")) {
-                    int startStyle = htmlToParse.indexOf("<style>");
-                    int endStyle = htmlToParse.indexOf("</style>");
-                    if (endStyle > startStyle) {
-                        String css = htmlToParse.substring(startStyle + 7, endStyle).trim();
-                        // Strip the style block from the body to prevent it rendering as text
-                        htmlToParse = htmlToParse.substring(0, startStyle) + htmlToParse.substring(endStyle + 8);
-                        
-                        // Basic CSS to StyleSheet mapping
-                        String[] rules = css.split("}");
-                        for (String rule : rules) {
-                            if (rule.contains("{")) {
-                                String[] kv = rule.split("\\{");
-                                String selector = kv[0].trim();
-                                if (selector.startsWith(".")) selector = selector.substring(1); // Remove dot for class selectors
-                                String props = kv[1].trim();
-                                for (String prop : props.split(";")) {
-                                    if (prop.contains(":")) {
-                                        String[] pk = prop.split(":");
-                                        String key = pk[0].trim();
-                                        String value = pk[1].trim();
-                                        styles.loadTagStyle(selector, key, value);
-                                        
-                                        // If background-color is set for body or html, apply it to the whole page
-                                        if ((selector.equalsIgnoreCase("body") || selector.equalsIgnoreCase("html")) 
-                                            && key.equalsIgnoreCase("background-color")) {
-                                            try {
-                                                java.awt.Color awtColor = java.awt.Color.decode(value);
-                                                com.lowagie.text.pdf.PdfContentByte canvas = writer.getDirectContentUnder();
-                                                canvas.saveState();
-                                                canvas.setColorFill(awtColor);
-                                                canvas.rectangle(0, 0, PageSize.A4.getWidth(), PageSize.A4.getHeight());
-                                                canvas.fill();
-                                                canvas.restoreState();
-                                            } catch (Exception ex) {
-                                                // Ignore invalid colors
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                // Background color handling
+                if (coverHtml.contains("background-color:")) {
+                    int bgStart = coverHtml.indexOf("background-color:") + 17;
+                    int bgEnd = coverHtml.indexOf(";", bgStart);
+                    if (bgEnd > bgStart) {
+                        String colorStr = coverHtml.substring(bgStart, bgEnd).trim();
+                        try {
+                            java.awt.Color awtColor = java.awt.Color.decode(colorStr);
+                            PdfContentByte canvas = writer.getDirectContentUnder();
+                            canvas.saveState();
+                            canvas.setColorFill(awtColor);
+                            canvas.rectangle(0, 0, PageSize.A4.getWidth(), PageSize.A4.getHeight());
+                            canvas.fill();
+                            canvas.restoreState();
+                        } catch (Exception ex) {}
                     }
                 }
 
-                // Use more modern HTML parsing if possible, but stay with HTMLWorker for compatibility
-                List<com.lowagie.text.Element> elements = HTMLWorker.parseToList(new StringReader(htmlToParse), styles);
-                for (com.lowagie.text.Element element : elements) {
+                // Parse HTML elements
+                StyleSheet styles = new StyleSheet();
+                styles.loadTagStyle("body", "font-family", "helvetica");
+                styles.loadTagStyle("body", "margin", "50pt");
+                styles.loadTagStyle("h1", "font-size", "32px");
+                styles.loadTagStyle("h1", "font-weight", "bold");
+                styles.loadTagStyle("h1", "text-align", "center");
+                styles.loadTagStyle("h1", "margin-top", "100pt");
+                styles.loadTagStyle("h1", "margin-bottom", "20pt");
+                styles.loadTagStyle("p", "font-size", "14px");
+                styles.loadTagStyle("p", "text-align", "center");
+                styles.loadTagStyle("div", "text-align", "center");
+                
+                // HTMLWorker for rendering. 
+                // To simulate a web page better, we might want to use a more modern approach, 
+                // but without major new dependencies like Flying Saucer, we improve HTMLWorker.
+                java.util.List<Element> elements = HTMLWorker.parseToList(new StringReader(coverHtml), styles);
+                for (Element element : elements) {
+                    if (element instanceof Paragraph p) {
+                        if (p.getAlignment() == Element.ALIGN_UNDEFINED) {
+                            p.setAlignment(Element.ALIGN_CENTER);
+                        }
+                    }
                     document.add(element);
                 }
             } catch (Exception e) {
-                // Fallback to plain text if HTML parsing fails
-                String plainText = coverHtml.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
-                Paragraph coverPara = new Paragraph(plainText, headerFont);
-                coverPara.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
+                // Fallback
+                Paragraph coverPara = new Paragraph("Report Cover Page", headerFont);
+                coverPara.setAlignment(Element.ALIGN_CENTER);
                 document.add(coverPara);
             }
             document.newPage();
@@ -119,22 +100,61 @@ public class ExportService {
         document.add(new Paragraph("Report Index", headerFont));
         document.add(new Paragraph(" ", normalFont));
         
-        PdfPTable indexTable = new PdfPTable(2);
+        PdfPTable indexTable = new PdfPTable(3);
         indexTable.setWidthPercentage(100);
-        indexTable.setWidths(new float[]{4, 1});
+        indexTable.setWidths(new float[]{4, 1, 1});
         
-        addIndexRow(indexTable, "Introduction & Purpose", "intro", normalFont);
-        if (aiReport != null) addIndexRow(indexTable, "AI Generated Review", "ai_review", normalFont);
-        if (meaningfulAnalysis != null) addIndexRow(indexTable, "Meaningful Change Detection", "meaningful", normalFont);
-        addIndexRow(indexTable, "Visual Analytics (Charts)", "charts", normalFont);
-        addIndexRow(indexTable, "Detailed Contributor Metrics", "details", normalFont);
+        // Add headers for Index Table
+        PdfPCell h1 = new PdfPCell(new Phrase("Section", sectionFont));
+        h1.setBackgroundColor(java.awt.Color.LIGHT_GRAY);
+        indexTable.addCell(h1);
+        PdfPCell h2 = new PdfPCell(new Phrase("Page", sectionFont));
+        h2.setBackgroundColor(java.awt.Color.LIGHT_GRAY);
+        indexTable.addCell(h2);
+        PdfPCell h3 = new PdfPCell(new Phrase("Link", sectionFont));
+        h3.setBackgroundColor(java.awt.Color.LIGHT_GRAY);
+        indexTable.addCell(h3);
+
+        addIndexRow(indexTable, "Introduction & Purpose", "intro", 2, normalFont);
+        
+        int currentPage = 3; // Estimated start page after index
+
+        if (mdSections != null) {
+            for (String title : mdSections.keySet()) {
+                addIndexRow(indexTable, "External Section: " + title, "md_" + title, currentPage++, normalFont);
+            }
+        }
+
+        if (aiReport != null) {
+            addIndexRow(indexTable, "AI Generated Review", "ai_review", currentPage, normalFont);
+            // AI review can be multi-page, estimate pages based on lines
+            int aiPages = Math.max(1, aiReport.split("\n").length / 40);
+            currentPage += aiPages;
+        }
+
+        if (meaningfulAnalysis != null) {
+            addIndexRow(indexTable, "Meaningful Change Detection", "meaningful", currentPage++, normalFont);
+        }
+
+        addIndexRow(indexTable, "Visual Analytics (Charts)", "charts", currentPage, normalFont);
+        addIndexRow(indexTable, "  - Commits by Contributor (Pie Chart)", "chart1", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Impact Analysis (Stacked Bar Chart)", "chart2", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Recent Commit Activity (Line Chart)", "chart3", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Daily Activity - Total Impact (Line Chart)", "chart4", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Daily Activity per Contributor (Line Chart)", "chart5", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Commits per Day (Line Chart)", "chart6", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Commits per Day per Contributor (Line Chart)", "chart7", currentPage++, normalFont);
+        
+        addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage, normalFont);
         
         document.add(indexTable);
         document.newPage();
 
+        // Introduction
         Paragraph introHeader = new Paragraph("Git Contributor Metrics Report", headerFont);
-        introHeader.setLocalDestination("intro");
-        document.add(introHeader);
+        Anchor introAnchor = new Anchor(introHeader);
+        introAnchor.setName("intro");
+        document.add(introAnchor);
         
         // Purpose Explanation
         Paragraph explanation = new Paragraph("This report provides a comprehensive analysis of the Git repository's contribution history. " +
@@ -149,13 +169,32 @@ public class ExportService {
         spacing.setSpacingAfter(10f);
         document.add(spacing);
 
-        // Meaningful Change Detection Section
+        // MD Sections
+        if (mdSections != null) {
+            for (java.util.Map.Entry<String, String> entry : mdSections.entrySet()) {
+                document.newPage();
+                Paragraph mdTitle = new Paragraph(entry.getKey(), sectionFont);
+                Anchor mdAnchor = new Anchor(mdTitle);
+                mdAnchor.setName("md_" + entry.getKey());
+                document.add(mdAnchor);
+                document.add(new Paragraph(" ", normalFont));
+                
+                // For simplicity, treating MD as plain text here, but could reuse Markdown parsing
+                String[] lines = entry.getValue().split("\n");
+                for (String line : lines) {
+                    document.add(new Paragraph(line, normalFont));
+                }
+            }
+        }
+
+        // AI Generated Review Section
         if (aiReport != null && !aiReport.isEmpty()) {
             document.newPage(); // Start AI Review on a new page
             Paragraph aiTitle = new Paragraph("AI Generated Review", sectionFont);
-        aiTitle.setLocalDestination("ai_review");
-        aiTitle.setSpacingBefore(15f);
-        document.add(aiTitle);
+            Anchor aiAnchor = new Anchor(aiTitle);
+            aiAnchor.setName("ai_review");
+            aiTitle.setSpacingBefore(15f);
+            document.add(aiAnchor);
             
             String[] lines = aiReport.split("\n");
             StringBuilder currentText = new StringBuilder();
@@ -164,7 +203,9 @@ public class ExportService {
                 String line = lines[i].trim();
                 if (line.isEmpty()) {
                     if (currentText.length() > 0) {
-                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
                         currentText = new StringBuilder();
                     }
                     continue;
@@ -172,38 +213,62 @@ public class ExportService {
 
                 if (line.startsWith("# ")) {
                     if (currentText.length() > 0) {
-                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
                         currentText = new StringBuilder();
                     }
-                    Paragraph h1 = new Paragraph(line.substring(2).trim(), sectionFont);
-                    h1.setSpacingBefore(10f);
-                    document.add(h1);
+                    Paragraph h1Header = new Paragraph(line.substring(2).trim(), headerFont);
+                    h1Header.setSpacingBefore(15f);
+                    h1Header.setSpacingAfter(10f);
+                    document.add(h1Header);
                 } else if (line.startsWith("## ")) {
                     if (currentText.length() > 0) {
-                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
                         currentText = new StringBuilder();
                     }
-                    Paragraph h2 = new Paragraph(line.substring(3).trim(), new Font(Font.HELVETICA, 12, Font.BOLD));
-                    h2.setSpacingBefore(8f);
-                    document.add(h2);
+                    Paragraph h2Header = new Paragraph(line.substring(3).trim(), sectionFont);
+                    h2Header.setSpacingBefore(12f);
+                    h2Header.setSpacingAfter(8f);
+                    document.add(h2Header);
+                } else if (line.startsWith("### ")) {
+                    if (currentText.length() > 0) {
+                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
+                        currentText = new StringBuilder();
+                    }
+                    Paragraph h3Header = new Paragraph(line.substring(4).trim(), new Font(Font.HELVETICA, 12, Font.BOLD));
+                    h3Header.setSpacingBefore(10f);
+                    h3Header.setSpacingAfter(6f);
+                    document.add(h3Header);
                 } else if (line.startsWith("**") && line.endsWith("**") && line.length() > 4) {
                     if (currentText.length() > 0) {
-                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
                         currentText = new StringBuilder();
                     }
                     Paragraph bold = new Paragraph(line.substring(2, line.length() - 2).trim(), new Font(Font.HELVETICA, 11, Font.BOLD));
                     bold.setSpacingBefore(5f);
+                    bold.setSpacingAfter(5f);
                     document.add(bold);
                 } else if (line.startsWith("|")) {
                     if (currentText.length() > 0) {
-                        document.add(new Paragraph(currentText.toString(), normalFont));
+                        Paragraph p = new Paragraph(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
                         currentText = new StringBuilder();
                     }
                     
                     // Table detection and processing
                     java.util.List<String> tableLines = new java.util.ArrayList<>();
-                    while (i < lines.length && lines[i].trim().startsWith("|")) {
-                        tableLines.add(lines[i].trim());
+                    while (i < lines.length && (lines[i].trim().startsWith("|") || (lines[i].trim().isEmpty() && i + 1 < lines.length && lines[i+1].trim().startsWith("|")))) {
+                        if (!lines[i].trim().isEmpty()) {
+                            tableLines.add(lines[i].trim());
+                        }
                         i++;
                     }
                     i--; // Step back because outer loop will increment
@@ -444,6 +509,18 @@ public class ExportService {
         }
     }
 
+    private void addIndexRow(PdfPTable table, String text, String destination, int pageNumber, Font font) {
+        Chunk chunk = new Chunk(text, font);
+        chunk.setLocalGoto(destination);
+        table.addCell(new Phrase(chunk));
+        
+        table.addCell(new Phrase(String.valueOf(pageNumber), font));
+        
+        Chunk goChunk = new Chunk("Go", font);
+        goChunk.setLocalGoto(destination);
+        table.addCell(new Phrase(goChunk));
+    }
+
     private List<ContributorStats> groupOthers(List<ContributorStats> stats, int limit) {
         if (stats.size() <= limit) return stats;
         java.util.List<ContributorStats> top = new java.util.ArrayList<>(stats.subList(0, limit));
@@ -453,9 +530,11 @@ public class ExportService {
         int oMerges = others.stream().mapToInt(ContributorStats::mergeCount).sum();
         int oAdded = others.stream().mapToInt(ContributorStats::linesAdded).sum();
         int oDeleted = others.stream().mapToInt(ContributorStats::linesDeleted).sum();
+
         int oFAdded = others.stream().mapToInt(ContributorStats::filesAdded).sum();
         int oFEdited = others.stream().mapToInt(ContributorStats::filesEdited).sum();
         int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
+
         double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
 
         double avgMeaningful = others.stream().mapToDouble(ContributorStats::meaningfulChangeScore).average().orElse(0.0);
@@ -521,10 +600,17 @@ public class ExportService {
             for (String line : dataLines) {
                 String[] parts = line.split("\\|");
                 int count = 0;
+                boolean isHeader = dataLines.indexOf(line) == 0;
                 for (String p : parts) {
                     if (p.trim().isEmpty() && count == 0 && line.startsWith("|")) continue; 
                     if (count < maxCols) {
-                        table.addCell(new Phrase(p.trim(), font));
+                        PdfPCell cell = new PdfPCell(new Phrase(p.trim(), isHeader ? new Font(Font.HELVETICA, 10, Font.BOLD) : font));
+                        if (isHeader) {
+                            cell.setBackgroundColor(java.awt.Color.LIGHT_GRAY);
+                            cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                        }
+                        cell.setPadding(5f);
+                        table.addCell(cell);
                         count++;
                     }
                 }

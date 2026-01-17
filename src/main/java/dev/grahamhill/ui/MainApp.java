@@ -5,6 +5,7 @@ import dev.grahamhill.model.ContributorStats;
 import dev.grahamhill.model.MeaningfulChangeAnalysis;
 import dev.grahamhill.model.FileChange;
 import dev.grahamhill.service.DatabaseService;
+import dev.grahamhill.service.EncryptionService;
 import dev.grahamhill.service.ExportService;
 import dev.grahamhill.service.GitService;
 import javafx.application.Application;
@@ -37,6 +38,7 @@ public class MainApp extends Application {
     private final GitService gitService = new GitService();
     private DatabaseService databaseService;
     private final ExportService exportService = new ExportService();
+    private EncryptionService encryptionService;
 
     private TableView<ContributorStats> statsTable;
     private ListView<String> commitList;
@@ -58,6 +60,7 @@ public class MainApp extends Application {
     private LineChart<String, Number> calendarActivityChart;
     private LineChart<String, Number> contributorActivityChart;
     private LineChart<String, Number> commitsPerDayChart;
+    private LineChart<String, Number> cpdPerContributorChart;
 
     private List<ContributorStats> currentStats;
     private MeaningfulChangeAnalysis currentMeaningfulAnalysis;
@@ -79,11 +82,41 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {
+        // Initialize UI components before loading settings to avoid NPE
+        repoPathField = new TextField();
+        commitLimitSpinner = new Spinner<>(0, 1000, 10);
+        commitLimitSpinner.setEditable(true);
+        tableLimitSpinner = new Spinner<>(1, 100, 20);
+        tableLimitSpinner.setEditable(true);
+        ignoredExtensionsField = new TextField("json,csv,lock,txt");
+        ignoredFoldersField = new TextField("node_modules,target,build,dist,.git");
+        mdFolderPathField = new TextField();
+        requiredFeaturesPathField = new TextField();
+        coverPagePathField = new TextField();
+        aliasesArea = new TextArea();
+
         try {
             databaseService = new DatabaseService();
+            encryptionService = new EncryptionService();
+            loadSettings();
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+        // Add listeners after loading settings to avoid multiple save calls during initialization
+        ignoredExtensionsField.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        ignoredFoldersField.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        commitLimitSpinner.valueProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        tableLimitSpinner.valueProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        repoPathField.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        aliasesArea.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        mdFolderPathField.textProperty().addListener((obs, oldVal, newVal) -> {
+            Platform.runLater(this::saveSettings);
+        });
+        requiredFeaturesPathField.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        coverPagePathField.textProperty().addListener((obs, oldVal, newVal) -> {
+            Platform.runLater(this::saveSettings);
+        });
 
         primaryStage.setTitle("Git Contributor Metrics");
 
@@ -111,7 +144,6 @@ public class MainApp extends Application {
         // Top: Repo Selection and Settings
         VBox topBox = new VBox(10);
         HBox repoBox = new HBox(10);
-        repoPathField = new TextField();
         repoPathField.setPrefWidth(400);
         Button browseButton = new Button("Browse...");
         browseButton.setOnAction(e -> browseRepo(primaryStage));
@@ -120,14 +152,9 @@ public class MainApp extends Application {
         repoBox.getChildren().addAll(new Label("Repo Path:"), repoPathField, browseButton, analyzeButton);
 
         HBox settingsBox = new HBox(10);
-        commitLimitSpinner = new Spinner<>(0, 1000, 10);
-        commitLimitSpinner.setEditable(true);
-        tableLimitSpinner = new Spinner<>(1, 100, 20);
-        tableLimitSpinner.setEditable(true);
-        ignoredExtensionsField = new TextField("json,csv,lock,txt");
         ignoredExtensionsField.setPromptText("e.g. json,csv");
-        ignoredFoldersField = new TextField("node_modules,target,build,dist,.git");
         ignoredFoldersField.setPromptText("e.g. node_modules,target");
+        
         settingsBox.getChildren().addAll(
                 new Label("Git Tree Commits:"), commitLimitSpinner,
                 new Label("Table Limit:"), tableLimitSpinner,
@@ -137,11 +164,7 @@ public class MainApp extends Application {
         
         HBox settingsBox2 = new HBox(10);
         settingsBox2.setPadding(new Insets(0, 0, 5, 0));
-        mdFolderPathField = new TextField();
         mdFolderPathField.setPromptText("Path to .md sections folder");
-        mdFolderPathField.textProperty().addListener((obs, oldVal, newVal) -> {
-            Platform.runLater(this::saveSettings);
-        });
         Button browseMdButton = new Button("Browse...");
         browseMdButton.setOnAction(e -> {
             browseMdFolder(primaryStage);
@@ -155,16 +178,11 @@ public class MainApp extends Application {
 
         HBox settingsBox3 = new HBox(10);
         settingsBox3.setPadding(new Insets(0, 0, 5, 0));
-        requiredFeaturesPathField = new TextField();
         requiredFeaturesPathField.setPromptText("Path to features.md/csv");
         Button browseReqButton = new Button("Browse...");
         browseReqButton.setOnAction(e -> browseRequiredFeatures(primaryStage));
 
-        coverPagePathField = new TextField();
         coverPagePathField.setPromptText("Path to coverpage.html");
-        coverPagePathField.textProperty().addListener((obs, oldVal, newVal) -> {
-            Platform.runLater(this::saveSettings);
-        });
         Button browseCoverButton = new Button("Browse...");
         browseCoverButton.setOnAction(e -> {
             browseCoverPage(primaryStage);
@@ -183,15 +201,12 @@ public class MainApp extends Application {
         );
 
         VBox aliasBox = new VBox(5);
-        aliasesArea = new TextArea();
         aliasesArea.setPromptText("Enter email=Name mappings (one per line)");
         aliasesArea.setPrefHeight(60);
         aliasBox.getChildren().addAll(new Label("User Aliases (email=Combined Name):"), aliasesArea);
         HBox.setHgrow(aliasBox, javafx.scene.layout.Priority.ALWAYS);
 
         contentBox.getChildren().addAll(repoBox, settingsBox, settingsBox2, settingsBox3, aliasBox);
-
-        loadSettings(); // Moved here after UI components are initialized
 
         // SplitPane for Main Content and LLM Panel
         SplitPane mainSplit = new SplitPane();
@@ -260,17 +275,17 @@ public class MainApp extends Application {
 
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
-        commitPieChart.setMinWidth(300);
-        commitPieChart.setPrefWidth(400);
+        commitPieChart.setMinWidth(150);
+        commitPieChart.setPrefWidth(200);
         commitPieChart.setLegendSide(javafx.geometry.Side.BOTTOM);
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         impactBarChart = new StackedBarChart<>(xAxis, yAxis);
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
-        impactBarChart.setMinWidth(600);
-        impactBarChart.setPrefWidth(800);
-        impactBarChart.setMinHeight(400); // Taller chart
+        impactBarChart.setMinWidth(800);
+        impactBarChart.setPrefWidth(1000);
+        impactBarChart.setMinHeight(500); // Taller chart
         impactBarChart.setCategoryGap(20);
         impactBarChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         xAxis.setLabel("Contributor");
@@ -281,9 +296,9 @@ public class MainApp extends Application {
         NumberAxis lyAxis = new NumberAxis();
         activityLineChart = new LineChart<>(lxAxis, lyAxis);
         activityLineChart.setTitle("Recent Commit Activity");
-        activityLineChart.setMinWidth(600);
-        activityLineChart.setPrefWidth(800);
-        activityLineChart.setMinHeight(400); // Taller chart
+        activityLineChart.setMinWidth(800);
+        activityLineChart.setPrefWidth(1000);
+        activityLineChart.setMinHeight(500); // Taller chart
         activityLineChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         lxAxis.setLabel("Commit ID");
         lxAxis.setTickLabelRotation(45); // Prevent overlap
@@ -293,9 +308,9 @@ public class MainApp extends Application {
         NumberAxis cyAxis = new NumberAxis();
         calendarActivityChart = new LineChart<>(cxAxis, cyAxis);
         calendarActivityChart.setTitle("Daily Activity (Total Impact)");
-        calendarActivityChart.setMinWidth(600);
-        calendarActivityChart.setPrefWidth(800);
-        calendarActivityChart.setMinHeight(400); // Taller chart
+        calendarActivityChart.setMinWidth(800);
+        calendarActivityChart.setPrefWidth(1000);
+        calendarActivityChart.setMinHeight(500); // Taller chart
         calendarActivityChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         cxAxis.setLabel("Date");
         cxAxis.setTickLabelRotation(45); // Prevent overlap
@@ -305,9 +320,9 @@ public class MainApp extends Application {
         NumberAxis cayAxis = new NumberAxis();
         contributorActivityChart = new LineChart<>(caxAxis, cayAxis);
         contributorActivityChart.setTitle("Daily Activity per Contributor");
-        contributorActivityChart.setMinWidth(600);
-        contributorActivityChart.setPrefWidth(800);
-        contributorActivityChart.setMinHeight(400); // Taller chart
+        contributorActivityChart.setMinWidth(800);
+        contributorActivityChart.setPrefWidth(1000);
+        contributorActivityChart.setMinHeight(500); // Taller chart
         contributorActivityChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         caxAxis.setLabel("Date");
         caxAxis.setTickLabelRotation(45);
@@ -317,21 +332,34 @@ public class MainApp extends Application {
         NumberAxis cpdYAxis = new NumberAxis();
         commitsPerDayChart = new LineChart<>(cpdXAxis, cpdYAxis);
         commitsPerDayChart.setTitle("Commits per Day");
-        commitsPerDayChart.setMinWidth(600);
-        commitsPerDayChart.setPrefWidth(800);
-        commitsPerDayChart.setMinHeight(400);
+        commitsPerDayChart.setMinWidth(800);
+        commitsPerDayChart.setPrefWidth(1000);
+        commitsPerDayChart.setMinHeight(500);
         commitsPerDayChart.setLegendSide(javafx.geometry.Side.BOTTOM);
         cpdXAxis.setLabel("Date");
         cpdXAxis.setTickLabelRotation(45);
         cpdYAxis.setLabel("Commit Count");
 
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart);
+        CategoryAxis cpdpXAxis = new CategoryAxis();
+        NumberAxis cpdpYAxis = new NumberAxis();
+        cpdPerContributorChart = new LineChart<>(cpdpXAxis, cpdpYAxis);
+        cpdPerContributorChart.setTitle("Commits per Day per Contributor");
+        cpdPerContributorChart.setMinWidth(800);
+        cpdPerContributorChart.setPrefWidth(1000);
+        cpdPerContributorChart.setMinHeight(500);
+        cpdPerContributorChart.setLegendSide(javafx.geometry.Side.BOTTOM);
+        cpdpXAxis.setLabel("Date");
+        cpdpXAxis.setTickLabelRotation(45);
+        cpdpYAxis.setLabel("Commit Count");
+
+        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart, cpdPerContributorChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(commitsPerDayChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(cpdPerContributorChart, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsScrollPane);
 
         statsTabPane.getTabs().addAll(statsTab, visualsTab);
@@ -473,9 +501,13 @@ public class MainApp extends Application {
 
     private void saveSettings() {
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(MainApp.class);
-        prefs.put("openAiKey", openAiKey);
+        
+        String encOpenAiKey = (encryptionService != null) ? encryptionService.encrypt(openAiKey) : openAiKey;
+        String encGroqKey = (encryptionService != null) ? encryptionService.encrypt(groqKey) : groqKey;
+
+        prefs.put("openAiKey", encOpenAiKey != null ? encOpenAiKey : "");
         prefs.put("openAiModel", openAiModel);
-        prefs.put("groqKey", groqKey);
+        prefs.put("groqKey", encGroqKey != null ? encGroqKey : "");
         prefs.put("groqModel", groqModel);
         prefs.put("ollamaUrl", ollamaUrl);
         prefs.put("ollamaModel", ollamaModel);
@@ -483,11 +515,18 @@ public class MainApp extends Application {
         prefs.put("aliases", aliasesArea.getText());
         prefs.put("genders", gendersData);
         
+        prefs.put("repoPath", repoPathField.getText());
+        prefs.put("commitLimit", String.valueOf(commitLimitSpinner.getValue()));
+        prefs.put("tableLimit", String.valueOf(tableLimitSpinner.getValue()));
+        prefs.put("ignoredExtensions", ignoredExtensionsField.getText());
+        prefs.put("ignoredFolders", ignoredFoldersField.getText());
+        
         // Save global settings to database as well
         if (databaseService != null) {
             try {
                 databaseService.saveGlobalSetting("mdFolderPath", mdFolderPathField.getText());
                 databaseService.saveGlobalSetting("coverPagePath", coverPagePathField.getText());
+                databaseService.saveGlobalSetting("requiredFeaturesPath", requiredFeaturesPathField.getText());
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -496,15 +535,37 @@ public class MainApp extends Application {
 
     private void loadSettings() {
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(MainApp.class);
-        openAiKey = prefs.get("openAiKey", "");
+        
+        String savedOpenAiKey = prefs.get("openAiKey", "");
+        String savedGroqKey = prefs.get("groqKey", "");
+        
+        if (encryptionService != null && !savedOpenAiKey.isEmpty()) {
+            String decrypted = encryptionService.decrypt(savedOpenAiKey);
+            openAiKey = (decrypted != null) ? decrypted : savedOpenAiKey;
+        } else {
+            openAiKey = savedOpenAiKey;
+        }
+
+        if (encryptionService != null && !savedGroqKey.isEmpty()) {
+            String decrypted = encryptionService.decrypt(savedGroqKey);
+            groqKey = (decrypted != null) ? decrypted : savedGroqKey;
+        } else {
+            groqKey = savedGroqKey;
+        }
+
         openAiModel = prefs.get("openAiModel", "gpt-4o");
-        groqKey = prefs.get("groqKey", "");
         groqModel = prefs.get("groqModel", "mixtral-8x7b-32768");
         ollamaUrl = prefs.get("ollamaUrl", "http://localhost:11434");
         ollamaModel = prefs.get("ollamaModel", "llama3");
         selectedProvider = prefs.get("selectedProvider", "OpenAI");
         aliasesArea.setText(prefs.get("aliases", ""));
         gendersData = prefs.get("genders", "");
+        
+        repoPathField.setText(prefs.get("repoPath", ""));
+        commitLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("commitLimit", "10")));
+        tableLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("tableLimit", "20")));
+        ignoredExtensionsField.setText(prefs.get("ignoredExtensions", "json,csv,lock,txt"));
+        ignoredFoldersField.setText(prefs.get("ignoredFolders", "node_modules,target,build,dist,.git"));
 
         // Load global settings from database
         if (databaseService != null) {
@@ -514,6 +575,9 @@ public class MainApp extends Application {
                 
                 String coverPath = databaseService.getGlobalSetting("coverPagePath");
                 if (coverPath != null) coverPagePathField.setText(coverPath);
+
+                String featuresPath = databaseService.getGlobalSetting("requiredFeaturesPath");
+                if (featuresPath != null) requiredFeaturesPathField.setText(featuresPath);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -638,6 +702,15 @@ public class MainApp extends Application {
         Map<String, String> mdSections = readMdSections();
         
         StringBuilder metricsText = new StringBuilder("METRICS:\n");
+
+        File repoDir = new File(repoPathField.getText());
+        Set<String> ignoredFolders = Arrays.stream(ignoredFoldersField.getText().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+        String structure = gitService.getProjectStructure(repoDir, ignoredFolders);
+        metricsText.append(structure).append("\n");
+
         for (ContributorStats s : currentStats) {
             metricsText.append(String.format("- %s (%s, %s): %d c, %d m, +%d/-%d l, %d n/%d e/%d d f, %s\n",
                 s.name(), s.email(), s.gender(), s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
@@ -954,7 +1027,7 @@ public class MainApp extends Application {
     }
 
     private Map<String, String> readMdSections() {
-        Map<String, String> sections = new TreeMap<>();
+        Map<String, String> sections = new LinkedHashMap<>(); // Use LinkedHashMap to preserve order
         String path = mdFolderPathField.getText();
         if (path == null || path.isEmpty()) return sections;
 
@@ -962,10 +1035,13 @@ public class MainApp extends Application {
         if (folder.exists() && folder.isDirectory()) {
             File[] files = folder.listFiles((dir, name) -> name.toLowerCase().endsWith(".md"));
             if (files != null) {
+                // Sort files by name to ensure consistent order
+                Arrays.sort(files, Comparator.comparing(File::getName));
                 for (File f : files) {
                     try {
                         String content = java.nio.file.Files.readString(f.toPath());
-                        sections.put(f.getName(), content);
+                        String title = f.getName().replace(".md", "");
+                        sections.put(title, content);
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
@@ -1153,6 +1229,7 @@ public class MainApp extends Application {
             // Pie Chart with percentages
             commitPieChart.getData().clear();
             commitPieChart.setAnimated(false);
+            commitPieChart.setLabelsVisible(false); // Hide labels to save space and avoid cutoff
             int totalCommits = stats.stream().mapToInt(s -> s.commitCount() + s.mergeCount()).sum();
             List<PieChart.Data> pieData = top5.stream()
                     .map(s -> {
@@ -1190,12 +1267,12 @@ public class MainApp extends Application {
             if (recentCommits != null && !recentCommits.isEmpty()) {
                 XYChart.Series<String, Number> activitySeries = new XYChart.Series<>();
                 activitySeries.setName("Lines Added");
-                // Show in chronological order (recentCommits is usually newest first)
+                // recentCommits is newest first, so reverse it for chronological order
                 List<CommitInfo> chronological = new ArrayList<>(recentCommits);
                 Collections.reverse(chronological);
                 
                 for (CommitInfo ci : chronological) {
-                    activitySeries.getData().add(new XYChart.Data<>(ci.id(), ci.linesAdded()));
+                    activitySeries.getData().add(new XYChart.Data<>(ci.id().substring(0, 7), ci.linesAdded()));
                 }
                 activityLineChart.getData().add(activitySeries);
             }
@@ -1207,6 +1284,7 @@ public class MainApp extends Application {
                 XYChart.Series<String, Number> calSeries = new XYChart.Series<>();
                 calSeries.setName("Daily Impact");
                 
+                // TreeMap keeps it chronological by LocalDate
                 Map<java.time.LocalDate, Integer> dailyImpact = new TreeMap<>();
                 for (CommitInfo ci : recentCommits) {
                     java.time.LocalDate date = ci.timestamp().toLocalDate();
@@ -1226,6 +1304,7 @@ public class MainApp extends Application {
                 XYChart.Series<String, Number> cpdSeries = new XYChart.Series<>();
                 cpdSeries.setName("Daily Commits");
 
+                // TreeMap keeps it chronological by LocalDate
                 Map<java.time.LocalDate, Integer> dailyCommits = new TreeMap<>();
                 for (CommitInfo ci : recentCommits) {
                     java.time.LocalDate date = ci.timestamp().toLocalDate();
@@ -1239,6 +1318,7 @@ public class MainApp extends Application {
             }
 
             updateContributorActivityChart(stats, recentCommits);
+            updateCpdPerContributorChart(stats, recentCommits);
 
             // Force layout pass and refresh to ensure charts are rendered correctly
             Platform.runLater(() -> {
@@ -1256,6 +1336,11 @@ public class MainApp extends Application {
                 calendarActivityChart.setLegendVisible(true);
                 contributorActivityChart.setLegendVisible(true);
                 commitsPerDayChart.setLegendVisible(true);
+                cpdPerContributorChart.setLegendVisible(true);
+                
+                // Increase legend spacing/size if possible or ensure it has enough room
+                // In JavaFX, Legend is a skin property, hard to access directly easily, 
+                // but setting LegendSide to BOTTOM helps.
                 
                 // Adjust layout to avoid overlapping
                 impactBarChart.requestLayout();
@@ -1263,6 +1348,7 @@ public class MainApp extends Application {
                 calendarActivityChart.requestLayout();
                 contributorActivityChart.requestLayout();
                 commitsPerDayChart.requestLayout();
+                cpdPerContributorChart.requestLayout();
 
                 commitPieChart.requestLayout();
             });
@@ -1275,7 +1361,7 @@ public class MainApp extends Application {
         if (recentCommits == null || recentCommits.isEmpty()) return;
 
         // Group commits by author and then by date
-        Map<String, Map<java.time.LocalDate, Integer>> authorDailyImpact = new HashMap<>();
+        Map<String, Map<java.time.LocalDate, Integer>> authorDailyImpact = new TreeMap<>();
         
         // Use top 5 contributors only to avoid clutter
         Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
@@ -1297,6 +1383,34 @@ public class MainApp extends Application {
                 series.getData().add(new XYChart.Data<>(dateEntry.getKey().toString(), dateEntry.getValue()));
             }
             contributorActivityChart.getData().add(series);
+        }
+    }
+
+    private void updateCpdPerContributorChart(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
+        cpdPerContributorChart.getData().clear();
+        cpdPerContributorChart.setAnimated(false);
+        if (recentCommits == null || recentCommits.isEmpty()) return;
+
+        Map<String, Map<java.time.LocalDate, Integer>> authorDailyCommits = new TreeMap<>();
+        Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
+
+        for (CommitInfo ci : recentCommits) {
+            String author = ci.authorName();
+            if (!topAuthorNames.contains(author)) continue;
+            
+            java.time.LocalDate date = ci.timestamp().toLocalDate();
+            authorDailyCommits.computeIfAbsent(author, k -> new TreeMap<>())
+                             .merge(date, 1, Integer::sum);
+        }
+
+        for (Map.Entry<String, Map<java.time.LocalDate, Integer>> entry : authorDailyCommits.entrySet()) {
+            XYChart.Series<String, Number> series = new XYChart.Series<>();
+            series.setName(entry.getKey());
+            
+            for (Map.Entry<java.time.LocalDate, Integer> dateEntry : entry.getValue().entrySet()) {
+                series.getData().add(new XYChart.Data<>(dateEntry.getKey().toString(), dateEntry.getValue()));
+            }
+            cpdPerContributorChart.getData().add(series);
         }
     }
 
@@ -1327,19 +1441,23 @@ public class MainApp extends Application {
             File calendarFile = new File("calendar_chart.png");
             File contribFile = new File("contrib_activity.png");
             File cpdFile = new File("commits_per_day.png");
+            File cpdPerContributorFile = new File("cpd_per_contributor.png");
             
+            // Pie chart needs to be small in PDF too
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(impactBarChart, barFile);
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calendarFile);
             saveNodeSnapshot(contributorActivityChart, contribFile);
             saveNodeSnapshot(commitsPerDayChart, cpdFile);
+            saveNodeSnapshot(cpdPerContributorChart, cpdPerContributorFile);
 
             String aiReport = null;
             if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
                 aiReport = llmResponseArea.getText();
             }
 
+            Map<String, String> mdSections = readMdSections();
             String coverHtml = null;
             String coverBasePath = null;
             if (coverPagePathField.getText() != null && !coverPagePathField.getText().isEmpty()) {
@@ -1369,9 +1487,10 @@ public class MainApp extends Application {
             }
 
             exportService.exportToPdf(currentStats, currentMeaningfulAnalysis, file.getAbsolutePath(), 
-                                      pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
-                                      calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), aiReport, 
-                                      readMdSections(), coverHtml, coverBasePath, tableLimitSpinner.getValue());
+                pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
+                calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(),
+                cpdPerContributorFile.getAbsolutePath(),
+                aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue());
             
             // Cleanup temp files
             pieFile.delete();
@@ -1380,6 +1499,7 @@ public class MainApp extends Application {
             calendarFile.delete();
             contribFile.delete();
             cpdFile.delete();
+            cpdPerContributorFile.delete();
 
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {
