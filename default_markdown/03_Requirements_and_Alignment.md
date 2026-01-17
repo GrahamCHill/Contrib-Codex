@@ -8,7 +8,7 @@ INSTRUCTIONS FOR AI (STRICT):
 - Use ONLY names, file paths, directories, commit refs, metrics, and feature statements explicitly present in METRICS or Features.
 - Do NOT invent requirements, capabilities, modules, or features.
 - If a requirement/capability is not present in Features or cannot be supported by METRICS, state:
-  **"Not provided in Features"** or **"Not evidenced in METRICS"**.
+  **"Not provided in Features"** or **"Not Implemented / No Evidence Detected"**.
 - Do NOT assume implementation just because a feature is mentioned in Features.
     - Features describes intent/capability.
     - METRICS provides evidence of implementation activity.
@@ -22,15 +22,17 @@ Provide:
 - 3–7 bullets summarizing what is strongly aligned, partially aligned, and missing
 
 ## 2) Feature-to-Evidence Mapping Table
-Create a table mapping each major feature area from **Features** to evidence in **METRICS**:
+Create a table mapping EVERY feature area from **Features** to evidence in **METRICS**.
+**CRITICAL: You MUST include ALL features listed in the "Features" input in this table. If a feature is not present in METRICS, you MUST still include it and state "Not Implemented / No Evidence Detected".**
 
 | Feature / Requirement (from Features) | Evidence in Repo (from METRICS) | Contributors Involved | Alignment Status |
 |---|---|---|---|
-| ... | directories/files touched, commit refs if provided | contributor names | Fully Met / Partially Met / Not Evidenced |
+| ... | directories/files touched, commit refs if provided | contributor names | Fully Met / Partially Met / Not Implemented / No Evidence Detected |
 
 Rules:
 - Evidence MUST reference file paths/directories from METRICS (and commit refs if present).
-- If no evidence exists in METRICS, mark as **Not Evidenced**.
+- If no evidence exists in METRICS, mark as **Not Implemented / No Evidence Detected** and leave "Evidence in Repo" and "Contributors Involved" as "N/A" or "None".
+- DO NOT skip any features from the provided Features input, regardless of whether evidence exists.
 
 ## 3) Alignment by Architecture Area
 Using directory patterns from METRICS, describe alignment across:

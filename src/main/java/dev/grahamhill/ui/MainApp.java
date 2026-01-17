@@ -1436,7 +1436,7 @@ public class MainApp extends Application {
                     "  - Contributor-level score: In this AI-assisted mode, the score is qualitatively assigned by the LLM (0-100) based on commit descriptive quality, iterative patterns, and functional impact.\n" +
                     "  - Filters out boilerplate, generated artifacts, and documentation noise.");
 
-                java.nio.file.Files.writeString(new File(folder, "03_Contributor_Deep_Dive.md").toPath(),
+                java.nio.file.Files.writeString(new File(folder, "04_Contributor_Deep_Dive.md").toPath(),
                     "# Contributor Impact Analysis\n" +
                     "A detailed evaluation of individual contributions based on commit frequency, impact volume, and code quality.\n\n" +
                     "INSTRUCTIONS FOR AI:\n" +
@@ -1449,7 +1449,7 @@ public class MainApp extends Application {
                     "- MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section.\n" +
                     "- Identify their 'Most Valuable Contributor' potential based on iterative development rather than just bulk LOC.");
 
-                java.nio.file.Files.writeString(new File(folder, "04_Risk_and_Quality_Assessment.md").toPath(),
+                java.nio.file.Files.writeString(new File(folder, "05_Risk_and_Quality_Assessment.md").toPath(),
                     "# Risk & Quality Assessment\n" +
                     "Evaluation of project stability and potential technical debt based on commit patterns.\n\n" +
                     "INSTRUCTIONS FOR AI:\n" +
@@ -1461,7 +1461,7 @@ public class MainApp extends Application {
                     "- Identify patterns of 'Bulk Commits' vs 'Iterative Refinement'.\n" +
                     "- Highlighting areas where test coverage is lacking relative to feature complexity.");
 
-                java.nio.file.Files.writeString(new File(folder, "05_Conclusion.md").toPath(),
+                java.nio.file.Files.writeString(new File(folder, "06_Conclusion.md").toPath(),
                     "# Conclusion & Recommendations\n" +
                     "Final synthesis of findings and strategic recommendations for the project.\n\n" +
                     "INSTRUCTIONS FOR AI:\n" +
