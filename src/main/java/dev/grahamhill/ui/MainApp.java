@@ -49,6 +49,10 @@ public class MainApp extends Application {
 
     private List<ContributorStats> currentStats;
 
+    private TextArea systemPromptArea;
+    private TextArea userPromptArea;
+    private TextArea llmResponseArea;
+
     @Override
     public void start(Stage primaryStage) {
         try {
@@ -94,9 +98,13 @@ public class MainApp extends Application {
         topBox.getChildren().addAll(repoBox, settingsBox, aliasBox);
         root.setTop(topBox);
 
+        // SplitPane for Main Content and LLM Panel
+        SplitPane mainSplit = new SplitPane();
+        mainSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
+
         // Center: Stats Table and Charts
         VBox centerBox = new VBox(10);
-        centerBox.setPadding(new Insets(0, 10, 0, 0));
+        centerBox.setPadding(new Insets(10, 10, 10, 10));
         
         statsTable = new TableView<>();
         TableColumn<ContributorStats, String> nameCol = new TableColumn<>("Name");
@@ -107,38 +115,132 @@ public class MainApp extends Application {
         addedCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().linesAdded()).asObject());
         TableColumn<ContributorStats, Integer> deletedCol = new TableColumn<>("Deleted");
         deletedCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().linesDeleted()).asObject());
+        
+        TableColumn<ContributorStats, Integer> fNewCol = new TableColumn<>("New Files");
+        fNewCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().filesAdded()).asObject());
+        TableColumn<ContributorStats, Integer> fEditCol = new TableColumn<>("Edited Files");
+        fEditCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().filesEdited()).asObject());
+        TableColumn<ContributorStats, Integer> fDelCol = new TableColumn<>("Deleted Files");
+        fDelCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().filesDeletedCount()).asObject());
 
-        statsTable.getColumns().addAll(nameCol, commitsCol, addedCol, deletedCol);
-        statsTable.setPrefHeight(200);
+        TableColumn<ContributorStats, String> languagesCol = new TableColumn<>("Languages");
+        languagesCol.setCellValueFactory(data -> new SimpleStringProperty(formatLanguages(data.getValue().languageBreakdown())));
+        TableColumn<ContributorStats, String> aiCol = new TableColumn<>("AI Prob");
+        aiCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f%%", data.getValue().averageAiProbability() * 100)));
+
+        statsTable.getColumns().addAll(nameCol, commitsCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol);
+        setupStatsTableContextMenu();
 
         HBox chartsBox = new HBox(10);
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
-        commitPieChart.setPrefSize(400, 300);
+        commitPieChart.setMinWidth(300);
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         impactBarChart = new BarChart<>(xAxis, yAxis);
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
-        impactBarChart.setPrefSize(400, 300);
+        impactBarChart.setMinWidth(300);
 
         chartsBox.getChildren().addAll(commitPieChart, impactBarChart);
+        HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
 
         centerBox.getChildren().addAll(new Label("Top 10 Contributors:"), statsTable, chartsBox);
-        root.setCenter(centerBox);
+        VBox.setVgrow(statsTable, javafx.scene.layout.Priority.ALWAYS);
 
-        // Right: Git Tree and Initial Commit
+        // Right side: Commits
         VBox rightBox = new VBox(10);
-        rightBox.setPadding(new Insets(0, 0, 0, 10));
+        rightBox.setPadding(new Insets(10, 10, 10, 10));
         commitList = new ListView<>();
-        commitList.setPrefWidth(300);
         initialCommitLabel = new Label("Initial Commit: N/A");
         rightBox.getChildren().addAll(new Label("Recent Commits:"), commitList, initialCommitLabel);
-        root.setRight(rightBox);
+        VBox.setVgrow(commitList, javafx.scene.layout.Priority.ALWAYS);
 
-        Scene scene = new Scene(root, 900, 600);
+        SplitPane horizontalSplit = new SplitPane(centerBox, rightBox);
+        horizontalSplit.setDividerPositions(0.7);
+
+        // LLM Panel
+        VBox llmPanel = new VBox(10);
+        llmPanel.setPadding(new Insets(10));
+        systemPromptArea = new TextArea("You are a senior software engineer. Analyze the following git metrics and provide a detailed report on contributor activity, code quality, and any suspicious AI-generated patterns.");
+        systemPromptArea.setPrefHeight(60);
+        userPromptArea = new TextArea("Please summarize the performance of the team and identify the key contributors.");
+        userPromptArea.setPrefHeight(60);
+        llmResponseArea = new TextArea();
+        llmResponseArea.setEditable(false);
+        llmResponseArea.setPromptText("LLM Report will appear here...");
+        Button generateLlmReportBtn = new Button("Generate LLM Report");
+        generateLlmReportBtn.setOnAction(e -> generateLlmReport());
+
+        llmPanel.getChildren().addAll(
+            new Label("System Prompt:"), systemPromptArea,
+            new Label("User Prompt:"), userPromptArea,
+            generateLlmReportBtn,
+            new Label("LLM Response:"), llmResponseArea
+        );
+        VBox.setVgrow(llmResponseArea, javafx.scene.layout.Priority.ALWAYS);
+
+        mainSplit.getItems().addAll(horizontalSplit, llmPanel);
+        mainSplit.setDividerPositions(0.6);
+
+        root.setCenter(mainSplit);
+
+        Scene scene = new Scene(root, 1100, 800);
         primaryStage.setScene(scene);
         primaryStage.show();
+    }
+
+    private void setupStatsTableContextMenu() {
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem mergeItem = new MenuItem("Merge with another user...");
+        mergeItem.setOnAction(e -> {
+            ContributorStats selected = statsTable.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                showMergeDialog(selected);
+            }
+        });
+        contextMenu.getItems().add(mergeItem);
+        statsTable.setContextMenu(contextMenu);
+    }
+
+    private void showMergeDialog(ContributorStats selected) {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Merge User");
+        dialog.setHeaderText("Merge " + selected.email() + " into a combined name");
+        dialog.setContentText("Enter the name to merge into:");
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(name -> {
+            String currentAliases = aliasesArea.getText();
+            String newAlias = selected.email() + "=" + name;
+            if (currentAliases.isEmpty()) {
+                aliasesArea.setText(newAlias);
+            } else {
+                aliasesArea.setText(currentAliases + "\n" + newAlias);
+            }
+            analyzeRepo(); // Re-analyze with new alias
+        });
+    }
+
+    private void generateLlmReport() {
+        if (currentStats == null || currentStats.isEmpty()) {
+            showAlert("Error", "No metrics to analyze. Run analysis first.");
+            return;
+        }
+
+        StringBuilder metricsText = new StringBuilder("Git Metrics Data:\n");
+        for (ContributorStats s : currentStats) {
+            metricsText.append(String.format("- %s (%s): %d commits, +%d/-%d lines, %d new/%d edited/%d deleted files, AI Prob: %.1f%%\n",
+                s.name(), s.email(), s.commitCount(), s.linesAdded(), s.linesDeleted(), s.filesAdded(), s.filesEdited(), s.filesDeletedCount(), s.averageAiProbability() * 100));
+        }
+
+        llmResponseArea.setText("Generating report (placeholder)...\n\n" +
+            "In a real application, this would send the following to an LLM:\n\n" +
+            "SYSTEM: " + systemPromptArea.getText() + "\n\n" +
+            "USER: " + userPromptArea.getText() + "\n\n" +
+            "DATA: " + metricsText.toString());
+        
+        // You could use an HTTP client here to call OpenAI/Anthropic/etc.
     }
 
     private void browseRepo(Stage stage) {
@@ -183,11 +285,14 @@ public class MainApp extends Application {
                 Platform.runLater(() -> {
                     statsTable.setItems(FXCollections.observableArrayList(currentStats));
                     updateCharts(currentStats);
-                    commitList.setItems(FXCollections.observableArrayList(
-                            recentCommits.stream().map(c -> "[" + c.id() + "] " + c.authorName() + ": " + c.message()).toList()
-                    ));
+                    commitList.getItems().clear();
+                    for (CommitInfo ci : recentCommits) {
+                        String langStr = formatLanguages(ci.languageBreakdown());
+                        String aiStr = String.format("[AI: %.0f%%]", ci.aiProbability() * 100);
+                        commitList.getItems().add(String.format("[%s] %s: %s (%s) %s", ci.id(), ci.authorName(), ci.message(), langStr, aiStr));
+                    }
                     if (initial != null) {
-                        initialCommitLabel.setText("Initial Commit: [" + initial.id() + "] by " + initial.authorName());
+                        initialCommitLabel.setText("Initial: [" + initial.id() + "] by " + initial.authorName() + " (" + formatLanguages(initial.languageBreakdown()) + ") " + String.format("[AI: %.0f%%]", initial.aiProbability() * 100));
                     }
                 });
             } catch (Exception e) {
@@ -253,6 +358,15 @@ public class MainApp extends Application {
     private void saveNodeSnapshot(javafx.scene.Node node, File file) throws Exception {
         WritableImage image = node.snapshot(new SnapshotParameters(), null);
         ImageIO.write(SwingFXUtils.fromFXImage(image, null), "png", file);
+    }
+
+    private String formatLanguages(Map<String, Integer> languages) {
+        if (languages == null || languages.isEmpty()) return "N/A";
+        return languages.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(3)
+                .map(e -> e.getKey() + "(" + e.getValue() + ")")
+                .collect(Collectors.joining(", "));
     }
 
     private void showAlert(String title, String content) {

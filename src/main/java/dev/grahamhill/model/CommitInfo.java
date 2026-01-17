@@ -9,5 +9,8 @@ public record CommitInfo(
     String message,
     LocalDateTime timestamp,
     Map<String, Integer> languageBreakdown,
-    double aiProbability
+    double aiProbability,
+    int filesAdded,
+    int filesEdited,
+    int filesDeleted
 ) {}

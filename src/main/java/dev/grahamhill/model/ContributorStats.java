@@ -8,7 +8,10 @@ public record ContributorStats(
     int linesAdded,
     int linesDeleted,
     Map<String, Integer> languageBreakdown,
-    double averageAiProbability
+    double averageAiProbability,
+    int filesAdded,
+    int filesEdited,
+    int filesDeletedCount
 ) {
     public int getTotalImpact() {
         return linesAdded + linesDeleted;

@@ -104,6 +104,14 @@ public class GitService {
                     }
                 }
 
+                // Metric for new, edited, other (deleted)
+                switch (entry.getChangeType()) {
+                    case ADD -> builder.filesAdded++;
+                    case MODIFY -> builder.filesEdited++;
+                    case DELETE -> builder.filesDeleted++;
+                    default -> {} // RENAME, COPY etc as other/edited for now
+                }
+
                 for (Edit edit : df.toFileHeader(entry).toEditList()) {
                     int added = edit.getEndB() - edit.getBeginB();
                     int deleted = edit.getEndA() - edit.getBeginA();
@@ -144,12 +152,19 @@ public class GitService {
     public List<CommitInfo> getLastCommits(File repoPath, int limit) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
-            Iterable<RevCommit> commits = git.log().setMaxCount(limit).call();
+            var logCommand = git.log();
+            if (limit > 0) {
+                logCommand.setMaxCount(limit);
+            }
+            Iterable<RevCommit> commits = logCommand.call();
             List<CommitInfo> result = new ArrayList<>();
             for (RevCommit commit : commits) {
                 Map<String, Integer> languages = new HashMap<>();
                 int linesAdded = 0;
                 int linesDeleted = 0;
+                int fAdded = 0;
+                int fEdited = 0;
+                int fDeleted = 0;
                 
                 RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
                 try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
@@ -163,6 +178,14 @@ public class GitService {
                                 languages.merge(path.substring(lastDot + 1).toLowerCase(), 1, Integer::sum);
                             }
                         }
+
+                        switch (entry.getChangeType()) {
+                            case ADD -> fAdded++;
+                            case MODIFY -> fEdited++;
+                            case DELETE -> fDeleted++;
+                            default -> {}
+                        }
+
                         for (Edit edit : df.toFileHeader(entry).toEditList()) {
                             linesAdded += edit.getEndB() - edit.getBeginB();
                             linesDeleted += edit.getEndA() - edit.getBeginA();
@@ -178,7 +201,10 @@ public class GitService {
                         commit.getShortMessage(),
                         LocalDateTime.ofInstant(commit.getAuthorIdent().getWhenAsInstant(), ZoneId.systemDefault()),
                         languages,
-                        aiProb
+                        aiProb,
+                        fAdded,
+                        fEdited,
+                        fDeleted
                 ));
             }
             return result;
@@ -197,6 +223,9 @@ public class GitService {
                 Map<String, Integer> languages = new HashMap<>();
                 int linesAdded = 0;
                 int linesDeleted = 0;
+                int fAdded = 0;
+                int fEdited = 0;
+                int fDeleted = 0;
                 try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
                     df.setRepository(repository);
                     List<DiffEntry> diffs = df.scan(null, initial.getTree());
@@ -208,6 +237,14 @@ public class GitService {
                                 languages.merge(path.substring(lastDot + 1).toLowerCase(), 1, Integer::sum);
                             }
                         }
+
+                        switch (entry.getChangeType()) {
+                            case ADD -> fAdded++;
+                            case MODIFY -> fEdited++;
+                            case DELETE -> fDeleted++;
+                            default -> {}
+                        }
+
                         for (Edit edit : df.toFileHeader(entry).toEditList()) {
                             linesAdded += edit.getEndB() - edit.getBeginB();
                             linesDeleted += edit.getEndA() - edit.getBeginA();
@@ -222,7 +259,10 @@ public class GitService {
                         initial.getShortMessage(),
                         LocalDateTime.ofInstant(initial.getAuthorIdent().getWhenAsInstant(), ZoneId.systemDefault()),
                         languages,
-                        aiProb
+                        aiProb,
+                        fAdded,
+                        fEdited,
+                        fDeleted
                 );
             }
             return null;
@@ -237,6 +277,9 @@ public class GitService {
         int linesDeleted;
         Map<String, Integer> languageBreakdown = new HashMap<>();
         double totalAiProbability;
+        int filesAdded;
+        int filesEdited;
+        int filesDeleted;
 
         StatsBuilder(String name, String email) {
             this.name = name;
@@ -244,7 +287,7 @@ public class GitService {
         }
 
         ContributorStats build() {
-            return new ContributorStats(name, email, commitCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / commitCount);
+            return new ContributorStats(name, email, commitCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / commitCount, filesAdded, filesEdited, filesDeleted);
         }
     }
 }
