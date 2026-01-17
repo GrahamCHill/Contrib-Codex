@@ -296,7 +296,11 @@ public class GitService {
             Map<String, StatsBuilder> statsMap = new HashMap<>();
 
             Iterable<RevCommit> commits = git.log().all().call();
+            Set<String> processedCommits = new HashSet<>();
             for (RevCommit commit : commits) {
+                if (!processedCommits.add(commit.getName())) {
+                    continue;
+                }
                 String email = commit.getAuthorIdent().getEmailAddress();
                 String name = commit.getAuthorIdent().getName();
                 
@@ -549,7 +553,9 @@ public class GitService {
                 String branchName = repository.shortenRemoteBranchName(branch.getName());
                 Iterable<RevCommit> branchCommits = git.log().add(branch.getObjectId()).call();
                 for (RevCommit branchCommit : branchCommits) {
-                    commitToBranch.merge(branchCommit.getId(), branchName, (old, val) -> old.contains(val) ? old : old + ", " + val);
+                    if (branchCommit != null && branchCommit.getId() != null && branchName != null) {
+                        commitToBranch.merge(branchCommit.getId(), branchName, (old, val) -> old.contains(val) ? old : old + ", " + val);
+                    }
                 }
             }
 
