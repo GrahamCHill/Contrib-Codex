@@ -35,6 +35,7 @@ echo "Detected platform: ${PLATFORM}"
 
 if [ "${PLATFORM}" == "macos" ]; then
     echo "Creating macOS .app..."
+    rm -rf dist/ContribCodex.app
     jpackage \
       --type app-image \
       --input target \
@@ -43,7 +44,7 @@ if [ "${PLATFORM}" == "macos" ]; then
       --main-jar "contrib_metric-${APP_VERSION}.jar" \
       --main-class ${MAIN_CLASS} \
       --module-path "${LIBS_DIR}" \
-      --add-modules javafx.controls,javafx.fxml,javafx.swing \
+      --add-modules javafx.controls,javafx.fxml,javafx.swing,java.sql,java.naming,jdk.charsets \
       --vendor "Graham Hill" \
       --description "Contrib Codex Git Analytics" \
       --app-version "1.0.0" \
@@ -53,6 +54,8 @@ if [ "${PLATFORM}" == "macos" ]; then
     
 elif [ "${PLATFORM}" == "windows" ]; then
     echo "Creating Windows .exe..."
+    # jpackage usually handles overwriting for exe/msi better, but let's be safe
+    rm -rf dist/ContribCodex
     jpackage \
       --type exe \
       --input target \
@@ -61,7 +64,7 @@ elif [ "${PLATFORM}" == "windows" ]; then
       --main-jar "contrib_metric-${APP_VERSION}.jar" \
       --main-class ${MAIN_CLASS} \
       --module-path "${LIBS_DIR}" \
-      --add-modules javafx.controls,javafx.fxml,javafx.swing \
+      --add-modules javafx.controls,javafx.fxml,javafx.swing,java.sql,java.naming,jdk.charsets \
       --vendor "Graham Hill" \
       --description "Contrib Codex Git Analytics" \
       --app-version "1.0.0" \

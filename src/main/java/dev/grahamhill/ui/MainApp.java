@@ -103,6 +103,12 @@ public class MainApp extends Application {
 
         try {
             databaseService = new DatabaseService();
+        } catch (Exception e) {
+            System.err.println("Could not initialize DatabaseService: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        try {
             encryptionService = new EncryptionService();
             loadSettings();
         } catch (Exception e) {
@@ -1470,7 +1476,7 @@ public class MainApp extends Application {
                     "- Identify patterns of 'Bulk Commits' vs 'Iterative Refinement'.\n" +
                     "- Highlighting areas where test coverage is lacking relative to feature complexity.");
 
-                java.nio.file.Files.writeString(new File(folder, "06_Conclusion.md").toPath(),
+                java.nio.file.Files.writeString(new File(folder, "10_Conclusion.md").toPath(),
                     "# Conclusion & Recommendations\n" +
                     "Final synthesis of findings and strategic recommendations for the project.\n\n" +
                     "INSTRUCTIONS FOR AI:\n" +
@@ -1660,7 +1666,9 @@ public class MainApp extends Application {
                 List<CommitInfo> recentCommits = gitService.getLastCommits(repoDir, commitLimitSpinner.getValue(), currentAliases);
                 CommitInfo initial = gitService.getInitialCommit(repoDir, currentAliases);
 
-                databaseService.saveMetrics(currentStats);
+                if (databaseService != null) {
+                    databaseService.saveMetrics(currentStats);
+                }
 
                 Platform.runLater(() -> {
                     List<ContributorStats> tableStats = groupOthers(currentStats, tableLimitSpinner.getValue());
@@ -2073,7 +2081,16 @@ public class MainApp extends Application {
         File file = chooser.showSaveDialog(stage);
         if (file != null) {
             if (aiReviewCheckBox.isSelected()) {
-                generateLlmReport(() -> performPdfExport(file));
+                generateLlmReport(() -> {
+                    if (databaseService != null) {
+                        try {
+                            databaseService.saveMetrics(currentStats);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    performPdfExport(file);
+                });
             } else {
                 performPdfExport(file);
             }
@@ -2132,10 +2149,85 @@ public class MainApp extends Application {
                 }
             }
 
+            Map<String, String> metadata = new LinkedHashMap<>();
+            File repoDir = new File(repoPathField.getText());
+            try (org.eclipse.jgit.api.Git git = org.eclipse.jgit.api.Git.open(repoDir)) {
+                org.eclipse.jgit.lib.ObjectId head = git.getRepository().resolve("HEAD");
+                String commitHash = head != null ? head.getName().substring(0, 7) : "Unknown";
+                
+                String latestMessage = "";
+                if (head != null) {
+                    try (org.eclipse.jgit.revwalk.RevWalk walk = new org.eclipse.jgit.revwalk.RevWalk(git.getRepository())) {
+                        org.eclipse.jgit.revwalk.RevCommit commit = walk.parseCommit(head);
+                        latestMessage = commit.getShortMessage();
+                    }
+                }
+
+                // Get tags for the current commit
+                String tags = "None";
+                try {
+                    List<org.eclipse.jgit.lib.Ref> tagRefs = git.tagList().call();
+                    List<String> commitTags = new ArrayList<>();
+                    for (org.eclipse.jgit.lib.Ref ref : tagRefs) {
+                        org.eclipse.jgit.lib.ObjectId peeled = git.getRepository().getRefDatabase().peel(ref).getPeeledObjectId();
+                        if (peeled == null) peeled = ref.getObjectId();
+                        if (peeled.equals(head)) {
+                            commitTags.add(ref.getName().replace("refs/tags/", ""));
+                        }
+                    }
+                    if (!commitTags.isEmpty()) {
+                        tags = String.join(", ", commitTags);
+                    }
+                } catch (Exception e) {
+                    // Ignore tag errors
+                }
+                
+                String gitInfo = commitHash;
+                if (!tags.equals("None")) {
+                    gitInfo += " (" + tags + ")";
+                }
+                if (!latestMessage.isEmpty()) {
+                    gitInfo += " - " + latestMessage;
+                }
+                metadata.put("Git Info", gitInfo);
+                
+                List<org.eclipse.jgit.lib.Ref> branches = git.branchList().setListMode(org.eclipse.jgit.api.ListBranchCommand.ListMode.ALL).call();
+                String branchList = branches.stream()
+                        .map(org.eclipse.jgit.lib.Ref::getName)
+                        .map(git.getRepository()::shortenRemoteBranchName)
+                        .filter(name -> !name.equals("HEAD"))
+                        .distinct()
+                        .collect(Collectors.joining(", "));
+                metadata.put("Repo list + branches", repoDir.getName() + " [" + branchList + "]");
+            } catch (Exception e) {
+                metadata.put("Git Info", "Error retrieving git metadata: " + e.getMessage());
+            }
+
+            if (currentMeaningfulAnalysis != null) {
+                metadata.put("Time range", currentMeaningfulAnalysis.dateRange());
+            }
+            
+            String appVersion = envConfig.getOrDefault("APP_VERSION", "1.0.0");
+            String configVersion = envConfig.getOrDefault("APP_CONFIG_VERSION", "1.0");
+            metadata.put("Generator version", "Tool: v" + appVersion + " / Config: v" + configVersion);
+            
+            java.time.ZonedDateTime now = java.time.ZonedDateTime.now();
+            metadata.put("Generated timestamp (UTC)", now.withZoneSameInstant(java.time.ZoneOffset.UTC).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'")));
+            metadata.put("Generated timestamp (Local)", now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss XXX")));
+            
+            String chartConfig = envConfig.getOrDefault("APP_CHART_CONFIG", "Scaling: 3.0x (UI), 90% (PDF) | Thresholds: 1500+ VERY HIGH, 1000-1500 HIGH, 750-1000 MED-HIGH, 500-750 MED, 250-500 LOW-MED, <250 LOW");
+            metadata.put("Chart config / thresholds", chartConfig);
+            
+            if (envConfig.containsKey("APP_DESCRIPTION")) {
+                metadata.put("Description", envConfig.get("APP_DESCRIPTION"));
+            }
+            
+            metadata.put("Parameters", "Commit Limit: " + commitLimitSpinner.getValue() + ", Table Limit: " + tableLimitSpinner.getValue());
+
             exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
                 pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(),
-                aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue());
+                aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata);
             
             // Cleanup temp files
             pieFile.delete();
@@ -2187,6 +2279,14 @@ public class MainApp extends Application {
             }
             return s;
         }).collect(Collectors.toList());
+
+        if (databaseService != null) {
+            try {
+                databaseService.saveMetrics(currentStats);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
 
         Platform.runLater(() -> {
             List<ContributorStats> tableStats = groupOthers(currentStats, tableLimitSpinner.getValue());

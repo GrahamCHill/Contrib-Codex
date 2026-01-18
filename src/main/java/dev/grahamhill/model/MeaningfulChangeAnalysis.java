@@ -5,6 +5,7 @@ import java.util.Map;
 
 public record MeaningfulChangeAnalysis(
     String commitRange,
+    String dateRange,
     int totalInsertions,
     int totalDeletions,
     int whitespaceChurn, // insertions + deletions that are just whitespace

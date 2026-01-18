@@ -17,7 +17,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -72,8 +72,59 @@ public class ExportService {
         }
         event.setCoverPage(false);
 
+        // 00. Document Control
+        document.newPage();
+        document.add(new Paragraph("00. Document Control", headerFont));
+        Anchor docControlAnchor = new Anchor(" ");
+        docControlAnchor.setName("doc_control");
+        document.add(docControlAnchor);
+        document.add(new Paragraph(" ", normalFont));
+
+        document.add(new Paragraph("00.1 Version History", sectionFont));
+        PdfPTable versionTable = new PdfPTable(4);
+        versionTable.setWidthPercentage(100);
+        versionTable.setSpacingBefore(5f);
+        versionTable.setSpacingAfter(15f);
+        versionTable.addCell("Version");
+        versionTable.addCell("Date");
+        versionTable.addCell("Author");
+        versionTable.addCell("Description");
+        versionTable.addCell("1.0");
+        versionTable.addCell(java.time.LocalDate.now().toString());
+        versionTable.addCell(System.getProperty("user.name"));
+        versionTable.addCell("Initial Report Generation");
+        document.add(versionTable);
+
+        document.add(new Paragraph("00.2 Metrics Tooling & Generation Method", sectionFont));
+        Paragraph toolingPara = new Paragraph("This report was generated using Contrib Codex, a Git forensics and analytics tool. " +
+                "Metrics are extracted directly from the Git repository using JGit. " +
+                "Qualitative analysis and engineering audits are performed by Large Language Models (LLM) " +
+                "based on the extracted quantitative data.", normalFont);
+        toolingPara.setSpacingBefore(5f);
+        toolingPara.setSpacingAfter(15f);
+        document.add(toolingPara);
+
+        document.add(new Paragraph("00.3 Generation Metadata", sectionFont));
+        PdfPTable metaTable = new PdfPTable(2);
+        metaTable.setWidthPercentage(100);
+        metaTable.setSpacingBefore(5f);
+        metaTable.setSpacingAfter(15f);
+        metaTable.setWidths(new float[]{1, 2});
+
+        if (metadata != null) {
+            metadata.forEach((k, v) -> {
+                metaTable.addCell(new Phrase(k, new Font(Font.HELVETICA, 10, Font.BOLD)));
+                metaTable.addCell(new Phrase(v, normalFont));
+            });
+        }
+        document.add(metaTable);
+        document.newPage();
+
         // Index Page
         document.add(new Paragraph("Report Index", headerFont));
+        Anchor reportIndexAnchor = new Anchor(" ");
+        reportIndexAnchor.setName("report_index");
+        document.add(reportIndexAnchor);
         document.add(new Paragraph(" ", normalFont));
         
         PdfPTable indexTable = new PdfPTable(3);
@@ -91,9 +142,11 @@ public class ExportService {
         h3.setBackgroundColor(java.awt.Color.LIGHT_GRAY);
         indexTable.addCell(h3);
 
-        addIndexRow(indexTable, "Introduction & Purpose", "intro", 2, normalFont);
+        addIndexRow(indexTable, "Document Control", "doc_control", 2, normalFont);
+        addIndexRow(indexTable, "Report Index", "report_index", 3, normalFont);
+        addIndexRow(indexTable, "Introduction & Purpose", "intro", 4, normalFont);
         
-        int currentPage = 3; // Estimated start page after index
+        int currentPage = 5; // Estimated start page after index
 
         if (mdSections != null) {
             for (String title : mdSections.keySet()) {
@@ -128,7 +181,7 @@ public class ExportService {
         addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage++, normalFont);
         
         if (allCommits != null && !allCommits.isEmpty()) {
-            addIndexRow(indexTable, "Complete Commit History", "commits", currentPage, normalFont);
+            addIndexRow(indexTable, "Appendix A: Complete Commit History", "commits", currentPage, normalFont);
         }
         
         document.add(indexTable);
@@ -243,6 +296,24 @@ public class ExportService {
                     h5Header.setSpacingBefore(6f);
                     h5Header.setSpacingAfter(2f);
                     document.add(h5Header);
+                } else if (line.startsWith("$\\boxed{") && line.endsWith("}$")) {
+                    if (currentText.length() > 0) {
+                        Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
+                        p.setSpacingAfter(5f);
+                        document.add(p);
+                        currentText = new StringBuilder();
+                    }
+                    String boxedText = line.substring(9, line.length() - 2).trim();
+                    PdfPTable boxedTable = new PdfPTable(1);
+                    boxedTable.setWidthPercentage(100);
+                    boxedTable.setSpacingBefore(10f);
+                    boxedTable.setSpacingAfter(10f);
+                    PdfPCell cell = new PdfPCell(processInlineFormatting(boxedText, new Font(Font.HELVETICA, 11, Font.BOLD)));
+                    cell.setPadding(10f);
+                    cell.setBorderWidth(1.5f);
+                    cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                    boxedTable.addCell(cell);
+                    document.add(boxedTable);
                 } else if (line.startsWith("**") && line.endsWith("**") && line.length() > 4) {
                     if (currentText.length() > 0) {
                         Paragraph p = processInlineFormatting(currentText.toString(), normalFont);
@@ -527,10 +598,15 @@ public class ExportService {
         if (allCommits != null && !allCommits.isEmpty()) {
             document.setPageSize(PageSize.A4.rotate());
             document.newPage();
+            
+            Paragraph appendixTitle = new Paragraph("Appendix A", headerFont);
+            appendixTitle.setSpacingBefore(15f);
+            document.add(appendixTitle);
+            
             Paragraph commitTitle = new Paragraph("Complete Commit History:", sectionFont);
             Anchor commitAnchor = new Anchor(commitTitle);
             commitAnchor.setName("commits");
-            commitTitle.setSpacingBefore(15f);
+            commitTitle.setSpacingBefore(5f);
             document.add(commitAnchor);
             document.add(spacing);
 

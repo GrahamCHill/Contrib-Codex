@@ -113,6 +113,12 @@ public class GitService {
             String range = oldest.getName().substring(0, 7) + ".." + newest.getName().substring(0, 7);
             if (commits.size() == 1) range = newest.getName().substring(0, 7);
 
+            var formatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yy");
+            String startDate = java.time.LocalDateTime.ofInstant(java.time.Instant.ofEpochSecond(oldest.getCommitTime()), java.time.ZoneId.systemDefault()).format(formatter);
+            String endDate = java.time.LocalDateTime.ofInstant(java.time.Instant.ofEpochSecond(newest.getCommitTime()), java.time.ZoneId.systemDefault()).format(formatter);
+            String dateRange = startDate + " - " + endDate;
+            if (startDate.equals(endDate)) dateRange = startDate;
+
             List<FileChange> allFileChanges = new ArrayList<>();
             int totalIns = 0;
             int totalDel = 0;
@@ -181,7 +187,7 @@ public class GitService {
             String summary = generateSummary(range, totalIns, totalDel, categoryMap, warnings);
 
             return new MeaningfulChangeAnalysis(
-                range, totalIns, totalDel, totalWsIns + totalWsDel,
+                range, dateRange, totalIns, totalDel, totalWsIns + totalWsDel,
                 top20, categoryMap, warnings, summary, score
             );
         }
