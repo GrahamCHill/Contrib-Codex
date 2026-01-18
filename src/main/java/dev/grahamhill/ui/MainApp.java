@@ -34,12 +34,20 @@ import java.io.File;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import dev.grahamhill.service.*;
+import javafx.scene.Node;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.chart.*;
+
 public class MainApp extends Application {
 
     private final GitService gitService = new GitService();
     private DatabaseService databaseService;
     private final ExportService exportService = new ExportService();
     private EncryptionService encryptionService;
+    private final LlmService llmService = new LlmService();
+    private final ConfigManager configManager = new ConfigManager();
+    private final ChartManager chartManager = new ChartManager();
 
     private TableView<ContributorStats> statsTable;
     private ListView<String> commitList;
@@ -61,8 +69,8 @@ public class MainApp extends Application {
     private StackedBarChart<String, Number> impactBarChart;
     private LineChart<String, Number> activityLineChart;
     private LineChart<String, Number> calendarActivityChart;
-    private LineChart<String, Number> contributorActivityChart;
-    private LineChart<String, Number> commitsPerDayChart;
+    private BarChart<String, Number> contributorActivityChart;
+    private BarChart<String, Number> commitsPerDayChart;
     private LineChart<String, Number> cpdPerContributorChart;
 
     private List<ContributorStats> currentStats;
@@ -387,7 +395,7 @@ public class MainApp extends Application {
 
         CategoryAxis caxAxis = new CategoryAxis();
         NumberAxis cayAxis = new NumberAxis();
-        contributorActivityChart = new LineChart<>(caxAxis, cayAxis);
+        contributorActivityChart = new BarChart<>(caxAxis, cayAxis);
         contributorActivityChart.setTitle("Daily Activity per Contributor");
         contributorActivityChart.setMinWidth(1770);
         contributorActivityChart.setPrefWidth(2336);
@@ -403,7 +411,7 @@ public class MainApp extends Application {
 
         CategoryAxis cpdXAxis = new CategoryAxis();
         NumberAxis cpdYAxis = new NumberAxis();
-        commitsPerDayChart = new LineChart<>(cpdXAxis, cpdYAxis);
+        commitsPerDayChart = new BarChart<>(cpdXAxis, cpdYAxis);
         commitsPerDayChart.setTitle("Commits per Day");
         commitsPerDayChart.setMinWidth(1770);
         commitsPerDayChart.setPrefWidth(2336);
@@ -493,14 +501,21 @@ public class MainApp extends Application {
                 "   - If the provided METRICS labels contradict the numbers, explicitly flag it as: \"Metrics inconsistency detected\" and correct the ranking using the numeric values.\n" +
                 "3) Do not repeat the same points across sections. Prefer dense, high-signal writing.\n" +
                 "4) HARSHNESS ON LOW-VALUE WORK: In sections discussing contributor responsibility and value added, be direct and critical. If a contributor's work is primarily frontend styling or cosmetic, state that clearly as low functional impact.\n" +
-                "5) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
+                "5) MEANINGFUL SCORE PENALTY: Heavily punish (lower) the 'Meaningful Score' if a contributor pushes build or auto-generated files (e.g., dist/, build/, *.map, minified, lockfiles).\n" +
+                "6) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
                 "\n" +
                 "RISK MODEL (Primary: Lines Added per Commit, Secondary: Other Metrics):\n" +
-                "- PRIMARY METRIC: Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
+                "- PRIMARY RISK METRIC: Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
                 "- Higher lines_added_per_commit = HIGHER RISK. Lower = more iterative, lower risk.\n" +
-                "- SECONDARY METRICS: Risk is also increased by high code churn, low test coverage, and high AI-generated probability (if provided).\n" +
+                "- SECONDARY RISK FACTORS: Risk is also increased by high code churn, low test coverage, and high AI-generated probability (if provided).\n" +
                 "- DO NOT use file length as risk. Risk is based on changed lines per commit and the secondary metrics mentioned above.\n" +
-                "- REFACTORING VS BLOAT:\n" +
+                "\n" +
+                "KEY MAN RISK ASSESSMENT:\n" +
+                "- TOTAL LINES COMMITTED: High total lines added/deleted indicate a POTENTIAL Key Man risk (high impact/knowledge concentration).\n" +
+                "- DEFINITIVE KEY MAN: A contributor is a definitive Key Man if they are solely or primarily responsible for specific sections/modules/directories that other contributors have not touched or have minimally touched.\n" +
+                "- MEDIUM RISK: If an individual leaves, it does not automatically mean they are a keyman. Evaluate their 'Key Man' status by looking at where all other contributors have committed. If other contributors did not touch that section, then the original is a possible keyman; if they appear to be solely responsible, they ARE a keyman.\n" +
+                "\n" +
+                "REFACTORING VS BLOAT:\n" +
                 "  - Refactoring (high deletions relative to additions) is NOT bloat. It reduces future technical debt.\n" +
                 "  - If a contributor has significant deletions (e.g., deletions > 50% of additions), acknowledge this as high-value refactoring and adjust risk downward.\n" +
                 "- MERGE COMMITS:\n" +
@@ -591,16 +606,13 @@ public class MainApp extends Application {
                 "  \"Metrics inconsistency detected\" and correct the ranking based on numeric values.\n" +
                 "- NUMERIC LOGIC: Explicitly verify that you understand 327 is lower than 1160.\n" +
                 "- HARSHNESS ON LOW-VALUE WORK: Be direct and critical in evaluations. If a contributor's work is primarily frontend styling or cosmetic, state that clearly.\n" +
+                "- MEANINGFUL SCORE PENALTY: Heavily punish (lower) the 'Meaningful Score' if a contributor pushes build or auto-generated files (e.g., dist/, build/, *.map, minified, lockfiles).\n" +
                 "\n" +
                 "REFACTORING VS BLOAT:\n" +
                 "- Acknowledge refactoring (high deletions) as a positive quality signal that reduces technical debt.\n" +
                 "- Distinguish between new code bloat and high-value architectural cleanup.\n" +
                 "\n" +
-                "MERGE COMMITS:\n" +
-                "- Flag merge commits as distinct events that represent integration rather than individual code contribution spikes.\n" +
-                "- Merge commits in history are marked with [MERGE] and their LOC is not included in summary totals to avoid skewing metrics.\n" +
-                "\n" +
-                "RISK ASSESSMENT:\n" +
+                "RISK ASSESSMENT (Primary: Lines Added per Commit, Secondary: Other Metrics):\n" +
                 "- Calculate risk using: lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
                 "- Higher lines_added_per_commit = HIGHER RISK (mathematically).\n" +
                 "- SECONDARY RISK FACTORS: Increase risk if there is high code churn, low test coverage, or high AI-generated probability.\n" +
@@ -608,7 +620,12 @@ public class MainApp extends Application {
                 "- Adjust risk downward if tests are present (changes in folders containing: test, tests, __tests__).\n" +
                 "- Consider language/file context and project phase (initial scaffolding can be lower risk only if changes are mostly config/docs/build setup, not core logic).\n" +
                 "\n" +
-                "OUTPUT REQUIREMENTS:\n" +
+                "KEY MAN RISK ASSESSMENT:\n" +
+                "- TOTAL LINES COMMITTED: High total lines added/deleted indicate a POTENTIAL Key Man risk.\n" +
+                "- DEFINITIVE KEY MAN: A contributor is a definitive Key Man if they are solely or primarily responsible for specific sections/modules/directories that other contributors have not touched or have minimally touched.\n" +
+                "- MEDIUM RISK: If an individual leaves, it does not automatically mean they are a keyman. Evaluate their 'Key Man' status by looking at where all other contributors have committed. If other contributors did not touch that section, then the original is a possible keyman; if they appear to be solely responsible, they ARE a keyman.\n" +
+                "\n" +
+                "MERGE COMMITS:\n" +
                 "- Use Markdown headings and tables.\n" +
                 "- Explain reasoning behind risk assessments with metric-backed evidence.\n" +
                 "- Avoid repetition across sections.\n" +
@@ -741,26 +758,24 @@ public class MainApp extends Application {
     }
 
     private void saveSettings() {
-        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(MainApp.class);
-        
         String encOpenAiKey = (encryptionService != null) ? encryptionService.encrypt(openAiKey) : openAiKey;
         String encGroqKey = (encryptionService != null) ? encryptionService.encrypt(groqKey) : groqKey;
 
-        prefs.put("openAiKey", encOpenAiKey != null ? encOpenAiKey : "");
-        prefs.put("openAiModel", openAiModel);
-        prefs.put("groqKey", encGroqKey != null ? encGroqKey : "");
-        prefs.put("groqModel", groqModel);
-        prefs.put("ollamaUrl", ollamaUrl);
-        prefs.put("ollamaModel", ollamaModel);
-        prefs.put("selectedProvider", selectedProvider);
-        prefs.put("aliases", aliasesArea.getText());
-        prefs.put("genders", gendersData);
+        configManager.saveSetting("openAiKey", encOpenAiKey != null ? encOpenAiKey : "");
+        configManager.saveSetting("openAiModel", openAiModel);
+        configManager.saveSetting("groqKey", encGroqKey != null ? encGroqKey : "");
+        configManager.saveSetting("groqModel", groqModel);
+        configManager.saveSetting("ollamaUrl", ollamaUrl);
+        configManager.saveSetting("ollamaModel", ollamaModel);
+        configManager.saveSetting("selectedProvider", selectedProvider);
+        configManager.saveSetting("aliases", aliasesArea.getText());
+        configManager.saveSetting("genders", gendersData);
         
-        prefs.put("repoPath", repoPathField.getText());
-        prefs.put("commitLimit", String.valueOf(commitLimitSpinner.getValue()));
-        prefs.put("tableLimit", String.valueOf(tableLimitSpinner.getValue()));
-        prefs.put("ignoredExtensions", ignoredExtensionsField.getText());
-        prefs.put("ignoredFolders", ignoredFoldersField.getText());
+        configManager.saveSetting("repoPath", repoPathField.getText());
+        configManager.saveSetting("commitLimit", String.valueOf(commitLimitSpinner.getValue()));
+        configManager.saveSetting("tableLimit", String.valueOf(tableLimitSpinner.getValue()));
+        configManager.saveSetting("ignoredExtensions", ignoredExtensionsField.getText());
+        configManager.saveSetting("ignoredFolders", ignoredFoldersField.getText());
         
         // Save global settings to database as well
         if (databaseService != null) {
@@ -775,10 +790,8 @@ public class MainApp extends Application {
     }
 
     private void loadSettings() {
-        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(MainApp.class);
-        
-        String savedOpenAiKey = prefs.get("openAiKey", "");
-        String savedGroqKey = prefs.get("groqKey", "");
+        String savedOpenAiKey = configManager.getSetting("openAiKey", "");
+        String savedGroqKey = configManager.getSetting("groqKey", "");
         
         if (encryptionService != null && !savedOpenAiKey.isEmpty()) {
             String decrypted = encryptionService.decrypt(savedOpenAiKey);
@@ -794,19 +807,19 @@ public class MainApp extends Application {
             groqKey = savedGroqKey;
         }
 
-        openAiModel = prefs.get("openAiModel", "gpt-4o");
-        groqModel = prefs.get("groqModel", "mixtral-8x7b-32768");
-        ollamaUrl = prefs.get("ollamaUrl", "http://localhost:11434");
-        ollamaModel = prefs.get("ollamaModel", "llama3");
-        selectedProvider = prefs.get("selectedProvider", "OpenAI");
-        aliasesArea.setText(prefs.get("aliases", ""));
-        gendersData = prefs.get("genders", "");
+        openAiModel = configManager.getSetting("openAiModel", "gpt-4o");
+        groqModel = configManager.getSetting("groqModel", "mixtral-8x7b-32768");
+        ollamaUrl = configManager.getSetting("ollamaUrl", "http://localhost:11434");
+        ollamaModel = configManager.getSetting("ollamaModel", "llama3");
+        selectedProvider = configManager.getSetting("selectedProvider", "OpenAI");
+        aliasesArea.setText(configManager.getSetting("aliases", ""));
+        gendersData = configManager.getSetting("genders", "");
         
-        repoPathField.setText(prefs.get("repoPath", ""));
-        commitLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("commitLimit", "10")));
-        tableLimitSpinner.getValueFactory().setValue(Integer.parseInt(prefs.get("tableLimit", "20")));
-        ignoredExtensionsField.setText(prefs.get("ignoredExtensions", "json,xml,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml"));
-        ignoredFoldersField.setText(prefs.get("ignoredFolders", "node_modules,target,build,dist,.git"));
+        repoPathField.setText(configManager.getSetting("repoPath", ""));
+        commitLimitSpinner.getValueFactory().setValue(Integer.parseInt(configManager.getSetting("commitLimit", "10")));
+        tableLimitSpinner.getValueFactory().setValue(Integer.parseInt(configManager.getSetting("tableLimit", "20")));
+        ignoredExtensionsField.setText(configManager.getSetting("ignoredExtensions", "json,xml,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml"));
+        ignoredFoldersField.setText(configManager.getSetting("ignoredFolders", "node_modules,target,build,dist,.git"));
 
         // Load global settings from database
         if (databaseService != null) {
@@ -959,7 +972,7 @@ public class MainApp extends Application {
         // User said: "allow setting of their email address as they may use different email addresses to what git uses"
         // If we put it in the aliasesArea as email=combinedName, it might not work if they just want to change email.
         // Let's create a separate email override map.
-        String currentEmails = prefs().get("emailOverrides", "");
+        String currentEmails = configManager.getSetting("emailOverrides", "");
         String mapping = stat.name() + "=" + newEmail; // Use name as key to override email
         
         String[] lines = currentEmails.split("\n");
@@ -977,13 +990,10 @@ public class MainApp extends Application {
         if (!found) {
             newEmails.append(mapping).append("\n");
         }
-        prefs().put("emailOverrides", newEmails.toString().trim());
+        configManager.saveSetting("emailOverrides", newEmails.toString().trim());
         analyzeRepo();
     }
 
-    private java.util.prefs.Preferences prefs() {
-        return java.util.prefs.Preferences.userNodeForPackage(MainApp.class);
-    }
 
     private void showMergeDialog(ContributorStats selected) {
         TextInputDialog dialog = new TextInputDialog();
@@ -1012,7 +1022,7 @@ public class MainApp extends Application {
 
         // Load email overrides for prompt consistency
         Map<String, String> emailOverrides = new HashMap<>();
-        String overridesStr = prefs().get("emailOverrides", "");
+        String overridesStr = configManager.getSetting("emailOverrides", "");
         for (String line : overridesStr.split("\n")) {
             if (line.contains("=")) {
                 String[] parts = line.split("=", 2);
@@ -1045,182 +1055,87 @@ public class MainApp extends Application {
         }
 
         Map<String, String> mdSections = readMdSections();
-        
-        StringBuilder metricsText = new StringBuilder("METRICS:\n");
-
         File repoDir = new File(repoPathField.getText());
         Set<String> ignoredFolders = Arrays.stream(ignoredFoldersField.getText().split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toSet());
         String structure = gitService.getProjectStructure(repoDir, ignoredFolders);
-        metricsText.append(structure).append("\n");
 
-        for (ContributorStats s : currentStats) {
-            boolean hasTests = s.languageBreakdown().containsKey("test") || 
-                              s.languageBreakdown().keySet().stream().anyMatch(l -> l.toLowerCase().contains("test"));
-            String name = s.name();
-            if (name.contains("<") && name.contains(">")) {
-                name = name.substring(0, name.indexOf("<")).trim();
-            }
-            String email = emailOverrides.getOrDefault(s.name(), s.email());
-            metricsText.append(String.format("- %s (%s, %s):\n", name, email, s.gender()));
-            metricsText.append(String.format("  Stats: %d commits, %d merges, +%d/-%d lines, %d new/%d edited/%d deleted files\n",
-                s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
-                s.filesAdded(), s.filesEdited(), s.filesDeletedCount()));
-            metricsText.append(String.format("  Risk Profile: AI Probability %.1f%%, Meaningful Score %.1f/100%s\n",
-                s.averageAiProbability() * 100, s.meaningfulChangeScore(), hasTests ? " [INCLUDES TESTS]" : ""));
-            metricsText.append("  Language breakdown: ").append(s.languageBreakdown()).append("\n");
-        }
-
-        metricsText.append("\nREPOSITORY SUMMARY METRICS:\n");
-        if (currentMeaningfulAnalysis != null) {
-            metricsText.append(String.format("Total Range: %s\n", currentMeaningfulAnalysis.commitRange()));
-            metricsText.append(String.format("Total Insertions: %d, Total Deletions: %d, Whitespace Churn: %d\n",
-                currentMeaningfulAnalysis.totalInsertions(), currentMeaningfulAnalysis.totalDeletions(), 
-                currentMeaningfulAnalysis.whitespaceChurn()));
-            
-            metricsText.append("Category Breakdown:\n");
-            currentMeaningfulAnalysis.categoryBreakdown().forEach((cat, m) -> {
-                if (m.fileCount() > 0) {
-                    metricsText.append(String.format("  * %s: %d files, +%d/-%d lines\n", cat, m.fileCount(), m.insertions(), m.deletions()));
-                }
-            });
-            
-            if (!currentMeaningfulAnalysis.warnings().isEmpty()) {
-                metricsText.append("Structural Observations: ").append(String.join("; ", currentMeaningfulAnalysis.warnings())).append("\n");
-            }
-
-            metricsText.append("Top 50 Impactful Files:\n");
-            currentMeaningfulAnalysis.topChangedFiles().stream().limit(50).forEach(f -> {
-                metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType()));
-            });
-        }
-
-        // Add full commit history for context
+        List<CommitInfo> allCommits = null;
+        Map<String, List<FileChange>> contributorFiles = null;
         try {
             int commitLimit = selectedProvider.equals("Groq") ? 300 : 1000;
-            List<CommitInfo> allCommits = gitService.getLastCommits(repoDir, commitLimit, aliasesMap());
-            // Sort by timestamp descending to ensure the LLM sees the chronological order correctly if it matters, 
-            // though getLastCommits usually returns them that way.
+            allCommits = gitService.getLastCommits(repoDir, commitLimit, aliasesMap());
             allCommits = allCommits.stream()
                     .sorted(Comparator.comparing(CommitInfo::timestamp).reversed())
                     .limit(commitLimit)
                     .toList();
-            metricsText.append(String.format("\nCOMPLETE COMMIT HISTORY (LATEST %d COMMITS, INCLUDING MERGED BRANCHES, LATEST FIRST):\n", commitLimit));
-            for (CommitInfo ci : allCommits) {
-                String mergeMarker = ci.isMerge() ? " [MERGE]" : "";
-                metricsText.append(String.format("[%s]%s %s <%s> [%s]: %s (%s) +%d/-%d l, %d n/%d e/%d d f, AI: %.0f%%\n",
-                    ci.id(), mergeMarker, ci.authorName(), ci.branch(), ci.timestamp().toString(), ci.message(), formatLanguages(ci.languageBreakdown()),
-                    ci.linesAdded(), ci.linesDeleted(), ci.filesAdded(), ci.filesEdited(), ci.filesDeleted(),
-                    ci.aiProbability() * 100));
-            }
 
-            metricsText.append("\nCONTRIBUTOR TOP FILES (Impactful Files per Contributor):\n");
             int topFileLimit = selectedProvider.equals("Groq") ? 5 : 10;
-            Map<String, List<FileChange>> contributorFiles = gitService.getTopFilesPerContributor(repoDir, topFileLimit, aliasesMap());
-            contributorFiles.forEach((contributor, files) -> {
-                metricsText.append(String.format("Contributor: %s\n", contributor));
-                files.forEach(f -> {
-                    metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType()));
-                    if (f.diff() != null && !f.diff().isEmpty()) {
-                        String diff = f.diff();
-                        if (selectedProvider.equals("Groq") && diff.length() > 2000) {
-                            diff = diff.substring(0, 2000) + "... [diff truncated for Groq limits]";
-                        }
-                        metricsText.append("    DIFF:\n").append(diff.indent(6)).append("\n");
-                    }
-                });
-            });
+            contributorFiles = gitService.getTopFilesPerContributor(repoDir, topFileLimit, aliasesMap());
         } catch (Exception e) {
-            metricsText.append("\nCould not retrieve commit history: ").append(e.getMessage()).append("\n");
+            e.printStackTrace();
         }
-
-        metricsText.append("\nRISK RULES: CALCULATE 'Lines Added/Commit' = (Total Lines Added / Total Commits).\n");
-        metricsText.append("Scale: 1500+ VERY HIGH, 1000-1500 HIGH, 750-1000 MED-HIGH, 500-750 MED, 250-500 LOW-MED, <250 LOW.\n");
-        metricsText.append("Higher = Higher Risk. Secondary risk factors: High churn, low test coverage, high AI probability.\n");
-        metricsText.append("Don't subtract deletions.\n");
 
         String reqFeatures = readRequiredFeatures();
-        if (!reqFeatures.isEmpty()) {
-            metricsText.append("\nFeatures:\n").append(reqFeatures).append("\n");
-        }
+        String baseMetrics = llmService.buildMetricsText(repoDir, currentStats, currentMeaningfulAnalysis, 
+                                                        allCommits, contributorFiles, structure, reqFeatures, emailOverrides);
 
         final String finalUrl = url;
         final String finalApiKey = apiKey;
         final String finalModel = model;
-        final String baseMetrics = metricsText.toString();
 
         Platform.runLater(() -> llmResponseArea.setText("Generating multi-section report using " + selectedProvider + "..."));
 
         new Thread(() -> {
             try {
                 StringBuilder fullReport = new StringBuilder();
-                
-                        // If there are MD sections, call LLM for each one
-                        if (!mdSections.isEmpty()) {
-                            // Split metrics into parts to reduce redundancy if possible, or send sequentially.
-                            // The user said "split the prompt over several prompts and only take the final response per section".
-                            // This currently does one call per section.
-                            
-                            for (Map.Entry<String, String> entry : mdSections.entrySet()) {
-                                String sectionTitle = entry.getKey().replace(".md", "");
-                                String formattedTitle = formatSectionTitle(sectionTitle);
-                                String sectionInstructions = entry.getValue();
-                                
-                                String basePrompt = userPromptArea.getText() + "\n\n" + 
-                                               "FOCUS SECTION: " + formattedTitle + "\n" +
-                                               "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
-                                               "IMPORTANT: Provide ONLY the content for this section as defined by the instructions. " +
-                                               "Do not include information that belongs in other sections. " +
-                                               "Use the provided metrics to inform your analysis for this specific section.\n" +
-                                               "HEADER NESTING: The application will prepend a top-level header (# " + formattedTitle + ") for this section. " +
-                                               "Ensure all headers in your response use at least TWO hashes (##) so they are correctly nested under the section header.";
-                                
-                                String fullPrompt = basePrompt + "\n\n" + baseMetrics;
-                                                   
-                                String sectionResponse = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), fullPrompt);
-                                
-                                // Take only the final response for this section (if it's a list or multi-part)
-                                // The user said "only take the final response per section when sending multiple sections"
-                                // If the API returned multiple messages or choices, we already take one in callLlmApi.
-                                // If "multiple sections" refers to the loop, we are already doing it.
-                                
-                                // Sanitize sectionResponse to remove markdown code blocks and duplicate titles
-                                sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
-                                
-                                // Remove redundant top-level title if AI included it
-                                String titlePattern = "^#\\s+" + java.util.regex.Pattern.quote(formattedTitle) + "\\s*\\n+";
-                                sectionResponse = sectionResponse.replaceFirst("(?i)" + titlePattern, "");
+                if (!mdSections.isEmpty()) {
+                    for (Map.Entry<String, String> entry : mdSections.entrySet()) {
+                        String sectionTitle = entry.getKey().replace(".md", "");
+                        String formattedTitle = llmService.formatSectionTitle(sectionTitle);
+                        String sectionInstructions = entry.getValue();
+                        
+                        String basePrompt = userPromptArea.getText() + "\n\n" + 
+                                       "FOCUS SECTION: " + formattedTitle + "\n" +
+                                       "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
+                                       "IMPORTANT: Provide ONLY the content for this section as defined by the instructions. " +
+                                       "Do not include information that belongs in other sections. " +
+                                       "Use the provided metrics to inform your analysis for this specific section.\n" +
+                                       "HEADER NESTING: The application will prepend a top-level header (# " + formattedTitle + ") for this section. " +
+                                       "Ensure all headers in your response use at least TWO hashes (##) so they are correctly nested under the section header.";
+                        
+                        String fullPrompt = basePrompt + "\n\n" + baseMetrics;
+                        String sectionResponse = llmService.callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), fullPrompt);
+                        
+                        sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
+                        String titlePattern = "^#\\s+" + java.util.regex.Pattern.quote(formattedTitle) + "\\s*\\n+";
+                        sectionResponse = sectionResponse.replaceFirst("(?i)" + titlePattern, "");
+                        sectionResponse = llmService.demoteMarkdownHeaders(sectionResponse);
 
-                                // Shift headers in sectionResponse
-                                sectionResponse = demoteMarkdownHeaders(sectionResponse);
+                        fullReport.append("# ").append(formattedTitle).append("\n\n");
+                        fullReport.append(sectionResponse).append("\n\n");
+                        
+                        String progressMsg = String.format("Generated section: %s...", formattedTitle);
+                        Platform.runLater(() -> llmResponseArea.setText(progressMsg));
 
-                                // Add the section title
-                                fullReport.append("# ").append(formattedTitle).append("\n\n");
-                                fullReport.append(sectionResponse).append("\n\n");
-                                
-                                String progressMsg = String.format("Generated section: %s...", formattedTitle);
-                                Platform.runLater(() -> llmResponseArea.setText(progressMsg));
-
-                                // Wait a bit between sections to avoid rate limits
-                                try {
-                                    Thread.sleep(2000); 
-                                } catch (InterruptedException ie) {
-                                    Thread.currentThread().interrupt();
-                                }
-                            }
-                        } else {
-                    // Default behavior if no MD sections
-                    String response = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + baseMetrics);
+                        try {
+                            Thread.sleep(2000); 
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                } else {
+                    String response = llmService.callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + baseMetrics);
                     response = response.replaceAll("```markdown", "").replaceAll("```", "").trim();
                     fullReport.append(response).append("\n\n");
-                    
                     Platform.runLater(() -> llmResponseArea.setText("Generating report..."));
                 }
 
                 Platform.runLater(() -> {
                     llmResponseArea.setText(fullReport.toString().trim());
+                    updateStatsWithAiScores(fullReport.toString());
                     if (onComplete != null) onComplete.run();
                 });
             } catch (Exception e) {
@@ -1233,135 +1148,6 @@ public class MainApp extends Application {
         }).start();
     }
 
-    private String formatSectionTitle(String title) {
-        if (title == null || title.isEmpty()) return "";
-        String formatted = title.replace("_", " ");
-        // Put a fullstop after the first number that appears
-        formatted = formatted.replaceFirst("(\\d+)", "$1.");
-        return formatted;
-    }
-
-    private String demoteMarkdownHeaders(String content) {
-        if (content == null || content.isEmpty()) return "";
-        String[] lines = content.split("\n");
-        StringBuilder result = new StringBuilder();
-        for (String line : lines) {
-            if (line.trim().startsWith("#")) {
-                result.append("#").append(line).append("\n");
-            } else {
-                result.append(line).append("\n");
-            }
-        }
-        return result.toString().trim();
-    }
-
-    private List<String> chunkMetrics(String metrics, int maxLength) {
-        List<String> chunks = new ArrayList<>();
-        if (metrics.length() <= maxLength) {
-            chunks.add(metrics);
-            return chunks;
-        }
-
-        String[] lines = metrics.split("\n");
-        StringBuilder currentChunk = new StringBuilder();
-        for (String line : lines) {
-            if (currentChunk.length() + line.length() + 1 > maxLength) {
-                if (currentChunk.length() > 0) {
-                    chunks.add(currentChunk.toString());
-                    currentChunk = new StringBuilder();
-                }
-                // If a single line is longer than maxLength (unlikely), force split it
-                if (line.length() > maxLength) {
-                    int start = 0;
-                    while (start < line.length()) {
-                        int end = Math.min(start + maxLength, line.length());
-                        chunks.add(line.substring(start, end));
-                        start = end;
-                    }
-                    continue;
-                }
-            }
-            currentChunk.append(line).append("\n");
-        }
-        if (currentChunk.length() > 0) {
-            chunks.add(currentChunk.toString());
-        }
-        return chunks;
-    }
-
-    private String callLlmApi(String apiUrl, String apiKey, String model, String system, String user) throws Exception {
-        java.net.URL url = new java.net.URL(apiUrl);
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/json");
-        if (!apiKey.equals("ollama")) {
-            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
-        }
-        conn.setDoOutput(true);
-
-        String combinedUserContent = system + "\n\n" + user;
-
-        String json = String.format("""
-            {
-              "model": "%s",
-              "messages": [
-                {"role": "user", "content": "%s"}
-              ]
-            }
-            """, model, escapeJson(combinedUserContent));
-
-        try (java.io.OutputStream os = conn.getOutputStream()) {
-            os.write(json.getBytes());
-        }
-
-        if (conn.getResponseCode() != 200) {
-            try (java.io.InputStream is = conn.getErrorStream()) {
-                if (is == null) return "Error code: " + conn.getResponseCode();
-                return "Error: " + new String(is.readAllBytes());
-            }
-        }
-
-        try (java.io.InputStream is = conn.getInputStream()) {
-            String response = new String(is.readAllBytes());
-            // Improved basic JSON parsing for OpenAI/Groq/Ollama format
-            // Handle both "content": "..." and "content":"..."
-            int start = response.indexOf("\"content\":");
-            if (start != -1) {
-                start = response.indexOf("\"", start + 10); // Find the opening quote of the content value
-                if (start != -1) {
-                    start += 1; // Move past the opening quote
-                    // Find the end of the content string, respecting escaped quotes
-                    int end = -1;
-                    for (int i = start; i < response.length(); i++) {
-                        if (response.charAt(i) == '\"' && response.charAt(i - 1) != '\\') {
-                            end = i;
-                            break;
-                        }
-                    }
-                    if (end > start) {
-                        return response.substring(start, end)
-                                .replace("\\n", "\n")
-                                .replace("\\t", "\t")
-                                .replace("\\\"", "\"")
-                                .replace("\\\\", "\\")
-                                .replace("\\u0026", "&")
-                                .replace("\\u003c", "<")
-                                .replace("\\u003e", ">");
-                    }
-                }
-            }
-            return response;
-        }
-    }
-
-    private String escapeJson(String input) {
-        if (input == null) return "";
-        return input.replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("\n", "\\n")
-                    .replace("\r", "\\r")
-                    .replace("\t", "\\t");
-    }
 
     private void browseRepo(Stage stage) {
         DirectoryChooser chooser = new DirectoryChooser();
@@ -1466,6 +1252,7 @@ public class MainApp extends Application {
                     "- Provide a high-level executive summary of the project's current state.\n" +
                     "- Analyze the repository structure to identify core backend, frontend, and infrastructure components.\n" +
                     "- HIGH-LEVEL CONTRIBUTOR RESPONSIBILITIES: Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor based on their directory/file activity.\n" +
+                    "- **Key Man Risk Assessment**: Evaluate if any contributor is a Key Man (sole/primary owner of core project sections). High total lines indicate potential risk, but sole ownership of sections confirms Key Man status.\n" +
                     "- Reference specific directory patterns to explain the architectural distribution of work.\n" +
                     "- SOFTWARE ARCHITECTURE & DESIGN: Analyze the directory structure and file distribution. \n" +
                     "  Comment on the overall design patterns (e.g., MVC, Microservices, Layered), tech stack usage, \n" +
@@ -1492,9 +1279,10 @@ public class MainApp extends Application {
                     "- Use the 'Gender' field for correct pronouns.\n" +
                     "- Analyze their specific 'Impact Analysis' (Added vs Deleted lines) and the types of files they touched as shown in their metrics.\n" +
                     "- Do NOT invent or assume names; attribute impact ONLY to the names provided in the metrics.\n" +
+                    "- **Key Man Identification**: Assess if this contributor is a Key Man for specific sections. High total lines committed indicate potential Key Man risk, but look at where all other contributors have committed. If other contributors did not touch a section this contributor owns, they are a Key Man for that section.\n" +
                     "- MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., \"update\", \"fix\").\n" +
                     "- FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files.\n" +
-                    "- MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section.\n" +
+                    "- MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section. **Heavily penalize this score if they pushed generated/build files.**\n" +
                     "- Identify their 'Most Valuable Contributor' potential based on iterative development rather than just bulk LOC.");
 
                 java.nio.file.Files.writeString(new File(folder, "05_Risk_and_Quality_Assessment.md").toPath(),
@@ -1504,8 +1292,9 @@ public class MainApp extends Application {
                     "- Create a detailed Risk Table for all contributors.\n" +
                     "- Columns: Contributor, Commits, Lines Added, Lines Added/Commit, Tests Touched, Risk Band, Justification.\n" +
                     "- IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.\n" +
+                    "- **RISK FACTORS**: Risk is primarily driven by Lines Added/Commit (Higher = Higher Risk), but also increases with high churn, low test coverage, and being a Key Man (sole owner of project sections).\n" +
                     "- STRICT RULE: In the 'Tests Touched' column, use 'No' if there is no evidence of test changes in the provided commit details for this contributor. If the 'touchedTests' metric is false, they MUST NOT get a 'Yes' in this column.\n" +
-                    "- Explain the reasoning behind each risk level.\n" +
+                    "- Explain the reasoning behind each risk level, explicitly addressing Key Man status (sole ownership of project sections).\n" +
                     "- Identify patterns of 'Bulk Commits' vs 'Iterative Refinement'.\n" +
                     "- Highlighting areas where test coverage is lacking relative to feature complexity.");
 
@@ -1674,7 +1463,7 @@ public class MainApp extends Application {
                 
                 // Load email overrides
                 Map<String, String> emailOverrides = new HashMap<>();
-                String overridesStr = prefs().get("emailOverrides", "");
+                String overridesStr = configManager.getSetting("emailOverrides", "");
                 for (String line : overridesStr.split("\n")) {
                     if (line.contains("=")) {
                         String[] parts = line.split("=", 2);
@@ -1690,7 +1479,7 @@ public class MainApp extends Application {
                         return new ContributorStats(s.name(), emailOverrides.get(s.name()), s.gender(), 
                             s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                             s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
-                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore(), s.touchedTests());
+                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore(), s.touchedTests(), s.generatedFilesPushed());
                     }
                     return s;
                 }).collect(Collectors.toList());
@@ -1747,6 +1536,7 @@ public class MainApp extends Application {
         int oFAdded = others.stream().mapToInt(ContributorStats::filesAdded).sum();
         int oFEdited = others.stream().mapToInt(ContributorStats::filesEdited).sum();
         int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
+        int oGenerated = others.stream().mapToInt(ContributorStats::generatedFilesPushed).sum();
         double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
 
         double avgMeaningful = others.stream().mapToDouble(ContributorStats::meaningfulChangeScore).average().orElse(0.0);
@@ -1756,189 +1546,15 @@ public class MainApp extends Application {
 
         boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated));
         return top;
     }
 
     private void updateCharts(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         Platform.runLater(() -> {
-            // Limited to Top 5 for visuals
-            List<ContributorStats> top5 = stats.stream().limit(5).collect(Collectors.toList());
-
-            // Pie Chart with percentages
-            commitPieChart.getData().clear();
-            commitPieChart.setAnimated(false);
-            commitPieChart.setMinWidth(1080);
-            commitPieChart.setMaxWidth(1080);
-            commitPieChart.setPrefWidth(1080);
-            commitPieChart.setMinHeight(1080);
-            commitPieChart.setMaxHeight(1080);
-            commitPieChart.setPrefHeight(1080);
-            commitPieChart.setLabelsVisible(true); // Enable labels to show contributor names
-            commitPieChart.setLabelLineLength(25); // Slightly more space
-            commitPieChart.setStartAngle(0); // Standard start angle
-            commitPieChart.setClockwise(true);
+            chartManager.updateCharts(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, 
+                                     contributorActivityChart, commitsPerDayChart, stats, recentCommits);
             
-            // Force re-layout for labels to appear
-            commitPieChart.requestLayout();
-            
-            // Re-apply labels visible to be absolutely sure
-            commitPieChart.setLabelsVisible(true);
-            
-            int totalCommits = stats.stream().mapToInt(ContributorStats::commitCount).sum();
-            List<PieChart.Data> pieData = stats.stream()
-                    .limit(10) // Show more on pie if labels are visible
-                    .map(s -> {
-                        double percentage = (totalCommits > 0) ? (double)s.commitCount() / totalCommits * 100 : 0;
-                        String displayName = s.name();
-                        if (displayName.contains("<") && displayName.contains(">")) {
-                            displayName = displayName.substring(0, displayName.indexOf("<")).trim();
-                        }
-                        PieChart.Data data = new PieChart.Data(String.format("%s (%.1f%%)", displayName, percentage), s.commitCount());
-                        return data;
-                    })
-                    .toList();
-            commitPieChart.setData(FXCollections.observableArrayList(pieData));
-            commitPieChart.setLegendVisible(true);
-            commitPieChart.setLegendSide(javafx.geometry.Side.BOTTOM);
-
-            // Stacked Bar Chart for Impact
-            impactBarChart.getData().clear();
-            impactBarChart.setAnimated(false); // Disable animations for snapshots
-            XYChart.Series<String, Number> addedSeries = new XYChart.Series<>();
-            addedSeries.setName("Added");
-            XYChart.Series<String, Number> deletedSeries = new XYChart.Series<>();
-            deletedSeries.setName("Deleted");
-
-            for (ContributorStats s : top5) {
-                // Ensure values are added as positive for stacked bar if we want them aligned at 0, 
-                // but usually StackedBarChart handles positive/negative. 
-                // User says "bars are not aligned at 0 they are floating too high". 
-                // This might happen if there's a mix or if the axis is weird.
-                // Let's ensure we are not adding negative values that cause floating if not intended.
-                String displayName = s.name();
-                if (displayName.contains("<") && displayName.contains(">")) {
-                    displayName = displayName.substring(0, displayName.indexOf("<")).trim();
-                }
-                XYChart.Data<String, Number> addedData = new XYChart.Data<>(displayName, Math.max(0, s.linesAdded()));
-                XYChart.Data<String, Number> deletedData = new XYChart.Data<>(displayName, Math.max(0, s.linesDeleted()));
-                addedSeries.getData().add(addedData);
-                deletedSeries.getData().add(deletedData);
-            }
-            impactBarChart.getData().addAll(addedSeries, deletedSeries);
-
-            // Activity Line Chart
-            activityLineChart.getData().clear();
-            activityLineChart.setAnimated(false);
-            if (recentCommits != null && !recentCommits.isEmpty()) {
-                XYChart.Series<String, Number> activitySeries = new XYChart.Series<>();
-                activitySeries.setName("Lines Added");
-                // recentCommits is newest first, so reverse it for chronological order
-                List<CommitInfo> chronological = recentCommits.stream()
-                        .filter(ci -> !ci.isMerge())
-                        .collect(Collectors.toList());
-                Collections.reverse(chronological);
-                
-                for (CommitInfo ci : chronological) {
-                    activitySeries.getData().add(new XYChart.Data<>(ci.id().substring(0, 7), ci.linesAdded()));
-                }
-                activityLineChart.getData().add(activitySeries);
-            }
-
-            // Calendar Activity Line Chart
-            calendarActivityChart.getData().clear();
-            calendarActivityChart.setAnimated(false);
-            if (recentCommits != null && !recentCommits.isEmpty()) {
-                XYChart.Series<String, Number> calSeries = new XYChart.Series<>();
-                calSeries.setName("Daily Impact");
-                
-                // TreeMap keeps it chronological by LocalDate
-                TreeMap<java.time.LocalDate, Integer> dailyImpact = new TreeMap<>();
-                for (CommitInfo ci : recentCommits) {
-                    if (ci.isMerge()) continue;
-                    java.time.LocalDate date = ci.timestamp().toLocalDate();
-                    dailyImpact.merge(date, ci.linesAdded(), Integer::sum);
-                }
-                
-                // Ensure all dates in the range are present with 0 if no activity
-                if (!dailyImpact.isEmpty()) {
-                    java.time.LocalDate firstDate = dailyImpact.firstKey();
-                    java.time.LocalDate lastDate = dailyImpact.lastKey();
-                    java.time.LocalDate current = firstDate;
-                    while (!current.isAfter(lastDate)) {
-                        dailyImpact.putIfAbsent(current, 0);
-                        current = current.plusDays(1);
-                    }
-                }
-
-                for (Map.Entry<java.time.LocalDate, Integer> entry : dailyImpact.entrySet()) {
-                    calSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
-                }
-                calendarActivityChart.getData().add(calSeries);
-            }
-
-            // Commits per Day Chart
-            commitsPerDayChart.getData().clear();
-            commitsPerDayChart.setAnimated(false);
-            if (recentCommits != null && !recentCommits.isEmpty()) {
-                XYChart.Series<String, Number> totalCpdSeries = new XYChart.Series<>();
-                totalCpdSeries.setName("Total Commits");
-
-                // TreeMap keeps it chronological by LocalDate
-                TreeMap<java.time.LocalDate, Integer> dailyTotalCommits = new TreeMap<>();
-                for (CommitInfo ci : recentCommits) {
-                    if (ci.isMerge()) continue;
-                    java.time.LocalDate date = ci.timestamp().toLocalDate();
-                    dailyTotalCommits.merge(date, 1, Integer::sum);
-                }
-
-                // Ensure all dates in the range are present with 0 if no activity
-                if (!dailyTotalCommits.isEmpty()) {
-                    java.time.LocalDate first = dailyTotalCommits.firstKey();
-                    java.time.LocalDate last = dailyTotalCommits.lastKey();
-                    java.time.LocalDate curr = first;
-                    while (!curr.isAfter(last)) {
-                        dailyTotalCommits.putIfAbsent(curr, 0);
-                        curr = curr.plusDays(1);
-                    }
-                }
-
-                for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
-                    totalCpdSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
-                }
-                commitsPerDayChart.getData().add(totalCpdSeries);
-
-                // Add per-contributor overlay (top 5)
-                Map<java.time.LocalDate, Map<String, Integer>> dailyCommitsPerAuthor = new TreeMap<>();
-                Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
-
-                for (CommitInfo ci : recentCommits) {
-                    if (ci.isMerge()) continue;
-                    String author = ci.authorName();
-                    if (!topAuthorNames.contains(author)) continue;
-                    java.time.LocalDate date = ci.timestamp().toLocalDate();
-                    dailyCommitsPerAuthor.computeIfAbsent(date, k -> new HashMap<>()).merge(author, 1, Integer::sum);
-                }
-
-                for (String author : topAuthorNames) {
-                    XYChart.Series<String, Number> series = new XYChart.Series<>();
-                    String displayName = author;
-                    if (displayName.contains("<") && displayName.contains(">")) {
-                        displayName = displayName.substring(0, displayName.indexOf("<")).trim();
-                    }
-                    series.setName(displayName);
-                    for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
-                        java.time.LocalDate date = entry.getKey();
-                        int count = dailyCommitsPerAuthor.getOrDefault(date, Collections.emptyMap()).getOrDefault(author, 0);
-                        series.getData().add(new XYChart.Data<>(date.toString(), count));
-                    }
-                    commitsPerDayChart.getData().add(series);
-                }
-            }
-
-            updateContributorActivityChart(stats, recentCommits);
-            updateCpdPerContributorChart(stats, recentCommits);
-
             // Force layout pass and refresh to ensure charts are rendered correctly
             Platform.runLater(() -> {
                 commitPieChart.layout();
@@ -1987,121 +1603,6 @@ public class MainApp extends Application {
         });
     }
 
-    private void updateContributorActivityChart(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
-        contributorActivityChart.getData().clear();
-        contributorActivityChart.setAnimated(false);
-        if (recentCommits == null || recentCommits.isEmpty()) return;
-
-        // TreeMap keeps it chronological by LocalDate
-        TreeMap<java.time.LocalDate, Integer> dailyTotalImpact = new TreeMap<>();
-        Map<java.time.LocalDate, Map<String, Integer>> dailyImpactPerAuthor = new TreeMap<>();
-        Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
-
-        for (CommitInfo ci : recentCommits) {
-            if (ci.isMerge()) continue;
-            java.time.LocalDate date = ci.timestamp().toLocalDate();
-            dailyTotalImpact.merge(date, ci.linesAdded(), Integer::sum);
-            
-            String author = ci.authorName();
-            if (topAuthorNames.contains(author)) {
-                dailyImpactPerAuthor.computeIfAbsent(date, k -> new HashMap<>())
-                                    .merge(author, ci.linesAdded(), Integer::sum);
-            }
-        }
-
-        // Ensure all dates in range are present
-        if (!dailyTotalImpact.isEmpty()) {
-            java.time.LocalDate first = dailyTotalImpact.firstKey();
-            java.time.LocalDate last = dailyTotalImpact.lastKey();
-            java.time.LocalDate curr = first;
-            while (!curr.isAfter(last)) {
-                dailyTotalImpact.putIfAbsent(curr, 0);
-                curr = curr.plusDays(1);
-            }
-        }
-
-        // Add Total series
-        XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
-        totalSeries.setName("Total Impact");
-        for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalImpact.entrySet()) {
-            totalSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
-        }
-        contributorActivityChart.getData().add(totalSeries);
-
-        // Initialize series for each top author
-        for (String author : topAuthorNames) {
-            XYChart.Series<String, Number> series = new XYChart.Series<>();
-            String displayName = author;
-            if (displayName.contains("<") && displayName.contains(">")) {
-                displayName = displayName.substring(0, displayName.indexOf("<")).trim();
-            }
-            series.setName(displayName);
-            for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalImpact.entrySet()) {
-                java.time.LocalDate date = entry.getKey();
-                Integer impact = dailyImpactPerAuthor.getOrDefault(date, Collections.emptyMap()).getOrDefault(author, 0);
-                series.getData().add(new XYChart.Data<>(date.toString(), impact));
-            }
-            contributorActivityChart.getData().add(series);
-        }
-    }
-
-    private void updateCpdPerContributorChart(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
-        cpdPerContributorChart.getData().clear();
-        cpdPerContributorChart.setAnimated(false);
-        if (recentCommits == null || recentCommits.isEmpty()) return;
-
-        // TreeMap keeps it chronological by LocalDate
-        TreeMap<java.time.LocalDate, Integer> dailyTotalCommits = new TreeMap<>();
-        Map<java.time.LocalDate, Map<String, Integer>> dailyCommitsPerAuthor = new TreeMap<>();
-        Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
-
-        for (CommitInfo ci : recentCommits) {
-            if (ci.isMerge()) continue;
-            java.time.LocalDate date = ci.timestamp().toLocalDate();
-            dailyTotalCommits.merge(date, 1, Integer::sum);
-            
-            String author = ci.authorName();
-            if (topAuthorNames.contains(author)) {
-                dailyCommitsPerAuthor.computeIfAbsent(date, k -> new HashMap<>())
-                                     .merge(author, 1, Integer::sum);
-            }
-        }
-
-        // Ensure all dates in range are present
-        if (!dailyTotalCommits.isEmpty()) {
-            java.time.LocalDate first = dailyTotalCommits.firstKey();
-            java.time.LocalDate last = dailyTotalCommits.lastKey();
-            java.time.LocalDate curr = first;
-            while (!curr.isAfter(last)) {
-                dailyTotalCommits.putIfAbsent(curr, 0);
-                curr = curr.plusDays(1);
-            }
-        }
-
-        // Add Total series
-        XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
-        totalSeries.setName("Total Commits");
-        for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
-            totalSeries.getData().add(new XYChart.Data<>(entry.getKey().toString(), entry.getValue()));
-        }
-        cpdPerContributorChart.getData().add(totalSeries);
-
-        // Initialize series for each top author
-        for (String author : topAuthorNames) {
-            XYChart.Series<String, Number> series = new XYChart.Series<>();
-            String displayName = author;
-            if (displayName.contains("<") && displayName.contains(">")) {
-                displayName = displayName.substring(0, displayName.indexOf("<")).trim();
-            }
-            series.setName(displayName);
-            for (Map.Entry<java.time.LocalDate, Integer> entry : dailyTotalCommits.entrySet()) {
-                java.time.LocalDate date = entry.getKey();
-                Integer count = dailyCommitsPerAuthor.getOrDefault(date, Collections.emptyMap()).getOrDefault(author, 0);
-                series.getData().add(new XYChart.Data<>(date.toString(), count));
-            }
-            cpdPerContributorChart.getData().add(series);
-        }
-    }
 
     private void exportToPdf(Stage stage) {
         if (currentStats == null || currentStats.isEmpty()) {
@@ -2355,7 +1856,7 @@ public class MainApp extends Application {
                 return new ContributorStats(s.name(), s.email(), s.gender(), 
                     s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                     s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
-                    s.filesEdited(), s.filesDeletedCount(), aiScore, s.touchedTests());
+                    s.filesEdited(), s.filesDeletedCount(), aiScore, s.touchedTests(), s.generatedFilesPushed());
             }
             return s;
         }).collect(Collectors.toList());

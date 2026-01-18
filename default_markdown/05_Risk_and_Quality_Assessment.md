@@ -17,15 +17,17 @@ Create a table with **one row per contributor**, including:
 - Contributor name
 - Total commits
 - Total lines added
-- **Lines added per commit** (must be calculated: total_lines_added / total_commits)
+- **Lines added per commit** (must be calculated: total_lines_added / total_commits). This is the primary driver of risk level.
 - Tests touched (Yes/No + count if available)
 - Risk band (LOW / LOW-MED / MED / MED-HIGH / HIGH / VERY HIGH) using the defined scale. 
-- **RISK FACTORS**: Risk is primarily driven by Lines Added/Commit, but also increases with high churn and low test coverage.
-- Brief justification (1–3 sentences, metric-backed)
+- **RISK FACTORS**: Risk is primarily driven by Lines Added/Commit (Higher = Higher Risk), but also increases with high churn, low test coverage, and being a Key Man (sole owner of project sections).
+- Brief justification (1–3 sentences, metric-backed). State if they are a Key Man and if they pushed generated files.
 
 ### 2) Risk Reasoning (per contributor)
 For each contributor:
 - Explain WHY their risk level was assigned, referencing specific metrics.
+- Address Key Man risk: High total lines indicate potential risk, but sole ownership of sections confirms Key Man status.
+- Mention if Meaningful Score was penalized due to generated files.
 - Identify whether their commits are primarily:
     - **Iterative Refinement** (small/consistent changes), or
     - **Bulk Commits** (large spikes, low granularity)

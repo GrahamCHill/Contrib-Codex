@@ -29,11 +29,12 @@ Rules:
     - ownership diversity is low AND
     - changes are high-churn/high-risk.
 
-## 3) Single-Point-of-Failure Contributors
+## 3) Single-Point-of-Failure Contributors (Key Men)
 Identify contributors who appear to be single points of failure:
 - list contributor name
 - list modules/directories they dominate
 - cite metrics evidence (commit concentration, LOC concentration, etc.)
+- **Key Man Rule**: High total lines committed indicate potential risk. However, they are only a definitive Key Man if they are the sole or primary contributor to a section that others have NOT touched. Evaluate their "Key Man" status by checking the overlap with other contributors. Sole ownership of core logic makes them a definitive Key Man.
 
 ## 4) Recommendations to Reduce Bus Factor
 Provide 5–10 concrete actions (metric-backed), including:

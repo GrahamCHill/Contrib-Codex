@@ -33,9 +33,9 @@ Create a table for all major contributors:
 | name | e.g. Backend | Yes/No | e.g. Sole owner of core API | High/Med/Low |
 
 Rules:
-- **Key Man?**: "Yes" if they are the primary or sole contributor to critical modules (as evidenced by high ownership concentration in those areas).
-- **Project Dependence**: A very brief statement summarizing how much the project relies on them (max 5 words).
-- **Risk if they leave**: Based on their Key Man status and the criticality of the modules they own.
+- **Key Man?**: "Yes" if they are the primary or sole contributor to critical modules (as evidenced by high ownership concentration in those areas). Evaluate by checking if other contributors have touched the same directories; if not, they are a Key Man.
+- **Project Dependence**: A very brief statement summarizing how much the project relies on them (max 5 words). High total lines committed indicates POTENTIAL dependence, but sole ownership of sections confirms it.
+- **Risk if they leave**: Based on their Key Man status and the criticality of the modules they own. A "Medium" risk if they leave does NOT automatically make them a Key Man; they must also show sole ownership of project sections.
 
 ### 4) Repository Structure & Architecture Mapping
 Analyze the directory patterns included in METRICS and classify work into:

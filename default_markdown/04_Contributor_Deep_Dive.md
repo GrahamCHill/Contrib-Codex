@@ -24,19 +24,21 @@ A table containing (if available in METRICS):
 - Net change (added − deleted)
 - Lines added per commit (total_lines_added / total_commits)
 - Tests touched (Yes/No + count if available)
+- Generated Files Pushed (Count)
 - Primary areas modified (top directories / file types from METRICS)
 - **Meaningful Score**: (Your LLM-calculated score 0-100)
 
 ### 2) Meaningful Score Tag (MANDATORY)
 At the end of this contributor's subsection, you MUST include this exact tag: 
 `[MEANINGFUL_SCORE: Contributor Name=XX/100]`
-Where XX is the score you calculated. This score should take into account commit messages, iterative patterns, and the qualitative nature of the work.
+Where XX is the score you calculated. This score should take into account commit messages, iterative patterns, and the qualitative nature of the work. You MUST heavily penalize this score if the contributor pushed build or auto-generated files.
 
 ### 3) Impact & Ownership Analysis
 - Explain WHAT areas this contributor worked on (directories + file types).
 - Describe the nature of the work using evidence:
     - features vs refactors vs formatting vs generated outputs
 - **Functionality Comparison**: Identify the specific functional components or features this contributor is primarily responsible for. Compare their contributions to others to determine who "owns" or created the most functionality in key areas.
+- **Key Man Identification**: Assess if this contributor is a Key Man for specific sections. High total lines committed indicate potential Key Man risk, but look at where all other contributors have committed. If other contributors did not touch a section this contributor owns, they are a Key Man for that section.
 - **Top Files Analysis**: Reference the specific files they touched most frequently or with the most impact. Explain what those files do and how they contribute to the overall project requirements.
     - **Change Classification**: For each top file, use the provided **DIFF** to classify the nature of the changes into one of these categories:
         - **Logic**: Substantial changes to business logic, algorithms, or core functionality.
@@ -58,10 +60,11 @@ Evaluate quality indicators based ONLY on METRICS:
 
 ### 4) Risk Rating & Justification
 Assign a risk band using the defined scale:
-- Base it primarily on **Lines Added per Commit** (higher = higher risk)
+- Base it primarily on **Lines Added per Commit** (higher = higher risk). This is the leading indicator of risk.
+- High total lines committed indicate POTENTIAL Key Man risk, which increases organizational risk.
 - Secondary risk factors (increase risk): High code churn, low test coverage relative to logic changes, high AI-generated probability.
 - Mitigating factors (decrease risk): High deletion ratio (refactoring), high test coverage.
-- Note if changes are concentrated in high-risk areas (core logic) vs lower-risk areas (docs/config), using directory context
+- Note if changes are concentrated in high-risk areas (core logic) vs lower-risk areas (docs/config), using directory context. Sole ownership of a section makes that contributor a Key Man, which significantly increases risk.
 
 ### 5) "Most Valuable Contributor" Potential
 Assess their potential for being the **Most Valuable Contributor** using:

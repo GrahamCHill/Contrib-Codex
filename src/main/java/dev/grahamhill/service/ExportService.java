@@ -762,6 +762,7 @@ public class ExportService {
         int oFAdded = others.stream().mapToInt(ContributorStats::filesAdded).sum();
         int oFEdited = others.stream().mapToInt(ContributorStats::filesEdited).sum();
         int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
+        int oGenerated = others.stream().mapToInt(ContributorStats::generatedFilesPushed).sum();
 
         double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
 
@@ -772,7 +773,7 @@ public class ExportService {
 
         boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated));
         return top;
     }
 

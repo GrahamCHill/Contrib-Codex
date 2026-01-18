@@ -435,6 +435,11 @@ public class GitService {
             score -= Math.min(30, b.meaninglessCommits * 5);
         }
 
+        // Deduction for pushing generated/build artifacts
+        if (b.generatedFilesPushed > 0) {
+            score -= Math.min(40, b.generatedFilesPushed * 10);
+        }
+
         return Math.max(0, Math.min(100, score));
     }
 
@@ -463,6 +468,11 @@ public class GitService {
                     
                     // Explicitly ignore lockfiles
                     String lowerPath = path.toLowerCase();
+                    String category = categorizePath(path, repository);
+                    if ("Generated/Artifacts".equals(category) || "Sourcemaps/Minified".equals(category)) {
+                        builder.generatedFilesPushed++;
+                    }
+                    
                     if (lowerPath.contains("package-lock.json") || lowerPath.contains("yarn.lock") || lowerPath.contains("pnpm-lock.yaml")) {
                         continue;
                     }
@@ -922,6 +932,7 @@ public class GitService {
         int blankLinesAdded;
         int blankLinesDeleted;
         int meaninglessCommits;
+        int generatedFilesPushed;
         Map<String, Integer> languageBreakdown = new HashMap<>();
         double totalAiProbability;
         int filesAdded;
@@ -936,7 +947,7 @@ public class GitService {
         }
 
         ContributorStats build(double meaningfulChangeScore) {
-            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore, touchedTests);
+            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore, touchedTests, generatedFilesPushed);
         }
     }
 }
