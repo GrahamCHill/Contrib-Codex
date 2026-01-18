@@ -1033,14 +1033,15 @@ public class MainApp extends Application {
 
         // Add full commit history for context
         try {
-            List<CommitInfo> allCommits = gitService.getLastCommits(repoDir, 1000, aliasesMap());
+            int commitLimit = selectedProvider.equals("Groq") ? 300 : 1000;
+            List<CommitInfo> allCommits = gitService.getLastCommits(repoDir, commitLimit, aliasesMap());
             // Sort by timestamp descending to ensure the LLM sees the chronological order correctly if it matters, 
             // though getLastCommits usually returns them that way.
             allCommits = allCommits.stream()
                     .sorted(Comparator.comparing(CommitInfo::timestamp).reversed())
-                    .limit(1000)
+                    .limit(commitLimit)
                     .toList();
-            metricsText.append("\nCOMPLETE COMMIT HISTORY (LATEST 1000 COMMITS, INCLUDING MERGED BRANCHES, LATEST FIRST):\n");
+            metricsText.append(String.format("\nCOMPLETE COMMIT HISTORY (LATEST %d COMMITS, INCLUDING MERGED BRANCHES, LATEST FIRST):\n", commitLimit));
             for (CommitInfo ci : allCommits) {
                 String mergeMarker = ci.isMerge() ? " [MERGE]" : "";
                 metricsText.append(String.format("[%s]%s %s <%s>: %s (%s) +%d/-%d l, %d n/%d e/%d d f, AI: %.0f%%\n",
@@ -1050,13 +1051,18 @@ public class MainApp extends Application {
             }
 
             metricsText.append("\nCONTRIBUTOR TOP FILES (Impactful Files per Contributor):\n");
-            Map<String, List<FileChange>> contributorFiles = gitService.getTopFilesPerContributor(repoDir, 10, aliasesMap());
+            int topFileLimit = selectedProvider.equals("Groq") ? 5 : 10;
+            Map<String, List<FileChange>> contributorFiles = gitService.getTopFilesPerContributor(repoDir, topFileLimit, aliasesMap());
             contributorFiles.forEach((contributor, files) -> {
                 metricsText.append(String.format("Contributor: %s\n", contributor));
                 files.forEach(f -> {
                     metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType()));
                     if (f.diff() != null && !f.diff().isEmpty()) {
-                        metricsText.append("    DIFF:\n").append(f.diff().indent(6)).append("\n");
+                        String diff = f.diff();
+                        if (selectedProvider.equals("Groq") && diff.length() > 2000) {
+                            diff = diff.substring(0, 2000) + "... [diff truncated for Groq limits]";
+                        }
+                        metricsText.append("    DIFF:\n").append(diff.indent(6)).append("\n");
                     }
                 });
             });
