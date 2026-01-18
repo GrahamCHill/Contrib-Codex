@@ -1,8 +1,10 @@
 package dev.grahamhill.service;
 
 import dev.grahamhill.model.ContributorStats;
+import dev.grahamhill.model.ReportHistory;
 
 import java.sql.*;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,6 +38,16 @@ public class DatabaseService {
                 CREATE TABLE IF NOT EXISTS global_settings (
                     key TEXT PRIMARY KEY,
                     value TEXT
+                )
+                """);
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS report_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    version TEXT,
+                    date TEXT,
+                    author TEXT,
+                    description TEXT,
+                    earliest_commit TEXT
                 )
                 """);
         }
@@ -117,6 +129,62 @@ public class DatabaseService {
             }
         }
         return stats;
+    }
+
+    public List<ReportHistory> getLatestReportHistory(int limit) throws SQLException {
+        List<ReportHistory> history = new ArrayList<>();
+        String sql = "SELECT id, version, date, author, description, earliest_commit FROM report_history ORDER BY id DESC LIMIT ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, limit);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    history.add(new ReportHistory(
+                            rs.getInt("id"),
+                            rs.getString("version"),
+                            LocalDate.parse(rs.getString("date")),
+                            rs.getString("author"),
+                            rs.getString("description"),
+                            rs.getString("earliest_commit")
+                    ));
+                }
+            }
+        }
+        return history;
+    }
+
+    public ReportHistory getLatestReportForCommit(String earliestCommit) throws SQLException {
+        String sql = "SELECT id, version, date, author, description, earliest_commit FROM report_history WHERE earliest_commit = ? ORDER BY id DESC LIMIT 1";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, earliestCommit);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return new ReportHistory(
+                            rs.getInt("id"),
+                            rs.getString("version"),
+                            LocalDate.parse(rs.getString("date")),
+                            rs.getString("author"),
+                            rs.getString("description"),
+                            rs.getString("earliest_commit")
+                    );
+                }
+            }
+        }
+        return null;
+    }
+
+    public void saveReportHistory(ReportHistory history) throws SQLException {
+        String sql = "INSERT INTO report_history (version, date, author, description, earliest_commit) VALUES (?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, history.version());
+            pstmt.setString(2, history.date().toString());
+            pstmt.setString(3, history.author());
+            pstmt.setString(4, history.description());
+            pstmt.setString(5, history.earliestCommit());
+            pstmt.executeUpdate();
+        }
     }
 
     private java.util.Map<String, Integer> parseLanguageBreakdown(String str) {

@@ -8,6 +8,7 @@ import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import dev.grahamhill.model.ContributorStats;
 import dev.grahamhill.model.MeaningfulChangeAnalysis;
 import dev.grahamhill.model.FileChange;
+import dev.grahamhill.model.ReportHistory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -17,7 +18,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -89,10 +90,20 @@ public class ExportService {
         versionTable.addCell("Date");
         versionTable.addCell("Author");
         versionTable.addCell("Description");
-        versionTable.addCell("1.0");
-        versionTable.addCell(java.time.LocalDate.now().toString());
-        versionTable.addCell(System.getProperty("user.name"));
-        versionTable.addCell("Initial Report Generation");
+        
+        if (history != null && !history.isEmpty()) {
+            for (ReportHistory rh : history) {
+                versionTable.addCell(rh.version());
+                versionTable.addCell(rh.date().toString());
+                versionTable.addCell(rh.author());
+                versionTable.addCell(rh.description());
+            }
+        } else {
+            versionTable.addCell("1.0");
+            versionTable.addCell(java.time.LocalDate.now().toString());
+            versionTable.addCell(System.getProperty("user.name"));
+            versionTable.addCell("Initial Report Generation");
+        }
         document.add(versionTable);
 
         document.add(new Paragraph("00.2 Metrics Tooling & Generation Method", sectionFont));

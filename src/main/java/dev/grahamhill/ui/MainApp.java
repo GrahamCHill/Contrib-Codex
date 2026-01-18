@@ -4,6 +4,7 @@ import dev.grahamhill.model.CommitInfo;
 import dev.grahamhill.model.ContributorStats;
 import dev.grahamhill.model.MeaningfulChangeAnalysis;
 import dev.grahamhill.model.FileChange;
+import dev.grahamhill.model.ReportHistory;
 import dev.grahamhill.service.DatabaseService;
 import dev.grahamhill.service.EncryptionService;
 import dev.grahamhill.service.ExportService;
@@ -2195,7 +2196,7 @@ public class MainApp extends Application {
                 String branchList = branches.stream()
                         .map(org.eclipse.jgit.lib.Ref::getName)
                         .map(git.getRepository()::shortenRemoteBranchName)
-                        .filter(name -> !name.equals("HEAD"))
+                        .filter(name -> name != null && !name.equals("HEAD"))
                         .distinct()
                         .collect(Collectors.joining(", "));
                 metadata.put("Repo list + branches", repoDir.getName() + " [" + branchList + "]");
@@ -2224,10 +2225,50 @@ public class MainApp extends Application {
             
             metadata.put("Parameters", "Commit Limit: " + commitLimitSpinner.getValue() + ", Table Limit: " + tableLimitSpinner.getValue());
 
+            // Handle Report History
+            List<ReportHistory> historyList = new ArrayList<>();
+            if (databaseService != null) {
+                try {
+                    String earliestCommit = "unknown";
+                    if (currentMeaningfulAnalysis != null && currentMeaningfulAnalysis.commitRange() != null) {
+                        String range = currentMeaningfulAnalysis.commitRange();
+                        if (range.contains("..")) {
+                            earliestCommit = range.split("\\.\\.")[0];
+                        } else {
+                            earliestCommit = range;
+                        }
+                    }
+
+                    ReportHistory latest = databaseService.getLatestReportForCommit(earliestCommit);
+                    String newVersion = "1.0";
+                    if (latest != null) {
+                        try {
+                            double v = Double.parseDouble(latest.version());
+                            newVersion = String.format("%.1f", v + 1.0);
+                        } catch (NumberFormatException e) {
+                            newVersion = latest.version() + ".1";
+                        }
+                    }
+                    
+                    ReportHistory newEntry = new ReportHistory(
+                        0, 
+                        newVersion, 
+                        java.time.LocalDate.now(), 
+                        System.getProperty("user.name"), 
+                        "generation of report version " + newVersion, 
+                        earliestCommit
+                    );
+                    databaseService.saveReportHistory(newEntry);
+                    historyList = databaseService.getLatestReportHistory(5);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
             exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
                 pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(),
-                aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata);
+                aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);
             
             // Cleanup temp files
             pieFile.delete();
