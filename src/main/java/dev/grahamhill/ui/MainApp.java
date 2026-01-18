@@ -45,6 +45,8 @@ public class MainApp extends Application {
     private ListView<String> commitList;
     private Label initialCommitLabel;
     private TextField repoPathField;
+    private TextField manualVersionField;
+    private TextArea manualDescriptionArea;
     private Spinner<Integer> commitLimitSpinner;
     private Spinner<Integer> tableLimitSpinner;
     private TextArea aliasesArea;
@@ -100,6 +102,11 @@ public class MainApp extends Application {
         mdFolderPathField = new TextField();
         requiredFeaturesPathField = new TextField();
         coverPagePathField = new TextField();
+        manualVersionField = new TextField();
+        manualVersionField.setPromptText("Manual Version (e.g. 1.1 or 2.0)");
+        manualDescriptionArea = new TextArea();
+        manualDescriptionArea.setPromptText("Manual Description for this report generation");
+        manualDescriptionArea.setPrefHeight(100);
         aliasesArea = new TextArea();
 
         try {
@@ -444,8 +451,19 @@ public class MainApp extends Application {
         HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(commitsPerDayChart, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsScrollPane);
+        
+        Tab docControlTab = new Tab("Document Control");
+        docControlTab.setClosable(false);
+        VBox docControlBox = new VBox(10);
+        docControlBox.setPadding(new Insets(10));
+        docControlBox.getChildren().addAll(
+                new Label("Manual Version Override:"), manualVersionField,
+                new Label("Manual Description Override:"), manualDescriptionArea,
+                new Label("(Leave blank to use automatic versioning and description)")
+        );
+        docControlTab.setContent(docControlBox);
 
-        statsTabPane.getTabs().addAll(statsTab, visualsTab);
+        statsTabPane.getTabs().addAll(statsTab, visualsTab, docControlTab);
 
         // Right side: Commits
         VBox rightBox = new VBox(10);
@@ -2241,7 +2259,9 @@ public class MainApp extends Application {
 
                     ReportHistory latest = databaseService.getLatestReportForCommit(earliestCommit);
                     String newVersion = "1.0";
-                    if (latest != null) {
+                    if (manualVersionField != null && !manualVersionField.getText().trim().isEmpty()) {
+                        newVersion = manualVersionField.getText().trim();
+                    } else if (latest != null) {
                         try {
                             double v = Double.parseDouble(latest.version());
                             newVersion = String.format("%.1f", v + 1.0);
@@ -2250,12 +2270,17 @@ public class MainApp extends Application {
                         }
                     }
                     
+                    String description = "generation of report version " + newVersion;
+                    if (manualDescriptionArea != null && !manualDescriptionArea.getText().trim().isEmpty()) {
+                        description = manualDescriptionArea.getText().trim();
+                    }
+
                     ReportHistory newEntry = new ReportHistory(
                         0, 
                         newVersion, 
                         java.time.LocalDate.now(), 
                         System.getProperty("user.name"), 
-                        "generation of report version " + newVersion, 
+                        description, 
                         earliestCommit
                     );
                     databaseService.saveReportHistory(newEntry);
