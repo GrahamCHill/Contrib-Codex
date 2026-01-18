@@ -6,7 +6,8 @@ public record FileChange(
     int deletions,
     String category,
     String changeType, // ADD, MODIFY, DELETE, RENAME, COPY
-    String diff
+    String diff,
+    String creator
 ) {
     public int getTotalChange() {
         return insertions + deletions;

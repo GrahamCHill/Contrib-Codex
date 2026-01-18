@@ -32,6 +32,7 @@ public class DatabaseService {
                     meaningful_change_score REAL DEFAULT 0.0,
                     touched_tests INTEGER DEFAULT 0,
                     generated_files_pushed INTEGER DEFAULT 0,
+                    documentation_lines_added INTEGER DEFAULT 0,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
@@ -79,7 +80,7 @@ public class DatabaseService {
     }
 
     public void saveMetrics(List<ContributorStats> stats) throws SQLException {
-        String sql = "INSERT INTO contributor_metrics (name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO contributor_metrics (name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             for (ContributorStats stat : stats) {
@@ -98,6 +99,7 @@ public class DatabaseService {
                 pstmt.setDouble(13, stat.meaningfulChangeScore());
                 pstmt.setInt(14, stat.touchedTests() ? 1 : 0);
                 pstmt.setInt(15, stat.generatedFilesPushed());
+                pstmt.setInt(16, stat.documentationLinesAdded());
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
@@ -107,7 +109,7 @@ public class DatabaseService {
     public List<ContributorStats> getLatestMetrics() throws SQLException {
         List<ContributorStats> stats = new ArrayList<>();
         // This is a simplified version, just getting the last set of entries
-        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
+        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -127,7 +129,8 @@ public class DatabaseService {
                         rs.getInt("files_deleted_count"),
                         rs.getDouble("meaningful_change_score"),
                         rs.getInt("touched_tests") == 1,
-                        rs.getInt("generated_files_pushed")
+                        rs.getInt("generated_files_pushed"),
+                        rs.getInt("documentation_lines_added")
                 ));
             }
         }

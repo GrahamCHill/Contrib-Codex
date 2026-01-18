@@ -18,7 +18,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String cpdContributorPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -186,8 +186,9 @@ public class ExportService {
         addIndexRow(indexTable, "  - Impact Analysis (Stacked Bar Chart)", "chart2", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Recent Commit Activity (Line Chart)", "chart3", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Daily Activity - Total Impact (Line Chart)", "chart4", currentPage++, normalFont);
-        addIndexRow(indexTable, "  - Daily Activity per Contributor (Line Chart)", "chart5", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Daily Activity per Contributor (Lines Added) (Line Chart)", "chart5", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Commits per Day (Line Chart)", "chart6", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Commits per Day per Contributor (Line Chart)", "chart7", currentPage++, normalFont);
         
         addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage++, normalFont);
         
@@ -528,7 +529,7 @@ public class ExportService {
         document.add(calendarImage);
 
         document.newPage();
-        Paragraph chartTitle5 = new Paragraph("Daily Activity per Contributor:", sectionFont);
+        Paragraph chartTitle5 = new Paragraph("Daily Activity per Contributor (Lines Added):", sectionFont);
         chartTitle5.setSpacingBefore(15f);
         document.add(chartTitle5);
         Image contribImage = Image.getInstance(contribPath);
@@ -544,6 +545,15 @@ public class ExportService {
         cpdImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
+
+        document.newPage();
+        Paragraph chartTitle7 = new Paragraph("Commits per Day per Contributor:", sectionFont);
+        chartTitle7.setSpacingBefore(15f);
+        document.add(chartTitle7);
+        Image cpdContributorImage = Image.getInstance(cpdContributorPath);
+        cpdContributorImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        cpdContributorImage.setAlignment(Image.MIDDLE);
+        document.add(cpdContributorImage);
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);
@@ -763,6 +773,7 @@ public class ExportService {
         int oFEdited = others.stream().mapToInt(ContributorStats::filesEdited).sum();
         int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
         int oGenerated = others.stream().mapToInt(ContributorStats::generatedFilesPushed).sum();
+        int oDocLines = others.stream().mapToInt(ContributorStats::documentationLinesAdded).sum();
 
         double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
 
@@ -773,7 +784,7 @@ public class ExportService {
 
         boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated, oDocLines));
         return top;
     }
 

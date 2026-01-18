@@ -23,6 +23,7 @@ A table containing (if available in METRICS):
 - Total lines deleted
 - Net change (added − deleted)
 - Lines added per commit (total_lines_added / total_commits)
+- Documentation Lines Added
 - Tests touched (Yes/No + count if available)
 - Generated Files Pushed (Count)
 - Primary areas modified (top directories / file types from METRICS)
@@ -37,9 +38,13 @@ Where XX is the score you calculated. This score should take into account commit
 - Explain WHAT areas this contributor worked on (directories + file types).
 - Describe the nature of the work using evidence:
     - features vs refactors vs formatting vs generated outputs
+- **Ownership Analysis (Creator vs Editor)**: 
+    - Identify which files this contributor **created** (look for "Creator: [Name]" in Top Files matching this contributor).
+    - Identify which files this contributor only **edited** but did not create.
+    - If a contributor is the creator of a file, they have higher "foundational ownership". If they only edited it, analyze if they added new functional logic or just minor tweaks.
 - **Functionality Comparison**: Identify the specific functional components or features this contributor is primarily responsible for. Compare their contributions to others to determine who "owns" or created the most functionality in key areas.
 - **Key Man Identification**: Assess if this contributor is a Key Man for specific sections. High total lines committed indicate potential Key Man risk, but look at where all other contributors have committed. If other contributors did not touch a section this contributor owns, they are a Key Man for that section.
-- **Top Files Analysis**: Reference the specific files they touched most frequently or with the most impact. Explain what those files do and how they contribute to the overall project requirements.
+- **Top Files Analysis**: Reference the specific files they touched most frequently or with the most impact. Explain what those files do and how they contribute to the overall project requirements. Mention if they were the **original creator** of these high-impact files.
     - **Change Classification**: For each top file, use the provided **DIFF** to classify the nature of the changes into one of these categories:
         - **Logic**: Substantial changes to business logic, algorithms, or core functionality.
         - **Refactor**: Restructuring existing code without changing behavior (e.g., renaming, extracting methods).

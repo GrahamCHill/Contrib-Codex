@@ -69,8 +69,8 @@ public class MainApp extends Application {
     private StackedBarChart<String, Number> impactBarChart;
     private LineChart<String, Number> activityLineChart;
     private LineChart<String, Number> calendarActivityChart;
-    private BarChart<String, Number> contributorActivityChart;
-    private BarChart<String, Number> commitsPerDayChart;
+    private LineChart<String, Number> contributorActivityChart;
+    private LineChart<String, Number> commitsPerDayChart;
     private LineChart<String, Number> cpdPerContributorChart;
 
     private List<ContributorStats> currentStats;
@@ -395,8 +395,8 @@ public class MainApp extends Application {
 
         CategoryAxis caxAxis = new CategoryAxis();
         NumberAxis cayAxis = new NumberAxis();
-        contributorActivityChart = new BarChart<>(caxAxis, cayAxis);
-        contributorActivityChart.setTitle("Daily Activity per Contributor");
+        contributorActivityChart = new LineChart<>(caxAxis, cayAxis);
+        contributorActivityChart.setTitle("Daily Activity per Contributor (Lines Added)");
         contributorActivityChart.setMinWidth(1770);
         contributorActivityChart.setPrefWidth(2336);
         contributorActivityChart.setMinHeight(1040);
@@ -411,7 +411,7 @@ public class MainApp extends Application {
 
         CategoryAxis cpdXAxis = new CategoryAxis();
         NumberAxis cpdYAxis = new NumberAxis();
-        commitsPerDayChart = new BarChart<>(cpdXAxis, cpdYAxis);
+        commitsPerDayChart = new LineChart<>(cpdXAxis, cpdYAxis);
         commitsPerDayChart.setTitle("Commits per Day");
         commitsPerDayChart.setMinWidth(1770);
         commitsPerDayChart.setPrefWidth(2336);
@@ -451,13 +451,14 @@ public class MainApp extends Application {
         contributorActivityChart.setPrefHeight(1040);
         commitsPerDayChart.setPrefHeight(1040);
 
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart);
+        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart, cpdPerContributorChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(commitsPerDayChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(cpdPerContributorChart, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsScrollPane);
         
         Tab docControlTab = new Tab("Document Control");
@@ -501,8 +502,10 @@ public class MainApp extends Application {
                 "   - If the provided METRICS labels contradict the numbers, explicitly flag it as: \"Metrics inconsistency detected\" and correct the ranking using the numeric values.\n" +
                 "3) Do not repeat the same points across sections. Prefer dense, high-signal writing.\n" +
                 "4) HARSHNESS ON LOW-VALUE WORK: In sections discussing contributor responsibility and value added, be direct and critical. If a contributor's work is primarily frontend styling or cosmetic, state that clearly as low functional impact.\n" +
-                "5) MEANINGFUL SCORE PENALTY: Heavily punish (lower) the 'Meaningful Score' if a contributor pushes build or auto-generated files (e.g., dist/, build/, *.map, minified, lockfiles).\n" +
-                "6) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
+                "5) BACKEND VS FRONTEND VALUE: Explicitly weight backend logic as MORE VALUABLE than frontend styling. Backend handles the core logic and system functionality, whereas frontend styling is primarily aesthetic.\n" +
+                "6) DOCUMENTATION REVIEW: Feed the provided 'Documentation Lines Added' metric to assess who is contributing to the project's documentation. Review and state who is NOT contributing to documentation.\n" +
+                "7) MEANINGFUL SCORE PENALTY: Heavily punish (lower) the 'Meaningful Score' if a contributor pushes build or auto-generated files (e.g., dist/, build/, *.map, minified, lockfiles).\n" +
+                "8) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
                 "\n" +
                 "RISK MODEL (Primary: Lines Added per Commit, Secondary: Other Metrics):\n" +
                 "- PRIMARY RISK METRIC: Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
@@ -575,7 +578,9 @@ public class MainApp extends Application {
                 "   Then provide:\n" +
                 "   - impact summary (what areas they changed)\n" +
                 "   - MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., \"update\", \"fix\").\n" +
-                "   - FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files.\n" +
+                "   - OWNERSHIP ANALYSIS: Use the 'Creator' information in Top Files to identify if a contributor created a file or only edited it. Foundational ownership (creation) is a strong signal of expertise in that module.\n" +
+                "   - FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files. Weight backend logic as MORE VALUABLE than frontend styling.\n" +
+                "   - DOCUMENTATION CONTRIBUTION: Analyze the 'Documentation Lines Added' metric and comment on the contributor's effort towards project documentation. Explicitly state if they are NOT contributing to documentation.\n" +
                 "   - MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section.\n" +
                 "   - code quality signals (tests, granularity, churn, refactoring activity)\n" +
                 "   - risk rating + justification (considering refactoring as a positive factor)\n" +
@@ -1060,7 +1065,7 @@ public class MainApp extends Application {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toSet());
-        String structure = gitService.getProjectStructure(repoDir, ignoredFolders);
+        String structure = gitService.getProjectStructure(repoDir, ignoredFolders, aliasesMap());
 
         List<CommitInfo> allCommits = null;
         Map<String, List<FileChange>> contributorFiles = null;
@@ -1072,15 +1077,16 @@ public class MainApp extends Application {
                     .limit(commitLimit)
                     .toList();
 
-            int topFileLimit = selectedProvider.equals("Groq") ? 5 : 10;
+            int topFileLimit = selectedProvider.equals("Groq") ? 3 : 5;
             contributorFiles = gitService.getTopFilesPerContributor(repoDir, topFileLimit, aliasesMap());
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         String reqFeatures = readRequiredFeatures();
-        String baseMetrics = llmService.buildMetricsText(repoDir, currentStats, currentMeaningfulAnalysis, 
-                                                        allCommits, contributorFiles, structure, reqFeatures, emailOverrides);
+        
+        final List<CommitInfo> finalAllCommits = allCommits;
+        final Map<String, List<FileChange>> finalContributorFiles = contributorFiles;
 
         final String finalUrl = url;
         final String finalApiKey = apiKey;
@@ -1097,6 +1103,29 @@ public class MainApp extends Application {
                         String formattedTitle = llmService.formatSectionTitle(sectionTitle);
                         String sectionInstructions = entry.getValue();
                         
+                        boolean needsDiffs = entry.getKey().toLowerCase().contains("contributor_deep_dive") || 
+                                           entry.getKey().toLowerCase().contains("requirements_and_alignment");
+                        
+                        // When processing a specific section, we can further reduce the token load
+                        // by only sending the most relevant metrics. For now, we selectively include diffs.
+                        
+                        // Aggressively limit commit history for sections that don't need the full timeline
+                        int sectionCommitLimit = 0; // 0 means no additional limit beyond the initial fetch
+                        if (entry.getKey().toLowerCase().contains("introduction") || 
+                            entry.getKey().toLowerCase().contains("methodology") ||
+                            entry.getKey().toLowerCase().contains("bus_factor") ||
+                            entry.getKey().toLowerCase().contains("conclusion")) {
+                            sectionCommitLimit = 50; // These sections only need recent context
+                        } else if (entry.getKey().toLowerCase().contains("review_hygiene")) {
+                            sectionCommitLimit = 100;
+                        }
+                        
+                        String sectionMetrics = llmService.buildMetricsText(repoDir, currentStats, currentMeaningfulAnalysis, 
+                                                        finalAllCommits, finalContributorFiles, structure, reqFeatures, emailOverrides, needsDiffs, sectionCommitLimit);
+                        
+                        // Limit commit history length for specific sections if still too large
+                        // but buildMetricsText currently includes all commits from finalAllCommits.
+                        
                         String basePrompt = userPromptArea.getText() + "\n\n" + 
                                        "FOCUS SECTION: " + formattedTitle + "\n" +
                                        "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
@@ -1106,7 +1135,7 @@ public class MainApp extends Application {
                                        "HEADER NESTING: The application will prepend a top-level header (# " + formattedTitle + ") for this section. " +
                                        "Ensure all headers in your response use at least TWO hashes (##) so they are correctly nested under the section header.";
                         
-                        String fullPrompt = basePrompt + "\n\n" + baseMetrics;
+                        String fullPrompt = basePrompt + "\n\n" + sectionMetrics;
                         String sectionResponse = llmService.callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), fullPrompt);
                         
                         sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
@@ -1127,6 +1156,8 @@ public class MainApp extends Application {
                         }
                     }
                 } else {
+                    String baseMetrics = llmService.buildMetricsText(repoDir, currentStats, currentMeaningfulAnalysis, 
+                                                                    finalAllCommits, finalContributorFiles, structure, reqFeatures, emailOverrides, true, 0);
                     String response = llmService.callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + baseMetrics);
                     response = response.replaceAll("```markdown", "").replaceAll("```", "").trim();
                     fullReport.append(response).append("\n\n");
@@ -1253,10 +1284,12 @@ public class MainApp extends Application {
                     "- Analyze the repository structure to identify core backend, frontend, and infrastructure components.\n" +
                     "- HIGH-LEVEL CONTRIBUTOR RESPONSIBILITIES: Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor based on their directory/file activity.\n" +
                     "- **Key Man Risk Assessment**: Evaluate if any contributor is a Key Man (sole/primary owner of core project sections). High total lines indicate potential risk, but sole ownership of sections confirms Key Man status.\n" +
+                    "- **Ownership Analysis**: Distinguish between contributors who **created** critical files versus those who only **edited** them. File creation indicates deeper foundational knowledge.\n" +
                     "- Reference specific directory patterns to explain the architectural distribution of work.\n" +
                     "- SOFTWARE ARCHITECTURE & DESIGN: Analyze the directory structure and file distribution. \n" +
                     "  Comment on the overall design patterns (e.g., MVC, Microservices, Layered), tech stack usage, \n" +
-                    "  and assess the long-term maintainability of these choices.");
+                    "  and assess the long-term maintainability of these choices.\n" +
+                    "- **Documentation Review**: Review the provided 'Documentation Lines Added' metric for all contributors and explicitly identify who is NOT contributing to the project's documentation.");
 
                 java.nio.file.Files.writeString(new File(folder, "02_Methodology.md").toPath(),
                     "# Analysis Methodology\n" +
@@ -1281,7 +1314,8 @@ public class MainApp extends Application {
                     "- Do NOT invent or assume names; attribute impact ONLY to the names provided in the metrics.\n" +
                     "- **Key Man Identification**: Assess if this contributor is a Key Man for specific sections. High total lines committed indicate potential Key Man risk, but look at where all other contributors have committed. If other contributors did not touch a section this contributor owns, they are a Key Man for that section.\n" +
                     "- MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., \"update\", \"fix\").\n" +
-                    "- FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files.\n" +
+                    "- FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files. **Weight backend logic as MORE VALUABLE than frontend styling.**\n" +
+                    "- **Documentation Contribution**: Analyze the 'Documentation Lines Added' metric and comment on the contributor's effort towards project documentation. Explicitly state if they are NOT contributing to documentation.\n" +
                     "- MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section. **Heavily penalize this score if they pushed generated/build files.**\n" +
                     "- Identify their 'Most Valuable Contributor' potential based on iterative development rather than just bulk LOC.");
 
@@ -1479,7 +1513,7 @@ public class MainApp extends Application {
                         return new ContributorStats(s.name(), emailOverrides.get(s.name()), s.gender(), 
                             s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                             s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
-                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore(), s.touchedTests(), s.generatedFilesPushed());
+                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore(), s.touchedTests(), s.generatedFilesPushed(), s.documentationLinesAdded());
                     }
                     return s;
                 }).collect(Collectors.toList());
@@ -1537,6 +1571,7 @@ public class MainApp extends Application {
         int oFEdited = others.stream().mapToInt(ContributorStats::filesEdited).sum();
         int oFDeleted = others.stream().mapToInt(ContributorStats::filesDeletedCount).sum();
         int oGenerated = others.stream().mapToInt(ContributorStats::generatedFilesPushed).sum();
+        int oDocLines = others.stream().mapToInt(ContributorStats::documentationLinesAdded).sum();
         double avgAi = others.stream().mapToDouble(ContributorStats::averageAiProbability).average().orElse(0.0);
 
         double avgMeaningful = others.stream().mapToDouble(ContributorStats::meaningfulChangeScore).average().orElse(0.0);
@@ -1546,7 +1581,7 @@ public class MainApp extends Application {
 
         boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated, oDocLines));
         return top;
     }
 
@@ -1647,6 +1682,7 @@ public class MainApp extends Application {
             saveNodeSnapshot(calendarActivityChart, calendarFile);
             saveNodeSnapshot(contributorActivityChart, contribFile);
             saveNodeSnapshot(commitsPerDayChart, cpdFile);
+            saveNodeSnapshot(cpdPerContributorChart, new File("cpd_per_contributor.png"));
             
             String aiReport = null;
             if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
@@ -1807,7 +1843,7 @@ public class MainApp extends Application {
 
             exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
                 pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
-                calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(),
+                calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), new File("cpd_per_contributor.png").getAbsolutePath(),
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);
             
             // Cleanup temp files
@@ -1817,6 +1853,7 @@ public class MainApp extends Application {
             calendarFile.delete();
             contribFile.delete();
             cpdFile.delete();
+            new File("cpd_per_contributor.png").delete();
 
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {
@@ -1856,7 +1893,7 @@ public class MainApp extends Application {
                 return new ContributorStats(s.name(), s.email(), s.gender(), 
                     s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                     s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
-                    s.filesEdited(), s.filesDeletedCount(), aiScore, s.touchedTests(), s.generatedFilesPushed());
+                    s.filesEdited(), s.filesDeletedCount(), aiScore, s.touchedTests(), s.generatedFilesPushed(), s.documentationLinesAdded());
             }
             return s;
         }).collect(Collectors.toList());

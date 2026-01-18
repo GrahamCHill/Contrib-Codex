@@ -12,7 +12,7 @@ public class ChartManager {
 
     public void updateCharts(PieChart commitPieChart, StackedBarChart<String, Number> impactBarChart, 
                              LineChart<String, Number> activityLineChart, LineChart<String, Number> calendarActivityChart, 
-                             BarChart<String, Number> contributorActivityChart, BarChart<String, Number> commitsPerDayChart,
+                             LineChart<String, Number> contributorActivityChart, LineChart<String, Number> commitsPerDayChart,
                              List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         
         // Limited to Top 5 for visuals
@@ -111,44 +111,83 @@ public class ChartManager {
         updateCpdPerContributorChart(commitsPerDayChart, stats, recentCommits);
     }
 
-    public void updateContributorActivityChart(BarChart<String, Number> chart, List<ContributorStats> stats, List<CommitInfo> recentCommits) {
+    public void updateContributorActivityChart(LineChart<String, Number> chart, List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         chart.getData().clear();
         chart.setAnimated(false);
-        XYChart.Series<String, Number> series = new XYChart.Series<>();
-        series.setName("Avg Lines Per Commit");
 
-        List<ContributorStats> sorted = stats.stream()
-                .sorted(Comparator.comparingDouble((ContributorStats s) -> 
-                    s.commitCount() == 0 ? 0 : (double) s.linesAdded() / s.commitCount()).reversed())
-                .limit(10)
-                .toList();
+        if (recentCommits == null || recentCommits.isEmpty()) return;
 
-        for (ContributorStats s : sorted) {
-            double avg = s.commitCount() == 0 ? 0 : (double) s.linesAdded() / s.commitCount();
-            series.getData().add(new XYChart.Data<>(sanitizeName(s.name()), avg));
+        // Group lines added by date and author
+        Map<String, TreeMap<java.time.LocalDate, Integer>> contributorDailyLines = new HashMap<>();
+        
+        // Find date range
+        java.time.LocalDate firstDate = null;
+        java.time.LocalDate lastDate = null;
+
+        for (CommitInfo ci : recentCommits) {
+            if (ci.isMerge()) continue;
+            java.time.LocalDate date = ci.timestamp().toLocalDate();
+            if (firstDate == null || date.isBefore(firstDate)) firstDate = date;
+            if (lastDate == null || date.isAfter(lastDate)) lastDate = date;
+
+            String authorName = sanitizeName(ci.authorName());
+            contributorDailyLines.computeIfAbsent(authorName, k -> new TreeMap<>())
+                                 .merge(date, ci.linesAdded(), Integer::sum);
         }
 
-        chart.getData().add(series);
-        addTooltips(chart);
+        if (firstDate == null) return;
+
+        // Fill gaps with zeros and create series for top contributors
+        List<String> topContributors = stats.stream()
+                .limit(5)
+                .map(s -> sanitizeName(s.name()))
+                .collect(Collectors.toList());
+
+        for (String author : topContributors) {
+            XYChart.Series<String, Number> series = new XYChart.Series<>();
+            series.setName(author);
+            
+            TreeMap<java.time.LocalDate, Integer> dailyLines = contributorDailyLines.getOrDefault(author, new TreeMap<>());
+            
+            java.time.LocalDate current = firstDate;
+            while (!current.isAfter(lastDate)) {
+                int lines = dailyLines.getOrDefault(current, 0);
+                series.getData().add(new XYChart.Data<>(current.toString(), lines));
+                current = current.plusDays(1);
+            }
+            chart.getData().add(series);
+        }
     }
 
-    public void updateCpdPerContributorChart(BarChart<String, Number> chart, List<ContributorStats> stats, List<CommitInfo> recentCommits) {
+    public void updateCpdPerContributorChart(LineChart<String, Number> chart, List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         chart.getData().clear();
         chart.setAnimated(false);
         XYChart.Series<String, Number> series = new XYChart.Series<>();
-        series.setName("AI Probability %");
+        series.setName("Commits Per Day");
 
-        List<ContributorStats> sorted = stats.stream()
-                .sorted(Comparator.comparingDouble(ContributorStats::averageAiProbability).reversed())
-                .limit(10)
-                .toList();
-
-        for (ContributorStats s : sorted) {
-            series.getData().add(new XYChart.Data<>(sanitizeName(s.name()), s.averageAiProbability() * 100));
+        TreeMap<java.time.LocalDate, Integer> dailyCommits = new TreeMap<>();
+        if (recentCommits != null) {
+            for (CommitInfo ci : recentCommits) {
+                java.time.LocalDate date = ci.timestamp().toLocalDate();
+                dailyCommits.merge(date, 1, Integer::sum);
+            }
         }
 
+        if (!dailyCommits.isEmpty()) {
+            java.time.LocalDate firstDate = dailyCommits.firstKey();
+            java.time.LocalDate lastDate = dailyCommits.lastKey();
+            java.time.LocalDate current = firstDate;
+            while (!current.isAfter(lastDate)) {
+                dailyCommits.putIfAbsent(current, 0);
+                current = current.plusDays(1);
+            }
+        }
+
+        dailyCommits.forEach((date, count) -> {
+            series.getData().add(new XYChart.Data<>(date.toString(), count));
+        });
+
         chart.getData().add(series);
-        addTooltips(chart);
     }
 
     private String sanitizeName(String name) {
@@ -159,11 +198,14 @@ public class ChartManager {
         return name;
     }
 
-    private void addTooltips(BarChart<String, Number> chart) {
-        for (XYChart.Series<String, Number> s : chart.getData()) {
-            for (XYChart.Data<String, Number> d : s.getData()) {
-                if (d.getNode() != null) {
-                    Tooltip.install(d.getNode(), new Tooltip(s.getName() + ": " + String.format("%.1f", d.getYValue().doubleValue())));
+    private void addTooltips(Chart chart) {
+        if (chart instanceof XYChart<?, ?> xyChart) {
+            for (Object sObj : xyChart.getData()) {
+                XYChart.Series<String, Number> s = (XYChart.Series<String, Number>) sObj;
+                for (XYChart.Data<String, Number> d : s.getData()) {
+                    if (d.getNode() != null) {
+                        Tooltip.install(d.getNode(), new Tooltip(s.getName() + ": " + String.format("%.1f", d.getYValue().doubleValue())));
+                    }
                 }
             }
         }

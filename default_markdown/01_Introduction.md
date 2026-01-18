@@ -18,10 +18,12 @@ Provide 5–10 bullets covering:
 
 ### 2) High-Level Contributor Responsibilities & Value Added
 Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor. Be CRITICAL and direct. If a contributor's work appears to be low-value or purely cosmetic, state that clearly.
+**BACKEND VS FRONTEND VALUE**: Explicitly weight backend logic as MORE VALUABLE than frontend styling. Backend handles the core logic and system functionality, whereas frontend styling is primarily aesthetic.
 For each major contributor:
 - Identify their primary area of responsibility (e.g., core logic, frontend components, infrastructure, testing) based on the directories and files they touched most.
 - Describe the high-level value they added to the project (e.g., "established the project's architectural foundation", "drove the implementation of user-facing features", "ensured system stability through comprehensive testing").
 - **HARSHNESS RULE**: If it appears all an individual did was rewrite frontend stylings (CSS, HTML, simple UI layout changes) without contributing to functional logic, you MUST state that explicitly and call out the low impact on system functionality.
+- **Documentation Review**: Review the provided 'Documentation Lines Added' metric and explicitly state if this contributor is NOT contributing to the project's documentation.
 - This should be a concise, qualitative summary based on the quantitative metrics.
 - DO NOT assign future priorities here, only summarize past contributions.
 

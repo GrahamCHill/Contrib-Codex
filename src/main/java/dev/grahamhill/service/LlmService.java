@@ -107,6 +107,19 @@ public class LlmService {
                         case 'r': sb.append('\r'); break;
                         case '\\': sb.append('\\'); break;
                         case '\"': sb.append('\"'); break;
+                        case 'u':
+                            if (i + 4 < content.length()) {
+                                String hex = content.substring(i + 1, i + 5);
+                                try {
+                                    sb.append((char) Integer.parseInt(hex, 16));
+                                    i += 4;
+                                } catch (NumberFormatException e) {
+                                    sb.append('u');
+                                }
+                            } else {
+                                sb.append('u');
+                            }
+                            break;
                         default: sb.append(c);
                     }
                     escaped = false;
@@ -132,6 +145,33 @@ public class LlmService {
             String projectStructure,
             String requiredFeatures,
             Map<String, String> emailOverrides) {
+        return buildMetricsText(repoDir, stats, meaningfulAnalysis, allCommits, contributorFiles, projectStructure, requiredFeatures, emailOverrides, false, 0);
+    }
+
+    public String buildMetricsText(
+            File repoDir,
+            List<ContributorStats> stats,
+            MeaningfulChangeAnalysis meaningfulAnalysis,
+            List<CommitInfo> allCommits,
+            Map<String, List<FileChange>> contributorFiles,
+            String projectStructure,
+            String requiredFeatures,
+            Map<String, String> emailOverrides,
+            boolean includeDiffs) {
+        return buildMetricsText(repoDir, stats, meaningfulAnalysis, allCommits, contributorFiles, projectStructure, requiredFeatures, emailOverrides, includeDiffs, 0);
+    }
+
+    public String buildMetricsText(
+            File repoDir,
+            List<ContributorStats> stats,
+            MeaningfulChangeAnalysis meaningfulAnalysis,
+            List<CommitInfo> allCommits,
+            Map<String, List<FileChange>> contributorFiles,
+            String projectStructure,
+            String requiredFeatures,
+            Map<String, String> emailOverrides,
+            boolean includeDiffs,
+            int commitLimit) {
         
         StringBuilder metricsText = new StringBuilder("METRICS:\n");
         metricsText.append(projectStructure).append("\n");
@@ -148,8 +188,8 @@ public class LlmService {
             metricsText.append(String.format("  Stats: %d commits, %d merges, +%d/-%d lines, %d new/%d edited/%d deleted files\n",
                 s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                 s.filesAdded(), s.filesEdited(), s.filesDeletedCount()));
-            metricsText.append(String.format("  Risk Profile: AI Probability %.1f%%, Meaningful Score %.1f/100, Generated Files Pushed: %d%s\n",
-                s.averageAiProbability() * 100, s.meaningfulChangeScore(), s.generatedFilesPushed(), hasTests ? " [INCLUDES TESTS]" : ""));
+            metricsText.append(String.format("  Risk Profile: AI Probability %.1f%%, Meaningful Score %.1f/100, Generated Files Pushed: %d, Documentation Lines Added: %d%s\n",
+                s.averageAiProbability() * 100, s.meaningfulChangeScore(), s.generatedFilesPushed(), s.documentationLinesAdded(), hasTests ? " [INCLUDES TESTS]" : ""));
             double linesPerCommit = (double) s.linesAdded() / (s.commitCount() > 0 ? s.commitCount() : 1);
             metricsText.append(String.format("  Average Lines Added per Commit: %.1f\n", linesPerCommit));
             metricsText.append("  Language breakdown: ").append(s.languageBreakdown()).append("\n");
@@ -175,13 +215,15 @@ public class LlmService {
 
             metricsText.append("Top 50 Impactful Files:\n");
             meaningfulAnalysis.topChangedFiles().stream().limit(50).forEach(f -> {
-                metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType()));
+                metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s, Creator: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType(), f.creator()));
             });
         }
 
         if (allCommits != null) {
-            metricsText.append(String.format("\nCOMPLETE COMMIT HISTORY (LATEST %d COMMITS, INCLUDING MERGED BRANCHES, LATEST FIRST):\n", allCommits.size()));
-            for (CommitInfo ci : allCommits) {
+            int actualLimit = commitLimit > 0 ? Math.min(allCommits.size(), commitLimit) : allCommits.size();
+            metricsText.append(String.format("\nCOMMIT HISTORY (LATEST %d COMMITS, INCLUDING MERGED BRANCHES, LATEST FIRST):\n", actualLimit));
+            for (int i = 0; i < actualLimit; i++) {
+                CommitInfo ci = allCommits.get(i);
                 String mergeMarker = ci.isMerge() ? " [MERGE]" : "";
                 metricsText.append(String.format("[%s]%s %s <%s> [%s]: %s (%s) +%d/-%d l, %d n/%d e/%d d f, AI: %.0f%%\n",
                     ci.id(), mergeMarker, ci.authorName(), ci.branch(), ci.timestamp().toString(), ci.message(), formatLanguages(ci.languageBreakdown()),
@@ -195,9 +237,14 @@ public class LlmService {
             contributorFiles.forEach((contributor, files) -> {
                 metricsText.append(String.format("Contributor: %s\n", contributor));
                 files.forEach(f -> {
-                    metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType()));
-                    if (f.diff() != null && !f.diff().isEmpty()) {
-                        metricsText.append("    DIFF:\n").append(f.diff().indent(6)).append("\n");
+                    metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s, Creator: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType(), f.creator()));
+                    if (includeDiffs && f.diff() != null && !f.diff().isEmpty()) {
+                        String diffContent = f.diff();
+                        // Additional safety truncation for individual file diffs in the metrics text
+                        if (diffContent.length() > 2000) {
+                            diffContent = diffContent.substring(0, 2000) + "... [diff truncated in metrics]";
+                        }
+                        metricsText.append("    DIFF:\n").append(diffContent.indent(6)).append("\n");
                     }
                 });
             });

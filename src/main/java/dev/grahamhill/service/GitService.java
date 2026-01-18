@@ -24,17 +24,44 @@ import java.util.stream.Collectors;
 
 public class GitService {
 
-    public String getProjectStructure(File repoPath, Set<String> ignoredFolders) {
+    public String getProjectStructure(File repoPath, Set<String> ignoredFolders, Map<String, String> aliases) {
         StringBuilder sb = new StringBuilder();
-        sb.append("PROJECT STRUCTURE (with creation commit IDs):\n");
+        sb.append("PROJECT STRUCTURE (with creation commit IDs and Creators):\n");
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             Map<String, String> creationCommits = getFileCreationCommits(git);
-            listDirectory(repoPath, repoPath, "", sb, ignoredFolders, 0, creationCommits);
+            Map<String, String> creators = getFileCreators(git, aliases);
+            listDirectory(repoPath, repoPath, "", sb, ignoredFolders, 0, creationCommits, creators);
         } catch (Exception e) {
             sb.append("Error reading project structure: ").append(e.getMessage());
         }
         return sb.toString();
+    }
+
+    private Map<String, String> getFileCreators(Git git, Map<String, String> aliases) throws Exception {
+        Map<String, String> map = new HashMap<>();
+        Iterable<RevCommit> commits = git.log().all().call();
+        List<RevCommit> commitList = new ArrayList<>();
+        commits.forEach(commitList::add);
+        Collections.reverse(commitList); // Oldest first
+
+        try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+            df.setRepository(git.getRepository());
+            for (RevCommit commit : commitList) {
+                RevCommit parent = commit.getParentCount() > 0 ? commit.getParent(0) : null;
+                List<DiffEntry> diffs = df.scan(parent == null ? null : parent.getTree(), commit.getTree());
+                for (DiffEntry entry : diffs) {
+                    if (entry.getChangeType() == DiffEntry.ChangeType.ADD) {
+                        String path = entry.getNewPath();
+                        String authorName = commit.getAuthorIdent().getName();
+                        String authorEmail = commit.getAuthorIdent().getEmailAddress();
+                        String targetName = aliases != null ? aliases.getOrDefault(authorEmail, authorName) : authorName;
+                        map.putIfAbsent(path, targetName);
+                    }
+                }
+            }
+        }
+        return map;
     }
 
     private Map<String, String> getFileCreationCommits(Git git) throws Exception {
@@ -60,7 +87,7 @@ public class GitService {
         return map;
     }
 
-    private void listDirectory(File baseDir, File currentDir, String indent, StringBuilder sb, Set<String> ignoredFolders, int depth, Map<String, String> creationCommits) {
+    private void listDirectory(File baseDir, File currentDir, String indent, StringBuilder sb, Set<String> ignoredFolders, int depth, Map<String, String> creationCommits, Map<String, String> creators) {
         if (depth > 5) return; // Limit depth to avoid too much context
         File[] files = currentDir.listFiles();
         if (files == null) return;
@@ -78,15 +105,16 @@ public class GitService {
             
             String relativePath = baseDir.toPath().relativize(file.toPath()).toString().replace("\\", "/");
             String commitId = creationCommits.getOrDefault(relativePath, "Unknown");
+            String creator = creators.getOrDefault(relativePath, "Unknown");
 
             sb.append(indent).append(file.isDirectory() ? "[D] " : "[F] ").append(file.getName());
             if (!file.isDirectory()) {
-                sb.append(" (Created in: ").append(commitId).append(")");
+                sb.append(" (Created in: ").append(commitId).append(" by ").append(creator).append(")");
             }
             sb.append("\n");
 
             if (file.isDirectory()) {
-                listDirectory(baseDir, file, indent + "  ", sb, ignoredFolders, depth + 1, creationCommits);
+                listDirectory(baseDir, file, indent + "  ", sb, ignoredFolders, depth + 1, creationCommits, creators);
             }
         }
     }
@@ -133,6 +161,7 @@ public class GitService {
 
             Map<String, MeaningfulChangeAnalysis.CategoryMetrics> categoryMap = new HashMap<>();
             initializeCategories(categoryMap);
+            Map<String, String> creators = getFileCreators(git, null);
 
             try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE);
                  DiffFormatter dfWs = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
@@ -169,7 +198,7 @@ public class GitService {
                     totalWsIns += (ins - insWs);
                     totalWsDel += (del - delWs);
 
-                    allFileChanges.add(new FileChange(path, ins, del, category, entry.getChangeType().name(), ""));
+                    allFileChanges.add(new FileChange(path, ins, del, category, entry.getChangeType().name(), "", creators.getOrDefault(path, "Unknown")));
                     
                     MeaningfulChangeAnalysis.CategoryMetrics cm = categoryMap.get(category);
                     categoryMap.put(category, new MeaningfulChangeAnalysis.CategoryMetrics(
@@ -472,6 +501,9 @@ public class GitService {
                     if ("Generated/Artifacts".equals(category) || "Sourcemaps/Minified".equals(category)) {
                         builder.generatedFilesPushed++;
                     }
+                    if ("Documentation".equals(category)) {
+                        // We'll calculate documentation lines later in the loop where lines are added
+                    }
                     
                     if (lowerPath.contains("package-lock.json") || lowerPath.contains("yarn.lock") || lowerPath.contains("pnpm-lock.yaml")) {
                         continue;
@@ -515,6 +547,11 @@ public class GitService {
                     int deleted = edit.getEndA() - edit.getBeginA();
                     builder.linesAdded += added;
                     builder.linesDeleted += deleted;
+
+                    String category = categorizePath(path, repository);
+                    if ("Documentation".equals(category)) {
+                        builder.documentationLinesAdded += added;
+                    }
 
                     // Detect blank lines
                     try {
@@ -785,6 +822,7 @@ public class GitService {
             Repository repository = git.getRepository();
             Iterable<RevCommit> commits = git.log().all().call();
             Map<String, Map<String, FileChange>> contributorFileChanges = new HashMap<>();
+            Map<String, String> creators = getFileCreators(git, aliases);
             Set<String> processedCommits = new HashSet<>();
 
             for (RevCommit commit : commits) {
@@ -828,15 +866,20 @@ public class GitService {
                             }
                         } catch (Exception e) {}
 
+                        // Keep diff reasonably sized
+                        if (currentDiff.length() > 2000) {
+                            currentDiff = currentDiff.substring(0, 2000) + "... [diff truncated]";
+                        }
+
                         if (existing == null) {
-                            fileMap.put(path, new FileChange(path, ins, del, categorizePath(path), entry.getChangeType().name(), currentDiff));
+                            fileMap.put(path, new FileChange(path, ins, del, categorizePath(path), entry.getChangeType().name(), currentDiff, creators.getOrDefault(path, "Unknown")));
                         } else {
                             String combinedDiff = existing.diff() + "\n" + currentDiff;
-                            // Keep diff reasonably sized
-                            if (combinedDiff.length() > 5000) {
-                                combinedDiff = combinedDiff.substring(0, 5000) + "... [diff truncated]";
+                            // Keep combined diff reasonably sized
+                            if (combinedDiff.length() > 3000) {
+                                combinedDiff = combinedDiff.substring(0, 3000) + "... [diff truncated]";
                             }
-                            fileMap.put(path, new FileChange(path, existing.insertions() + ins, existing.deletions() + del, existing.category(), existing.changeType(), combinedDiff));
+                            fileMap.put(path, new FileChange(path, existing.insertions() + ins, existing.deletions() + del, existing.category(), existing.changeType(), combinedDiff, existing.creator()));
                         }
                     }
                 }
@@ -933,6 +976,7 @@ public class GitService {
         int blankLinesDeleted;
         int meaninglessCommits;
         int generatedFilesPushed;
+        int documentationLinesAdded;
         Map<String, Integer> languageBreakdown = new HashMap<>();
         double totalAiProbability;
         int filesAdded;
@@ -947,7 +991,7 @@ public class GitService {
         }
 
         ContributorStats build(double meaningfulChangeScore) {
-            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore, touchedTests, generatedFilesPushed);
+            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore, touchedTests, generatedFilesPushed, documentationLinesAdded);
         }
     }
 }
