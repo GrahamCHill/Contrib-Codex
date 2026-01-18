@@ -70,7 +70,6 @@ public class MainApp extends Application {
     private LineChart<String, Number> activityLineChart;
     private LineChart<String, Number> calendarActivityChart;
     private LineChart<String, Number> contributorActivityChart;
-    private LineChart<String, Number> commitsPerDayChart;
     private LineChart<String, Number> cpdPerContributorChart;
 
     private List<ContributorStats> currentStats;
@@ -409,26 +408,10 @@ public class MainApp extends Application {
         caxAxis.setTickLength(10);
         cayAxis.setLabel("Lines Added");
 
-        CategoryAxis cpdXAxis = new CategoryAxis();
-        NumberAxis cpdYAxis = new NumberAxis();
-        commitsPerDayChart = new LineChart<>(cpdXAxis, cpdYAxis);
-        commitsPerDayChart.setTitle("Commits per Day");
-        commitsPerDayChart.setMinWidth(1770);
-        commitsPerDayChart.setPrefWidth(2336);
-        commitsPerDayChart.setMinHeight(1040);
-        commitsPerDayChart.setPrefHeight(1040);
-        commitsPerDayChart.setLegendSide(javafx.geometry.Side.RIGHT);
-        commitsPerDayChart.setPadding(new Insets(0, 100, 0, 0));
-        cpdXAxis.setLabel("Date");
-        cpdXAxis.setTickLabelRotation(45);
-        cpdXAxis.setTickLabelGap(20);
-        cpdXAxis.setTickLength(10);
-        cpdYAxis.setLabel("Commit Count");
-
         CategoryAxis cpdPerXAxis = new CategoryAxis();
         NumberAxis cpdPerYAxis = new NumberAxis();
         cpdPerContributorChart = new LineChart<>(cpdPerXAxis, cpdPerYAxis);
-        cpdPerContributorChart.setTitle("Commits per Day per Contributor");
+        cpdPerContributorChart.setTitle("Commits per Day & per Contributor");
         cpdPerContributorChart.setMinWidth(1770);
         cpdPerContributorChart.setPrefWidth(2336);
         cpdPerContributorChart.setMinHeight(1040);
@@ -449,15 +432,14 @@ public class MainApp extends Application {
         activityLineChart.setPrefHeight(1040);
         calendarActivityChart.setPrefHeight(1040);
         contributorActivityChart.setPrefHeight(1040);
-        commitsPerDayChart.setPrefHeight(1040);
+        cpdPerContributorChart.setPrefHeight(1040);
 
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart, cpdPerContributorChart);
+        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, cpdPerContributorChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(commitsPerDayChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(cpdPerContributorChart, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsScrollPane);
         
@@ -1588,7 +1570,7 @@ public class MainApp extends Application {
     private void updateCharts(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         Platform.runLater(() -> {
             chartManager.updateCharts(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, 
-                                     contributorActivityChart, commitsPerDayChart, stats, recentCommits);
+                                     contributorActivityChart, cpdPerContributorChart, stats, recentCommits);
             
             // Force layout pass and refresh to ensure charts are rendered correctly
             Platform.runLater(() -> {
@@ -1597,7 +1579,6 @@ public class MainApp extends Application {
                 activityLineChart.layout();
                 calendarActivityChart.layout();
                 contributorActivityChart.layout();
-                commitsPerDayChart.layout();
                 cpdPerContributorChart.layout();
                 
             // Explicitly show legends for ALL charts
@@ -1606,7 +1587,6 @@ public class MainApp extends Application {
             activityLineChart.setLegendVisible(true);
             calendarActivityChart.setLegendVisible(true);
             contributorActivityChart.setLegendVisible(true);
-            commitsPerDayChart.setLegendVisible(true);
             cpdPerContributorChart.setLegendVisible(true);
 
             // Set legend side to RIGHT for all except pie
@@ -1614,7 +1594,6 @@ public class MainApp extends Application {
             activityLineChart.setLegendSide(javafx.geometry.Side.RIGHT);
             calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
             contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
-            commitsPerDayChart.setLegendSide(javafx.geometry.Side.RIGHT);
             cpdPerContributorChart.setLegendSide(javafx.geometry.Side.RIGHT);
 
             // Ensure charts have enough internal padding for legends
@@ -1622,7 +1601,6 @@ public class MainApp extends Application {
             activityLineChart.setPadding(new Insets(10, 400, 10, 10));
             calendarActivityChart.setPadding(new Insets(10, 400, 10, 10));
             contributorActivityChart.setPadding(new Insets(10, 400, 10, 10));
-            commitsPerDayChart.setPadding(new Insets(10, 400, 10, 10));
             cpdPerContributorChart.setPadding(new Insets(10, 400, 10, 10));
                 
             // Adjust layout to avoid overlapping
@@ -1630,7 +1608,6 @@ public class MainApp extends Application {
                 activityLineChart.requestLayout();
                 calendarActivityChart.requestLayout();
                 contributorActivityChart.requestLayout();
-                commitsPerDayChart.requestLayout();
                 cpdPerContributorChart.requestLayout();
 
                 commitPieChart.requestLayout();
@@ -1681,8 +1658,7 @@ public class MainApp extends Application {
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calendarFile);
             saveNodeSnapshot(contributorActivityChart, contribFile);
-            saveNodeSnapshot(commitsPerDayChart, cpdFile);
-            saveNodeSnapshot(cpdPerContributorChart, new File("cpd_per_contributor.png"));
+            saveNodeSnapshot(cpdPerContributorChart, cpdFile);
             
             String aiReport = null;
             if (aiReviewCheckBox.isSelected() && !llmResponseArea.getText().isEmpty() && !llmResponseArea.getText().startsWith("Generating report")) {
@@ -1843,7 +1819,7 @@ public class MainApp extends Application {
 
             exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
                 pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
-                calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), new File("cpd_per_contributor.png").getAbsolutePath(),
+                calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), 
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);
             
             // Cleanup temp files
@@ -1853,7 +1829,6 @@ public class MainApp extends Application {
             calendarFile.delete();
             contribFile.delete();
             cpdFile.delete();
-            new File("cpd_per_contributor.png").delete();
 
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {

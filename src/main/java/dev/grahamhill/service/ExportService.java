@@ -18,7 +18,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String cpdContributorPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -187,8 +187,7 @@ public class ExportService {
         addIndexRow(indexTable, "  - Recent Commit Activity (Line Chart)", "chart3", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Daily Activity - Total Impact (Line Chart)", "chart4", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Daily Activity per Contributor (Lines Added) (Line Chart)", "chart5", currentPage++, normalFont);
-        addIndexRow(indexTable, "  - Commits per Day (Line Chart)", "chart6", currentPage++, normalFont);
-        addIndexRow(indexTable, "  - Commits per Day per Contributor (Line Chart)", "chart7", currentPage++, normalFont);
+        addIndexRow(indexTable, "  - Commits per Day & per Contributor (Line Chart)", "chart6", currentPage++, normalFont);
         
         addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage++, normalFont);
         
@@ -489,11 +488,16 @@ public class ExportService {
         graphList.add(new ListItem("Impact Analysis (Stacked Bar Chart)", normalFont));
         graphList.add(new ListItem("Recent Commit Activity (Line Chart)", normalFont));
         graphList.add(new ListItem("Daily Activity - Total Impact (Line Chart)", normalFont));
-        graphList.add(new ListItem("Daily Activity per Contributor (Line Chart)", normalFont));
-        graphList.add(new ListItem("Commits per Day (Line Chart)", normalFont));
+        graphList.add(new ListItem("Daily Activity per Contributor (Lines Added) (Line Chart)", normalFont));
+        graphList.add(new ListItem("Commits per Day & per Contributor (Line Chart)", normalFont));
         document.add(graphList);
         document.add(new Paragraph(" ", normalFont));
 
+        Paragraph chartTitle1b = new Paragraph("Commits by Contributor:", sectionFont);
+        Anchor chartAnchor1 = new Anchor(chartTitle1b);
+        chartAnchor1.setName("chart1");
+        chartTitle1b.setSpacingBefore(15f);
+        document.add(chartAnchor1);
         Image pieImage = Image.getInstance(piePath);
         // Pie chart is 1080x1080, scale it to fit nicely while maintaining square aspect
         float pieSize = Math.min(document.getPageSize().getWidth() * 0.85f, (document.getPageSize().getHeight() - 150) * 0.85f);
@@ -503,8 +507,10 @@ public class ExportService {
 
         document.newPage();
         Paragraph chartTitle2 = new Paragraph("Impact Analysis (Stacked):", sectionFont);
+        Anchor chartAnchor2 = new Anchor(chartTitle2);
+        chartAnchor2.setName("chart2");
         chartTitle2.setSpacingBefore(15f);
-        document.add(chartTitle2);
+        document.add(chartAnchor2);
         Image barImage = Image.getInstance(barPath);
         barImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         barImage.setAlignment(Image.MIDDLE);
@@ -512,8 +518,10 @@ public class ExportService {
 
         document.newPage();
         Paragraph chartTitle3 = new Paragraph("Recent Commit Activity:", sectionFont);
+        Anchor chartAnchor3 = new Anchor(chartTitle3);
+        chartAnchor3.setName("chart3");
         chartTitle3.setSpacingBefore(15f);
-        document.add(chartTitle3);
+        document.add(chartAnchor3);
         Image lineImage = Image.getInstance(linePath);
         lineImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         lineImage.setAlignment(Image.MIDDLE);
@@ -521,8 +529,10 @@ public class ExportService {
 
         document.newPage();
         Paragraph chartTitle4 = new Paragraph("Daily Activity (Total Impact):", sectionFont);
+        Anchor chartAnchor4 = new Anchor(chartTitle4);
+        chartAnchor4.setName("chart4");
         chartTitle4.setSpacingBefore(15f);
-        document.add(chartTitle4);
+        document.add(chartAnchor4);
         Image calendarImage = Image.getInstance(calendarPath);
         calendarImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         calendarImage.setAlignment(Image.MIDDLE);
@@ -530,30 +540,25 @@ public class ExportService {
 
         document.newPage();
         Paragraph chartTitle5 = new Paragraph("Daily Activity per Contributor (Lines Added):", sectionFont);
+        Anchor chartAnchor5 = new Anchor(chartTitle5);
+        chartAnchor5.setName("chart5");
         chartTitle5.setSpacingBefore(15f);
-        document.add(chartTitle5);
+        document.add(chartAnchor5);
         Image contribImage = Image.getInstance(contribPath);
         contribImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         contribImage.setAlignment(Image.MIDDLE);
         document.add(contribImage);
 
         document.newPage();
-        Paragraph chartTitle6 = new Paragraph("Commits per Day:", sectionFont);
+        Paragraph chartTitle6 = new Paragraph("Commits per Day & per Contributor:", sectionFont);
+        Anchor chartAnchor6 = new Anchor(chartTitle6);
+        chartAnchor6.setName("chart6");
         chartTitle6.setSpacingBefore(15f);
-        document.add(chartTitle6);
+        document.add(chartAnchor6);
         Image cpdImage = Image.getInstance(cpdPath);
         cpdImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
-
-        document.newPage();
-        Paragraph chartTitle7 = new Paragraph("Commits per Day per Contributor:", sectionFont);
-        chartTitle7.setSpacingBefore(15f);
-        document.add(chartTitle7);
-        Image cpdContributorImage = Image.getInstance(cpdContributorPath);
-        cpdContributorImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
-        cpdContributorImage.setAlignment(Image.MIDDLE);
-        document.add(cpdContributorImage);
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);

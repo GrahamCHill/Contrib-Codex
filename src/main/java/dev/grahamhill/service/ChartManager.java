@@ -119,6 +119,7 @@ public class ChartManager {
 
         // Group lines added by date and author
         Map<String, TreeMap<java.time.LocalDate, Integer>> contributorDailyLines = new HashMap<>();
+        TreeMap<java.time.LocalDate, Integer> totalDailyLines = new TreeMap<>();
         
         // Find date range
         java.time.LocalDate firstDate = null;
@@ -133,9 +134,22 @@ public class ChartManager {
             String authorName = sanitizeName(ci.authorName());
             contributorDailyLines.computeIfAbsent(authorName, k -> new TreeMap<>())
                                  .merge(date, ci.linesAdded(), Integer::sum);
+            totalDailyLines.merge(date, ci.linesAdded(), Integer::sum);
         }
 
         if (firstDate == null) return;
+
+        // Total Series
+        XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
+        totalSeries.setName("Total");
+        
+        java.time.LocalDate current = firstDate;
+        while (!current.isAfter(lastDate)) {
+            int lines = totalDailyLines.getOrDefault(current, 0);
+            totalSeries.getData().add(new XYChart.Data<>(current.toString(), lines));
+            current = current.plusDays(1);
+        }
+        chart.getData().add(totalSeries);
 
         // Fill gaps with zeros and create series for top contributors
         List<String> topContributors = stats.stream()
@@ -149,7 +163,7 @@ public class ChartManager {
             
             TreeMap<java.time.LocalDate, Integer> dailyLines = contributorDailyLines.getOrDefault(author, new TreeMap<>());
             
-            java.time.LocalDate current = firstDate;
+            current = firstDate;
             while (!current.isAfter(lastDate)) {
                 int lines = dailyLines.getOrDefault(current, 0);
                 series.getData().add(new XYChart.Data<>(current.toString(), lines));
@@ -162,32 +176,62 @@ public class ChartManager {
     public void updateCpdPerContributorChart(LineChart<String, Number> chart, List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         chart.getData().clear();
         chart.setAnimated(false);
-        XYChart.Series<String, Number> series = new XYChart.Series<>();
-        series.setName("Commits Per Day");
 
-        TreeMap<java.time.LocalDate, Integer> dailyCommits = new TreeMap<>();
-        if (recentCommits != null) {
-            for (CommitInfo ci : recentCommits) {
-                java.time.LocalDate date = ci.timestamp().toLocalDate();
-                dailyCommits.merge(date, 1, Integer::sum);
-            }
+        if (recentCommits == null || recentCommits.isEmpty()) return;
+
+        // Group commits by date and author
+        Map<String, TreeMap<java.time.LocalDate, Integer>> contributorDailyCommits = new HashMap<>();
+        TreeMap<java.time.LocalDate, Integer> totalDailyCommits = new TreeMap<>();
+        
+        // Find date range
+        java.time.LocalDate firstDate = null;
+        java.time.LocalDate lastDate = null;
+
+        for (CommitInfo ci : recentCommits) {
+            java.time.LocalDate date = ci.timestamp().toLocalDate();
+            if (firstDate == null || date.isBefore(firstDate)) firstDate = date;
+            if (lastDate == null || date.isAfter(lastDate)) lastDate = date;
+
+            String authorName = sanitizeName(ci.authorName());
+            contributorDailyCommits.computeIfAbsent(authorName, k -> new TreeMap<>())
+                                 .merge(date, 1, Integer::sum);
+            totalDailyCommits.merge(date, 1, Integer::sum);
         }
 
-        if (!dailyCommits.isEmpty()) {
-            java.time.LocalDate firstDate = dailyCommits.firstKey();
-            java.time.LocalDate lastDate = dailyCommits.lastKey();
-            java.time.LocalDate current = firstDate;
+        if (firstDate == null) return;
+
+        // Total Series
+        XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
+        totalSeries.setName("Total");
+        
+        java.time.LocalDate current = firstDate;
+        while (!current.isAfter(lastDate)) {
+            int count = totalDailyCommits.getOrDefault(current, 0);
+            totalSeries.getData().add(new XYChart.Data<>(current.toString(), count));
+            current = current.plusDays(1);
+        }
+        chart.getData().add(totalSeries);
+
+        // Fill gaps with zeros and create series for top contributors
+        List<String> topContributors = stats.stream()
+                .limit(5)
+                .map(s -> sanitizeName(s.name()))
+                .collect(Collectors.toList());
+
+        for (String author : topContributors) {
+            XYChart.Series<String, Number> series = new XYChart.Series<>();
+            series.setName(author);
+            
+            TreeMap<java.time.LocalDate, Integer> dailyCommits = contributorDailyCommits.getOrDefault(author, new TreeMap<>());
+            
+            current = firstDate;
             while (!current.isAfter(lastDate)) {
-                dailyCommits.putIfAbsent(current, 0);
+                int count = dailyCommits.getOrDefault(current, 0);
+                series.getData().add(new XYChart.Data<>(current.toString(), count));
                 current = current.plusDays(1);
             }
+            chart.getData().add(series);
         }
-
-        dailyCommits.forEach((date, count) -> {
-            series.getData().add(new XYChart.Data<>(date.toString(), count));
-        });
-
-        chart.getData().add(series);
     }
 
     private String sanitizeName(String name) {
