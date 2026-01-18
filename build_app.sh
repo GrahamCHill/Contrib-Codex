@@ -44,7 +44,7 @@ if [ "${PLATFORM}" == "macos" ]; then
       --main-jar "contrib_metric-${APP_VERSION}.jar" \
       --main-class ${MAIN_CLASS} \
       --module-path "${LIBS_DIR}" \
-      --add-modules javafx.controls,javafx.fxml,javafx.swing,java.sql,java.naming,jdk.charsets \
+      --add-modules javafx.controls,javafx.fxml,javafx.swing,java.sql,java.naming,jdk.charsets,java.net.http \
       --vendor "Graham Hill" \
       --description "Contrib Codex Git Analytics" \
       --app-version "1.0.0" \
@@ -64,7 +64,7 @@ elif [ "${PLATFORM}" == "windows" ]; then
       --main-jar "contrib_metric-${APP_VERSION}.jar" \
       --main-class ${MAIN_CLASS} \
       --module-path "${LIBS_DIR}" \
-      --add-modules javafx.controls,javafx.fxml,javafx.swing,java.sql,java.naming,jdk.charsets \
+      --add-modules javafx.controls,javafx.fxml,javafx.swing,java.sql,java.naming,jdk.charsets,java.net.http \
       --vendor "Graham Hill" \
       --description "Contrib Codex Git Analytics" \
       --app-version "1.0.0" \

@@ -160,7 +160,13 @@ public class MainApp extends Application {
         genDefaultCoverItem.setOnAction(e -> generateDefaultCoverPage());
         MenuItem genFeaturesTemplateItem = new MenuItem("Generate Features Template");
         genFeaturesTemplateItem.setOnAction(e -> generateRequiredFeaturesTemplate());
-        settingsMenu.getItems().addAll(apiKeysItem, new SeparatorMenuItem(), genDefaultMdItem, genDefaultCoverItem, genFeaturesTemplateItem);
+        MenuItem dbLocationItem = new MenuItem("Open Database Location");
+        dbLocationItem.setOnAction(e -> {
+            String dbPath = DatabaseService.getDbPath();
+            File dbFile = new File(dbPath);
+            getHostServices().showDocument(dbFile.getParentFile().toURI().toString());
+        });
+        settingsMenu.getItems().addAll(apiKeysItem, new SeparatorMenuItem(), genDefaultMdItem, genDefaultCoverItem, genFeaturesTemplateItem, new SeparatorMenuItem(), dbLocationItem);
         
         Menu infoMenu = new Menu("Info");
         MenuItem websiteItem = new MenuItem("Website");
@@ -808,20 +814,98 @@ public class MainApp extends Application {
         ignoredExtensionsField.setText(configManager.getSetting("ignoredExtensions", "json,xml,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml"));
         ignoredFoldersField.setText(configManager.getSetting("ignoredFolders", "node_modules,target,build,dist,.git"));
 
-        // Load global settings from database
+        // Set default paths based on app data directory
+        String appDir = DatabaseService.getAppDir();
+        String defaultMdPath = appDir + File.separator + "md_sections";
+        String defaultCoverPath = appDir + File.separator + "coverpage.html";
+
+        mdFolderPathField.setText(defaultMdPath);
+        coverPagePathField.setText(defaultCoverPath);
+
+        // Load global settings from database (overwrites defaults if present)
         if (databaseService != null) {
             try {
                 String mdPath = databaseService.getGlobalSetting("mdFolderPath");
-                if (mdPath != null) mdFolderPathField.setText(mdPath);
+                if (mdPath != null && !mdPath.isEmpty()) mdFolderPathField.setText(mdPath);
                 
                 String coverPath = databaseService.getGlobalSetting("coverPagePath");
-                if (coverPath != null) coverPagePathField.setText(coverPath);
+                if (coverPath != null && !coverPath.isEmpty()) coverPagePathField.setText(coverPath);
 
                 String featuresPath = databaseService.getGlobalSetting("requiredFeaturesPath");
                 if (featuresPath != null) requiredFeaturesPathField.setText(featuresPath);
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+
+        // Ensure default files exist on startup
+        ensureDefaultFilesExist();
+    }
+
+    private void ensureDefaultFilesExist() {
+        String mdPath = mdFolderPathField.getText();
+        if (mdPath != null && !mdPath.isEmpty()) {
+            File mdFolder = new File(mdPath);
+            if (!mdFolder.exists()) {
+                mdFolder.mkdirs();
+            }
+            createDefaultMdFiles(mdFolder);
+        }
+
+        String coverPath = coverPagePathField.getText();
+        if (coverPath != null && !coverPath.isEmpty()) {
+            File coverFile = new File(coverPath);
+            if (!coverFile.exists()) {
+                autoGenerateCoverPage(coverFile);
+            }
+        }
+    }
+
+    private void autoGenerateCoverPage(File file) {
+        try {
+            try (java.io.InputStream is = getClass().getResourceAsStream("/coverpage.html")) {
+                if (is != null) {
+                    java.nio.file.Files.copy(is, file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    File templateFile = new File("coverpage.html");
+                    if (templateFile.exists()) {
+                        java.nio.file.Files.copy(templateFile.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    } else {
+                        String template = """
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                            <style>
+                                body { font-family: 'Helvetica', sans-serif; text-align: center; padding-top: 50px; }
+                                h1 { color: #2c3e50; font-size: 36px; }
+                                .info { font-size: 18px; color: #7f8c8d; margin-top: 20px; }
+                                .footer { margin-top: 100px; font-style: italic; color: #bdc3c7; }
+                                .logo { width: 200px; margin-bottom: 30px; }
+                            </style>
+                            </head>
+                            <body>
+                                <div class="logo">
+                                    <!-- You can add an image tag here: <img src="path/to/logo.png" width="200" /> -->
+                                    <h2 style="color: #3498db;">[Project Logo Placeholder]</h2>
+                                </div>
+                                <h1>Git Metrics Report</h1>
+                                <div class="info">
+                                    <p><strong>Project:</strong> {{project}}</p>
+                                    <p><strong>Generated By:</strong> {{user}}</p>
+                                    <p><strong>Date:</strong> {{generated_on}}</p>
+                                </div>
+                                <div class="footer">
+                                    <p>Generated by Contrib Codex</p>
+                                </div>
+                            </body>
+                            </html>
+                            """;
+                        java.nio.file.Files.writeString(file.toPath(), template);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -1214,8 +1298,8 @@ public class MainApp extends Application {
     private void generateDefaultMds() {
         String path = mdFolderPathField.getText();
         if (path == null || path.isEmpty()) {
-            // Default to 'md_sections' in current directory if empty
-            path = "md_sections";
+            String appDir = DatabaseService.getAppDir();
+            path = appDir + File.separator + "md_sections";
             mdFolderPathField.setText(path);
         }
         File folder = new File(path);
@@ -1246,81 +1330,31 @@ public class MainApp extends Application {
 
     private void createDefaultMdFiles(File folder) {
         try {
-            File templateFolder = new File("default_markdown");
-            if (templateFolder.exists() && templateFolder.isDirectory()) {
-                File[] templates = templateFolder.listFiles((dir, name) -> name.toLowerCase().endsWith(".md"));
-                if (templates != null) {
-                    for (File template : templates) {
-                        java.nio.file.Files.copy(template.toPath(), new File(folder, template.getName()).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            String[] defaultFiles = {
+                "01_Introduction.md", "02_Methodology.md", "03_Requirements_and_Alignment.md",
+                "04_Contributor_Deep_Dive.md", "05_Risk_and_Quality_Assessment.md",
+                "06_Code_Hotspots.md", "07_Bus_factor_analysis.md", "08_Review_Hygiene.md",
+                "09_Contribution_Patterns.md", "10_Conclusion.md", "11_Recommendations_and_Improvements.md"
+            };
+
+            for (String fileName : defaultFiles) {
+                File targetFile = new File(folder, fileName);
+                if (!targetFile.exists()) {
+                    try (java.io.InputStream is = getClass().getResourceAsStream("/default_markdown/" + fileName)) {
+                        if (is != null) {
+                            java.nio.file.Files.copy(is, targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        } else {
+                            // Fallback to local folder if resource not found (dev mode)
+                            File templateFile = new File("default_markdown", fileName);
+                            if (templateFile.exists()) {
+                                java.nio.file.Files.copy(templateFile.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            } else {
+                                // Last resort: hardcoded defaults for essential files
+                                writeHardcodedDefault(fileName, targetFile);
+                            }
+                        }
                     }
                 }
-            } else {
-                // Fallback to hardcoded defaults if folder doesn't exist
-                java.nio.file.Files.writeString(new File(folder, "01_Introduction.md").toPath(),
-                    "# Introduction\n" +
-                    "This report provides an exhaustive and technical analysis of the git repository's development history and contributor activity.\n" +
-                    "The focus is on identifying high-value contributions, assessing project stability, and evaluating technical risk across the codebase.\n\n" +
-                    "This is an **AI Assisted Review**, where AI assists by analyzing git metrics, commit messages, and project structure to provide insights into code quality, contributor impact, and potential risks.\n\n" +
-                    "INSTRUCTIONS FOR AI:\n" +
-                    "- Provide a high-level executive summary of the project's current state.\n" +
-                    "- Analyze the repository structure to identify core backend, frontend, and infrastructure components.\n" +
-                    "- HIGH-LEVEL CONTRIBUTOR RESPONSIBILITIES: Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor based on their directory/file activity.\n" +
-                    "- **Key Man Risk Assessment**: Evaluate if any contributor is a Key Man (sole/primary owner of core project sections). High total lines indicate potential risk, but sole ownership of sections confirms Key Man status.\n" +
-                    "- **Ownership Analysis**: Distinguish between contributors who **created** critical files versus those who only **edited** them. File creation indicates deeper foundational knowledge.\n" +
-                    "- Reference specific directory patterns to explain the architectural distribution of work.\n" +
-                    "- SOFTWARE ARCHITECTURE & DESIGN: Analyze the directory structure and file distribution. \n" +
-                    "  Comment on the overall design patterns (e.g., MVC, Microservices, Layered), tech stack usage, \n" +
-                    "  and assess the long-term maintainability of these choices.\n" +
-                    "- **Documentation Review**: Review the provided 'Documentation Lines Added' metric for all contributors and explicitly identify who is NOT contributing to the project's documentation.");
-
-                java.nio.file.Files.writeString(new File(folder, "02_Methodology.md").toPath(),
-                    "# Analysis Methodology\n" +
-                    "The analysis utilizes JGit for precise metric extraction and AI-driven heuristics to interpret qualitative development patterns.\n\n" +
-                    "INSTRUCTIONS FOR AI:\n" +
-                    "- Explain the 'Lines Added per Commit' risk scoring system (1500+ VERY HIGH to <250 LOW).\n" +
-                    "- Describe how the presence of tests (files in 'test' directories) mitigates risk scores.\n" +
-                    "- Explicitly state that risk is based on average lines added per commit, not lines in a single file.\n" +
-                    "- Explain that merge commits are tracked but their lines of code are excluded from total counts to prevent metric skewing.\n" +
-                    "- Detail the 'Meaningful Change' score logic:\n" +
-                    "  - Repository-wide score: Weighted by Source Code (70%) and Tests (30%) insertions.\n" +
-                    "  - Contributor-level score: In this AI-assisted mode, the score is qualitatively assigned by the LLM (0-100) based on commit descriptive quality, iterative patterns, and functional impact.\n" +
-                    "  - Filters out boilerplate, generated artifacts, and documentation noise.");
-
-                java.nio.file.Files.writeString(new File(folder, "04_Contributor_Deep_Dive.md").toPath(),
-                    "# Contributor Impact Analysis\n" +
-                    "A detailed evaluation of individual contributions based on commit frequency, impact volume, and code quality.\n\n" +
-                    "INSTRUCTIONS FOR AI:\n" +
-                    "- For EVERY major contributor listed in the METRICS, provide a dedicated technical subsection.\n" +
-                    "- Use the 'Gender' field for correct pronouns.\n" +
-                    "- Analyze their specific 'Impact Analysis' (Added vs Deleted lines) and the types of files they touched as shown in their metrics.\n" +
-                    "- Do NOT invent or assume names; attribute impact ONLY to the names provided in the metrics.\n" +
-                    "- **Key Man Identification**: Assess if this contributor is a Key Man for specific sections. High total lines committed indicate potential Key Man risk, but look at where all other contributors have committed. If other contributors did not touch a section this contributor owns, they are a Key Man for that section.\n" +
-                    "- MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., \"update\", \"fix\").\n" +
-                    "- FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files. **Weight backend logic as MORE VALUABLE than frontend styling.**\n" +
-                    "- **Documentation Contribution**: Analyze the 'Documentation Lines Added' metric and comment on the contributor's effort towards project documentation. Explicitly state if they are NOT contributing to documentation.\n" +
-                    "- MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section. **Heavily penalize this score if they pushed generated/build files.**\n" +
-                    "- Identify their 'Most Valuable Contributor' potential based on iterative development rather than just bulk LOC.");
-
-                java.nio.file.Files.writeString(new File(folder, "05_Risk_and_Quality_Assessment.md").toPath(),
-                    "# Risk & Quality Assessment\n" +
-                    "Evaluation of project stability and potential technical debt based on commit patterns.\n\n" +
-                    "INSTRUCTIONS FOR AI:\n" +
-                    "- Create a detailed Risk Table for all contributors.\n" +
-                    "- Columns: Contributor, Commits, Lines Added, Lines Added/Commit, Tests Touched, Risk Band, Justification.\n" +
-                    "- IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.\n" +
-                    "- **RISK FACTORS**: Risk is primarily driven by Lines Added/Commit (Higher = Higher Risk), but also increases with high churn, low test coverage, and being a Key Man (sole owner of project sections).\n" +
-                    "- STRICT RULE: In the 'Tests Touched' column, use 'No' if there is no evidence of test changes in the provided commit details for this contributor. If the 'touchedTests' metric is false, they MUST NOT get a 'Yes' in this column.\n" +
-                    "- Explain the reasoning behind each risk level, explicitly addressing Key Man status (sole ownership of project sections).\n" +
-                    "- Identify patterns of 'Bulk Commits' vs 'Iterative Refinement'.\n" +
-                    "- Highlighting areas where test coverage is lacking relative to feature complexity.");
-
-                java.nio.file.Files.writeString(new File(folder, "10_Conclusion.md").toPath(),
-                    "# Conclusion & Recommendations\n" +
-                    "Final synthesis of findings and strategic recommendations for the project.\n\n" +
-                    "INSTRUCTIONS FOR AI:\n" +
-                    "- Identify the overall 'Most Valuable Contributor' with a detailed justification.\n" +
-                    "- Summarize the top 3 technical risks found in the repo.\n" +
-                    "- Provide 3 actionable recommendations for improving code quality or team velocity.");
             }
 
             // Also update the UI field to show the path if it was empty
@@ -1329,6 +1363,77 @@ public class MainApp extends Application {
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private void writeHardcodedDefault(String fileName, File targetFile) throws java.io.IOException {
+        if (fileName.equals("01_Introduction.md")) {
+            java.nio.file.Files.writeString(targetFile.toPath(),
+                "# Introduction\n" +
+                "This report provides an exhaustive and technical analysis of the git repository's development history and contributor activity.\n" +
+                "The focus is on identifying high-value contributions, assessing project stability, and evaluating technical risk across the codebase.\n\n" +
+                "This is an **AI Assisted Review**, where AI assists by analyzing git metrics, commit messages, and project structure to provide insights into code quality, contributor impact, and potential risks.\n\n" +
+                "INSTRUCTIONS FOR AI:\n" +
+                "- Provide a high-level executive summary of the project's current state.\n" +
+                "- Analyze the repository structure to identify core backend, frontend, and infrastructure components.\n" +
+                "- HIGH-LEVEL CONTRIBUTOR RESPONSIBILITIES: Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor based on their directory/file activity.\n" +
+                "- **Key Man Risk Assessment**: Evaluate if any contributor is a Key Man (sole/primary owner of core project sections). High total lines indicate potential risk, but sole ownership of sections confirms Key Man status.\n" +
+                "- **Ownership Analysis**: Distinguish between contributors who **created** critical files versus those who only **edited** them. File creation indicates deeper foundational knowledge.\n" +
+                "- Reference specific directory patterns to explain the architectural distribution of work.\n" +
+                "- SOFTWARE ARCHITECTURE & DESIGN: Analyze the directory structure and file distribution. \n" +
+                "  Comment on the overall design patterns (e.g., MVC, Microservices, Layered), tech stack usage, \n" +
+                "  and assess the long-term maintainability of these choices.\n" +
+                "- **Documentation Review**: Review the provided 'Documentation Lines Added' metric for all contributors and explicitly identify who is NOT contributing to the project's documentation.");
+        } else if (fileName.equals("02_Methodology.md")) {
+            java.nio.file.Files.writeString(targetFile.toPath(),
+                "# Analysis Methodology\n" +
+                "The analysis utilizes JGit for precise metric extraction and AI-driven heuristics to interpret qualitative development patterns.\n\n" +
+                "INSTRUCTIONS FOR AI:\n" +
+                "- Explain the 'Lines Added per Commit' risk scoring system (1500+ VERY HIGH to <250 LOW).\n" +
+                "- Describe how the presence of tests (files in 'test' directories) mitigates risk scores.\n" +
+                "- Explicitly state that risk is based on average lines added per commit, not lines in a single file.\n" +
+                "- Explain that merge commits are tracked but their lines of code are excluded from total counts to prevent metric skewing.\n" +
+                "- Detail the 'Meaningful Change' score logic:\n" +
+                "  - Repository-wide score: Weighted by Source Code (70%) and Tests (30%) insertions.\n" +
+                "  - Contributor-level score: In this AI-assisted mode, the score is qualitatively assigned by the LLM (0-100) based on commit descriptive quality, iterative patterns, and functional impact.\n" +
+                "  - Filters out boilerplate, generated artifacts, and documentation noise.");
+        } else if (fileName.equals("04_Contributor_Deep_Dive.md")) {
+            java.nio.file.Files.writeString(targetFile.toPath(),
+                "# Contributor Impact Analysis\n" +
+                "A detailed evaluation of individual contributions based on commit frequency, impact volume, and code quality.\n\n" +
+                "INSTRUCTIONS FOR AI:\n" +
+                "- For EVERY major contributor listed in the METRICS, provide a dedicated technical subsection.\n" +
+                "- Use the 'Gender' field for correct pronouns.\n" +
+                "- Analyze their specific 'Impact Analysis' (Added vs Deleted lines) and the types of files they touched as shown in their metrics.\n" +
+                "- Do NOT invent or assume names; attribute impact ONLY to the names provided in the metrics.\n" +
+                "- **Key Man Identification**: Assess if this contributor is a Key Man for specific sections. High total lines committed indicate potential Key Man risk, but look at where all other contributors have committed. If other contributors did not touch a section this contributor owns, they are a Key Man for that section.\n" +
+                "- MEANINGFUL COMMIT NAMES: Evaluate if the contributor's commit messages are descriptive and follow good practices (e.g., prefixing with type, clear intent) versus being vague (e.g., \"update\", \"fix\").\n" +
+                "- FUNCTIONAL VS VISUAL/STYLING: Distinguish if their work was primarily functional logic or visual/styling (CSS, HTML, UI components in React/Vue). Be smart about detecting styling even in component files. **Weight backend logic as MORE VALUABLE than frontend styling.**\n" +
+                "- **Documentation Contribution**: Analyze the 'Documentation Lines Added' metric and comment on the contributor's effort towards project documentation. Explicitly state if they are NOT contributing to documentation.\n" +
+                "- MEANINGFUL SCORE: Provide a score 0-100 that takes into account commit messages, iterative patterns, and qualitative work. Include a MANDATORY tag: [MEANINGFUL_SCORE: Name=XX/100] at the end of each contributor section. **Heavily penalize this score if they pushed generated/build files.**\n" +
+                "- Identify their 'Most Valuable Contributor' potential based on iterative development rather than just bulk LOC.\n" +
+                "- **Directory Breakdown**: Review the 'Directory Breakdown' metric to see where they made their edits. This helps identify if they pushed generated files (e.g. in dist, build, or large amounts in a single folder) or did actual development across the project structure.");
+        } else if (fileName.equals("05_Risk_and_Quality_Assessment.md")) {
+            java.nio.file.Files.writeString(targetFile.toPath(),
+                "# Risk & Quality Assessment\n" +
+                "Evaluation of project stability and potential technical debt based on commit patterns.\n\n" +
+                "INSTRUCTIONS FOR AI:\n" +
+                "- Create a detailed Risk Table for all contributors.\n" +
+                "- Columns: Contributor, Commits, Lines Added, Lines Added/Commit, Tests Touched, Risk Band, Justification.\n" +
+                "- IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals.\n" +
+                "- **RISK FACTORS**: Risk is primarily driven by Lines Added/Commit (Higher = Higher Risk), but also increases with high churn, low test coverage, and being a Key Man (sole owner of project sections).\n" +
+                "- STRICT RULE: In the 'Tests Touched' column, use 'No' if there is no evidence of test changes in the provided commit details for this contributor. If the 'touchedTests' metric is false, they MUST NOT get a 'Yes' in this column.\n" +
+                "- Explain the reasoning behind each risk level, explicitly addressing Key Man status (sole ownership of project sections).\n" +
+                "- Identify patterns of 'Bulk Commits' vs 'Iterative Refinement'.\n" +
+                "- Highlighting areas where test coverage is lacking relative to feature complexity.");
+        } else if (fileName.equals("10_Conclusion.md")) {
+            java.nio.file.Files.writeString(targetFile.toPath(),
+                "# Conclusion & Recommendations\n" +
+                "Final synthesis of findings and strategic recommendations for the project.\n\n" +
+                "INSTRUCTIONS FOR AI:\n" +
+                "- Identify the overall 'Most Valuable Contributor' with a detailed justification.\n" +
+                "- Summarize the top 3 technical risks found in the repo.\n" +
+                "- Provide 3 actionable recommendations for improving code quality or team velocity.");
         }
     }
 
@@ -1388,36 +1493,49 @@ public class MainApp extends Application {
         File file = chooser.showSaveDialog(null);
         if (file != null) {
             try {
-                String template = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                    <style>
-                        body { font-family: 'Helvetica', sans-serif; text-align: center; padding-top: 50px; }
-                        h1 { color: #2c3e50; font-size: 36px; }
-                        .info { font-size: 18px; color: #7f8c8d; margin-top: 20px; }
-                        .footer { margin-top: 100px; font-style: italic; color: #bdc3c7; }
-                        .logo { width: 200px; margin-bottom: 30px; }
-                    </style>
-                    </head>
-                    <body>
-                        <div class="logo">
-                            <!-- You can add an image tag here: <img src="path/to/logo.png" width="200" /> -->
-                            <h2 style="color: #3498db;">[Project Logo Placeholder]</h2>
-                        </div>
-                        <h1>Git Metrics Report</h1>
-                        <div class="info">
-                            <p><strong>Project:</strong> {{project}}</p>
-                            <p><strong>Generated By:</strong> {{user}}</p>
-                            <p><strong>Date:</strong> {{generated_on}}</p>
-                        </div>
-                        <div class="footer">
-                            <p>Generated by Contrib Codex</p>
-                        </div>
-                    </body>
-                    </html>
-                    """;
-                java.nio.file.Files.writeString(file.toPath(), template);
+                try (java.io.InputStream is = getClass().getResourceAsStream("/coverpage.html")) {
+                    if (is != null) {
+                        java.nio.file.Files.copy(is, file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    } else {
+                        // Fallback to local file if resource not found (dev mode)
+                        File templateFile = new File("coverpage.html");
+                        if (templateFile.exists()) {
+                            java.nio.file.Files.copy(templateFile.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        } else {
+                            // Last resort: hardcoded template
+                            String template = """
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                <style>
+                                    body { font-family: 'Helvetica', sans-serif; text-align: center; padding-top: 50px; }
+                                    h1 { color: #2c3e50; font-size: 36px; }
+                                    .info { font-size: 18px; color: #7f8c8d; margin-top: 20px; }
+                                    .footer { margin-top: 100px; font-style: italic; color: #bdc3c7; }
+                                    .logo { width: 200px; margin-bottom: 30px; }
+                                </style>
+                                </head>
+                                <body>
+                                    <div class="logo">
+                                        <!-- You can add an image tag here: <img src="path/to/logo.png" width="200" /> -->
+                                        <h2 style="color: #3498db;">[Project Logo Placeholder]</h2>
+                                    </div>
+                                    <h1>Git Metrics Report</h1>
+                                    <div class="info">
+                                        <p><strong>Project:</strong> {{project}}</p>
+                                        <p><strong>Generated By:</strong> {{user}}</p>
+                                        <p><strong>Date:</strong> {{generated_on}}</p>
+                                    </div>
+                                    <div class="footer">
+                                        <p>Generated by Contrib Codex</p>
+                                    </div>
+                                </body>
+                                </html>
+                                """;
+                            java.nio.file.Files.writeString(file.toPath(), template);
+                        }
+                    }
+                }
                 coverPagePathField.setText(file.getAbsolutePath());
                 showAlert("Success", "Default cover page template created.");
             } catch (Exception e) {
@@ -1495,7 +1613,7 @@ public class MainApp extends Application {
                         return new ContributorStats(s.name(), emailOverrides.get(s.name()), s.gender(), 
                             s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                             s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
-                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore(), s.touchedTests(), s.generatedFilesPushed(), s.documentationLinesAdded());
+                            s.filesEdited(), s.filesDeletedCount(), s.meaningfulChangeScore(), s.touchedTests(), s.generatedFilesPushed(), s.documentationLinesAdded(), s.directoryBreakdown());
                     }
                     return s;
                 }).collect(Collectors.toList());
@@ -1560,10 +1678,12 @@ public class MainApp extends Application {
 
         Map<String, Integer> oLangs = new HashMap<>();
         others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
+        Map<String, Integer> oDirs = new HashMap<>();
+        others.forEach(s -> s.directoryBreakdown().forEach((k, v) -> oDirs.merge(k, v, Integer::sum)));
 
         boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated, oDocLines));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated, oDocLines, oDirs));
         return top;
     }
 
@@ -1645,13 +1765,14 @@ public class MainApp extends Application {
 
     private void performPdfExport(File file) {
         try {
-            // Take snapshots of charts
-            File pieFile = new File("pie_chart.png");
-            File barFile = new File("bar_chart.png");
-            File lineFile = new File("line_chart.png");
-            File calendarFile = new File("calendar_chart.png");
-            File contribFile = new File("contrib_activity.png");
-            File cpdFile = new File("commits_per_day.png");
+            // Take snapshots of charts in the same directory as the PDF
+            File exportDir = file.getParentFile();
+            File pieFile = new File(exportDir, "pie_chart.png");
+            File barFile = new File(exportDir, "bar_chart.png");
+            File lineFile = new File(exportDir, "line_chart.png");
+            File calendarFile = new File(exportDir, "calendar_chart.png");
+            File contribFile = new File(exportDir, "contrib_activity.png");
+            File cpdFile = new File(exportDir, "commits_per_day.png");
             
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(impactBarChart, barFile);
@@ -1822,14 +1943,6 @@ public class MainApp extends Application {
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), 
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);
             
-            // Cleanup temp files
-            pieFile.delete();
-            barFile.delete();
-            lineFile.delete();
-            calendarFile.delete();
-            contribFile.delete();
-            cpdFile.delete();
-
             Platform.runLater(() -> showAlert("Success", "Report exported to " + file.getAbsolutePath()));
         } catch (Exception e) {
             e.printStackTrace();
@@ -1868,7 +1981,7 @@ public class MainApp extends Application {
                 return new ContributorStats(s.name(), s.email(), s.gender(), 
                     s.commitCount(), s.mergeCount(), s.linesAdded(), s.linesDeleted(), 
                     s.languageBreakdown(), s.averageAiProbability(), s.filesAdded(), 
-                    s.filesEdited(), s.filesDeletedCount(), aiScore, s.touchedTests(), s.generatedFilesPushed(), s.documentationLinesAdded());
+                    s.filesEdited(), s.filesDeletedCount(), aiScore, s.touchedTests(), s.generatedFilesPushed(), s.documentationLinesAdded(), s.directoryBreakdown());
             }
             return s;
         }).collect(Collectors.toList());

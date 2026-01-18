@@ -193,6 +193,7 @@ public class LlmService {
             double linesPerCommit = (double) s.linesAdded() / (s.commitCount() > 0 ? s.commitCount() : 1);
             metricsText.append(String.format("  Average Lines Added per Commit: %.1f\n", linesPerCommit));
             metricsText.append("  Language breakdown: ").append(s.languageBreakdown()).append("\n");
+            metricsText.append("  Directory breakdown: ").append(s.directoryBreakdown()).append("\n");
         }
 
         metricsText.append("\nREPOSITORY SUMMARY METRICS:\n");

@@ -785,11 +785,15 @@ public class ExportService {
         double avgMeaningful = others.stream().mapToDouble(ContributorStats::meaningfulChangeScore).average().orElse(0.0);
 
         java.util.Map<String, Integer> oLangs = new java.util.HashMap<>();
-        others.forEach(s -> s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum)));
+        java.util.Map<String, Integer> oDirs = new java.util.HashMap<>();
+        others.forEach(s -> {
+            s.languageBreakdown().forEach((k, v) -> oLangs.merge(k, v, Integer::sum));
+            s.directoryBreakdown().forEach((k, v) -> oDirs.merge(k, v, Integer::sum));
+        });
 
         boolean oTouchedTests = others.stream().anyMatch(ContributorStats::touchedTests);
 
-        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated, oDocLines));
+        top.add(new ContributorStats("Others", "others@example.com", "unknown", oCommits, oMerges, oAdded, oDeleted, oLangs, avgAi, oFAdded, oFEdited, oFDeleted, avgMeaningful, oTouchedTests, oGenerated, oDocLines, oDirs));
         return top;
     }
 

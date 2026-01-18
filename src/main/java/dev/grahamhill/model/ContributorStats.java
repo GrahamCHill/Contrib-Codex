@@ -17,7 +17,8 @@ public record ContributorStats(
     double meaningfulChangeScore,
     boolean touchedTests,
     int generatedFilesPushed,
-    int documentationLinesAdded
+    int documentationLinesAdded,
+    Map<String, Integer> directoryBreakdown
 ) {
     public int getTotalImpact() {
         return linesAdded + linesDeleted;

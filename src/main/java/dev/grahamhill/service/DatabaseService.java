@@ -3,16 +3,18 @@ package dev.grahamhill.service;
 import dev.grahamhill.model.ContributorStats;
 import dev.grahamhill.model.ReportHistory;
 
+import java.io.File;
 import java.sql.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 public class DatabaseService {
-    private static final String DB_URL = "jdbc:sqlite:metrics.db";
+    private final String dbUrl;
 
     public DatabaseService() throws SQLException {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        this.dbUrl = "jdbc:sqlite:" + getDbPath();
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              Statement stmt = conn.createStatement()) {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS contributor_metrics (
@@ -25,6 +27,7 @@ public class DatabaseService {
                     lines_added INTEGER,
                     lines_deleted INTEGER,
                     language_breakdown TEXT,
+                    directory_breakdown TEXT,
                     ai_probability REAL,
                     files_added INTEGER DEFAULT 0,
                     files_edited INTEGER DEFAULT 0,
@@ -55,9 +58,30 @@ public class DatabaseService {
         }
     }
 
+    public static String getAppDir() {
+        String os = System.getProperty("os.name").toLowerCase();
+        String path;
+        if (os.contains("win")) {
+            path = System.getenv("APPDATA") + "\\ContribCodex";
+        } else if (os.contains("mac")) {
+            path = System.getProperty("user.home") + "/Library/Application Support/ContribCodex";
+        } else {
+            path = System.getProperty("user.home") + "/.local/share/ContribCodex";
+        }
+        File dir = new File(path);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        return path;
+    }
+
+    public static String getDbPath() {
+        return getAppDir() + File.separator + "metrics.db";
+    }
+
     public void saveGlobalSetting(String key, String value) throws SQLException {
         String sql = "INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, key);
             pstmt.setString(2, value);
@@ -67,7 +91,7 @@ public class DatabaseService {
 
     public String getGlobalSetting(String key) throws SQLException {
         String sql = "SELECT value FROM global_settings WHERE key = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, key);
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -80,8 +104,8 @@ public class DatabaseService {
     }
 
     public void saveMetrics(List<ContributorStats> stats) throws SQLException {
-        String sql = "INSERT INTO contributor_metrics (name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        String sql = "INSERT INTO contributor_metrics (name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             for (ContributorStats stat : stats) {
                 pstmt.setString(1, stat.name());
@@ -92,14 +116,15 @@ public class DatabaseService {
                 pstmt.setInt(6, stat.linesAdded());
                 pstmt.setInt(7, stat.linesDeleted());
                 pstmt.setString(8, stat.languageBreakdown().toString());
-                pstmt.setDouble(9, stat.averageAiProbability());
-                pstmt.setInt(10, stat.filesAdded());
-                pstmt.setInt(11, stat.filesEdited());
-                pstmt.setInt(12, stat.filesDeletedCount());
-                pstmt.setDouble(13, stat.meaningfulChangeScore());
-                pstmt.setInt(14, stat.touchedTests() ? 1 : 0);
-                pstmt.setInt(15, stat.generatedFilesPushed());
-                pstmt.setInt(16, stat.documentationLinesAdded());
+                pstmt.setString(9, stat.directoryBreakdown().toString());
+                pstmt.setDouble(10, stat.averageAiProbability());
+                pstmt.setInt(11, stat.filesAdded());
+                pstmt.setInt(12, stat.filesEdited());
+                pstmt.setInt(13, stat.filesDeletedCount());
+                pstmt.setDouble(14, stat.meaningfulChangeScore());
+                pstmt.setInt(15, stat.touchedTests() ? 1 : 0);
+                pstmt.setInt(16, stat.generatedFilesPushed());
+                pstmt.setInt(17, stat.documentationLinesAdded());
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
@@ -109,8 +134,8 @@ public class DatabaseService {
     public List<ContributorStats> getLatestMetrics() throws SQLException {
         List<ContributorStats> stats = new ArrayList<>();
         // This is a simplified version, just getting the last set of entries
-        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
@@ -130,7 +155,8 @@ public class DatabaseService {
                         rs.getDouble("meaningful_change_score"),
                         rs.getInt("touched_tests") == 1,
                         rs.getInt("generated_files_pushed"),
-                        rs.getInt("documentation_lines_added")
+                        rs.getInt("documentation_lines_added"),
+                        parseLanguageBreakdown(rs.getString("directory_breakdown"))
                 ));
             }
         }
@@ -140,7 +166,7 @@ public class DatabaseService {
     public List<ReportHistory> getLatestReportHistory(int limit) throws SQLException {
         List<ReportHistory> history = new ArrayList<>();
         String sql = "SELECT id, version, date, author, description, earliest_commit FROM report_history ORDER BY id DESC LIMIT ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, limit);
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -161,7 +187,7 @@ public class DatabaseService {
 
     public ReportHistory getLatestReportForCommit(String earliestCommit) throws SQLException {
         String sql = "SELECT id, version, date, author, description, earliest_commit FROM report_history WHERE earliest_commit = ? ORDER BY id DESC LIMIT 1";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, earliestCommit);
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -182,7 +208,7 @@ public class DatabaseService {
 
     public void saveReportHistory(ReportHistory history) throws SQLException {
         String sql = "INSERT INTO report_history (version, date, author, description, earliest_commit) VALUES (?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, history.version());
             pstmt.setString(2, history.date().toString());

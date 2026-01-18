@@ -553,6 +553,14 @@ public class GitService {
                         builder.documentationLinesAdded += added;
                     }
 
+                    // Update directory breakdown
+                    String dirPath = "root";
+                    int lastSlash = path.lastIndexOf('/');
+                    if (lastSlash != -1) {
+                        dirPath = path.substring(0, lastSlash);
+                    }
+                    builder.directoryBreakdown.merge(dirPath, added, Integer::sum);
+
                     // Detect blank lines
                     try {
                         org.eclipse.jgit.lib.ObjectLoader loaderA = entry.getOldId().toObjectId().equals(ObjectId.zeroId()) ? null : repository.open(entry.getOldId().toObjectId());
@@ -978,6 +986,7 @@ public class GitService {
         int generatedFilesPushed;
         int documentationLinesAdded;
         Map<String, Integer> languageBreakdown = new HashMap<>();
+        Map<String, Integer> directoryBreakdown = new HashMap<>();
         double totalAiProbability;
         int filesAdded;
         int filesEdited;
@@ -991,7 +1000,7 @@ public class GitService {
         }
 
         ContributorStats build(double meaningfulChangeScore) {
-            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore, touchedTests, generatedFilesPushed, documentationLinesAdded);
+            return new ContributorStats(name, email, gender, commitCount, mergeCount, linesAdded, linesDeleted, languageBreakdown, totalAiProbability / (commitCount + mergeCount > 0 ? commitCount + mergeCount : 1), filesAdded, filesEdited, filesDeleted, meaningfulChangeScore, touchedTests, generatedFilesPushed, documentationLinesAdded, directoryBreakdown);
         }
     }
 }
