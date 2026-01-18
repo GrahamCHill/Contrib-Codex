@@ -14,6 +14,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -162,7 +163,7 @@ public class GitService {
                     totalWsIns += (ins - insWs);
                     totalWsDel += (del - delWs);
 
-                    allFileChanges.add(new FileChange(path, ins, del, category, entry.getChangeType().name()));
+                    allFileChanges.add(new FileChange(path, ins, del, category, entry.getChangeType().name(), ""));
                     
                     MeaningfulChangeAnalysis.CategoryMetrics cm = categoryMap.get(category);
                     categoryMap.put(category, new MeaningfulChangeAnalysis.CategoryMetrics(
@@ -799,10 +800,27 @@ public class GitService {
                         }
 
                         FileChange existing = fileMap.get(path);
+                        String currentDiff = "";
+                        try {
+                            ByteArrayOutputStream out = new ByteArrayOutputStream();
+                            try (DiffFormatter dfDiff = new DiffFormatter(out)) {
+                                dfDiff.setRepository(repository);
+                                dfDiff.setDiffComparator(RawTextComparator.DEFAULT);
+                                dfDiff.setDetectRenames(true);
+                                dfDiff.format(entry);
+                                currentDiff = out.toString();
+                            }
+                        } catch (Exception e) {}
+
                         if (existing == null) {
-                            fileMap.put(path, new FileChange(path, ins, del, categorizePath(path), entry.getChangeType().name()));
+                            fileMap.put(path, new FileChange(path, ins, del, categorizePath(path), entry.getChangeType().name(), currentDiff));
                         } else {
-                            fileMap.put(path, new FileChange(path, existing.insertions() + ins, existing.deletions() + del, existing.category(), existing.changeType()));
+                            String combinedDiff = existing.diff() + "\n" + currentDiff;
+                            // Keep diff reasonably sized
+                            if (combinedDiff.length() > 5000) {
+                                combinedDiff = combinedDiff.substring(0, 5000) + "... [diff truncated]";
+                            }
+                            fileMap.put(path, new FileChange(path, existing.insertions() + ins, existing.deletions() + del, existing.category(), existing.changeType(), combinedDiff));
                         }
                     }
                 }

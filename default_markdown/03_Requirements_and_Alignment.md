@@ -2,11 +2,14 @@
 Evaluate whether repository work and implemented capabilities align with project requirements, using both the git METRICS and the uploaded **Features** reference.
 **CRITICAL: You MUST list ALL features requested in the requirements.md or Features input.**
 
+> **Note**: Entries in the Feature-to-Evidence Mapping Table may not be 100% complete. Please refer to a proper feature completeness review for a definitive status.
+
 INSTRUCTIONS FOR AI (STRICT):
 - You MUST use BOTH inputs:
     1) the **METRICS** section (git activity, file paths, contributor mappings)
     2) the **Features** field (uploaded capabilities/feature list)
 - Use ONLY names, file paths, directories, commit refs, metrics, and feature statements explicitly present in METRICS or Features.
+- **STRICT EVIDENCE RULE**: Unless you are over 90% sure a file or directory directly implements a requested feature based on the METRICS (path names, diffs, etc.), do NOT list it as "Fully Met". If confidence is lower, mark as "Partially Met" or "Not Implemented / No Evidence Detected".
 - Do NOT invent requirements, capabilities, modules, or features.
 - If a requirement/capability is not present in Features or cannot be supported by METRICS, state:
   **"Not provided in Features"** or **"Not Implemented / No Evidence Detected"**.
@@ -34,6 +37,10 @@ Rules:
 - Evidence MUST reference file paths/directories from METRICS (and commit refs if present).
 - If no evidence exists in METRICS, mark as **Not Implemented / No Evidence Detected** and leave "Evidence in Repo", "Contributors Involved", and "Contribution Breakdown (%)" as "N/A" or "None".
 - **Contribution Breakdown (%)**: For each feature, estimate the percentage of implementation effort per contributor based on their **Meaningful Score** and volume of changes (LOC/commits) in the relevant directories/files.
+    - **CRITICAL WEIGHTING**: When calculating the breakdown, you MUST apply weights based on the nature of the work:
+        - **Backend/Logic**: 1.0x (Full weight for core logic and backend implementation).
+        - **Frontend/Styling**: 0.5x (Half weight if the contribution is primarily visual or styling).
+        - Use the **Change Classification** from the Top Files analysis to identify if a contributor's work on a feature was primarily Logic vs. Styling. A contributor who implemented the backend logic should be credited more than one who only applied styling to the same feature.
 - DO NOT skip any features from the provided Features input, regardless of whether evidence exists.
 - You MUST list ALL features requested in the **requirements.md** or Features input.
 

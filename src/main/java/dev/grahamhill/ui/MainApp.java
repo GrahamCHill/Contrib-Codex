@@ -1055,6 +1055,9 @@ public class MainApp extends Application {
                 metricsText.append(String.format("Contributor: %s\n", contributor));
                 files.forEach(f -> {
                     metricsText.append(String.format("  * %s (+%d/-%d) [%s] Type: %s\n", f.path(), f.insertions(), f.deletions(), f.category(), f.changeType()));
+                    if (f.diff() != null && !f.diff().isEmpty()) {
+                        metricsText.append("    DIFF:\n").append(f.diff().indent(6)).append("\n");
+                    }
                 });
             });
         } catch (Exception e) {
