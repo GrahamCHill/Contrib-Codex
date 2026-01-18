@@ -1426,6 +1426,7 @@ public class MainApp extends Application {
                     "INSTRUCTIONS FOR AI:\n" +
                     "- Provide a high-level executive summary of the project's current state.\n" +
                     "- Analyze the repository structure to identify core backend, frontend, and infrastructure components.\n" +
+                    "- HIGH-LEVEL CONTRIBUTOR RESPONSIBILITIES: Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor based on their directory/file activity.\n" +
                     "- Reference specific directory patterns to explain the architectural distribution of work.\n" +
                     "- SOFTWARE ARCHITECTURE & DESIGN: Analyze the directory structure and file distribution. \n" +
                     "  Comment on the overall design patterns (e.g., MVC, Microservices, Layered), tech stack usage, \n" +
