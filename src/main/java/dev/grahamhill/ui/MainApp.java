@@ -1743,16 +1743,16 @@ public class MainApp extends Application {
             // Re-apply labels visible to be absolutely sure
             commitPieChart.setLabelsVisible(true);
             
-            int totalCommits = stats.stream().mapToInt(s -> s.commitCount() + s.mergeCount()).sum();
+            int totalCommits = stats.stream().mapToInt(ContributorStats::commitCount).sum();
             List<PieChart.Data> pieData = stats.stream()
                     .limit(10) // Show more on pie if labels are visible
                     .map(s -> {
-                        double percentage = (totalCommits > 0) ? (double)(s.commitCount() + s.mergeCount()) / totalCommits * 100 : 0;
+                        double percentage = (totalCommits > 0) ? (double)s.commitCount() / totalCommits * 100 : 0;
                         String displayName = s.name();
                         if (displayName.contains("<") && displayName.contains(">")) {
                             displayName = displayName.substring(0, displayName.indexOf("<")).trim();
                         }
-                        PieChart.Data data = new PieChart.Data(String.format("%s (%.1f%%)", displayName, percentage), s.commitCount() + s.mergeCount());
+                        PieChart.Data data = new PieChart.Data(String.format("%s (%.1f%%)", displayName, percentage), s.commitCount());
                         return data;
                     })
                     .toList();
@@ -1792,7 +1792,9 @@ public class MainApp extends Application {
                 XYChart.Series<String, Number> activitySeries = new XYChart.Series<>();
                 activitySeries.setName("Lines Added");
                 // recentCommits is newest first, so reverse it for chronological order
-                List<CommitInfo> chronological = new ArrayList<>(recentCommits);
+                List<CommitInfo> chronological = recentCommits.stream()
+                        .filter(ci -> !ci.isMerge())
+                        .collect(Collectors.toList());
                 Collections.reverse(chronological);
                 
                 for (CommitInfo ci : chronological) {
@@ -1811,6 +1813,7 @@ public class MainApp extends Application {
                 // TreeMap keeps it chronological by LocalDate
                 TreeMap<java.time.LocalDate, Integer> dailyImpact = new TreeMap<>();
                 for (CommitInfo ci : recentCommits) {
+                    if (ci.isMerge()) continue;
                     java.time.LocalDate date = ci.timestamp().toLocalDate();
                     dailyImpact.merge(date, ci.linesAdded(), Integer::sum);
                 }
@@ -1842,6 +1845,7 @@ public class MainApp extends Application {
                 // TreeMap keeps it chronological by LocalDate
                 TreeMap<java.time.LocalDate, Integer> dailyTotalCommits = new TreeMap<>();
                 for (CommitInfo ci : recentCommits) {
+                    if (ci.isMerge()) continue;
                     java.time.LocalDate date = ci.timestamp().toLocalDate();
                     dailyTotalCommits.merge(date, 1, Integer::sum);
                 }
@@ -1867,6 +1871,7 @@ public class MainApp extends Application {
                 Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
 
                 for (CommitInfo ci : recentCommits) {
+                    if (ci.isMerge()) continue;
                     String author = ci.authorName();
                     if (!topAuthorNames.contains(author)) continue;
                     java.time.LocalDate date = ci.timestamp().toLocalDate();
@@ -1951,6 +1956,7 @@ public class MainApp extends Application {
         Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
 
         for (CommitInfo ci : recentCommits) {
+            if (ci.isMerge()) continue;
             java.time.LocalDate date = ci.timestamp().toLocalDate();
             dailyTotalImpact.merge(date, ci.linesAdded(), Integer::sum);
             
@@ -2008,6 +2014,7 @@ public class MainApp extends Application {
         Set<String> topAuthorNames = stats.stream().limit(5).map(ContributorStats::name).collect(Collectors.toSet());
 
         for (CommitInfo ci : recentCommits) {
+            if (ci.isMerge()) continue;
             java.time.LocalDate date = ci.timestamp().toLocalDate();
             dailyTotalCommits.merge(date, 1, Integer::sum);
             

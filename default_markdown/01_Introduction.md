@@ -16,7 +16,15 @@ Provide 5–10 bullets covering:
 - key technical risks identified from commit patterns
 - evidence-backed statements referencing the metrics (counts, lines/commit, file categories)
 
-### 2) Repository Structure & Architecture Mapping
+### 2) High-Level Contributor Responsibilities & Value Added
+Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor.
+For each major contributor:
+- Identify their primary area of responsibility (e.g., core logic, frontend components, infrastructure, testing) based on the directories and files they touched most.
+- Describe the high-level value they added to the project (e.g., "established the project's architectural foundation", "drove the implementation of user-facing features", "ensured system stability through comprehensive testing").
+- This should be a concise, qualitative summary based on the quantitative metrics.
+- DO NOT assign future priorities here, only summarize past contributions.
+
+### 3) Repository Structure & Architecture Mapping
 Analyze the directory patterns included in METRICS and classify work into:
 - **Backend** (e.g., `backend/`, `server/`, `api/`, `src/main/`, etc. *only if present*)
 - **Frontend** (e.g., `frontend/`, `web/`, `ui/`, `src/app/`, etc. *only if present*)

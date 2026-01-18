@@ -73,5 +73,4 @@ Provide 3–8 priorities derived strictly from:
   Each priority must include:
 - What to implement/complete
 - Where (directories)
-- Who (contributors, if appropriate)
 - How success will be measured
