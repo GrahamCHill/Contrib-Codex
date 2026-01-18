@@ -9,6 +9,7 @@ import dev.grahamhill.service.DatabaseService;
 import dev.grahamhill.service.EncryptionService;
 import dev.grahamhill.service.ExportService;
 import dev.grahamhill.service.GitService;
+import dev.grahamhill.util.ConfigObfuscator;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -2047,19 +2048,39 @@ public class MainApp extends Application {
     }
 
     private void loadDotenv() {
+        // Try to load from local file first (development/override)
         File envFile = new File(".env");
         if (envFile.exists()) {
             try {
                 java.util.List<String> lines = java.nio.file.Files.readAllLines(envFile.toPath());
-                for (String line : lines) {
-                    if (line.trim().isEmpty() || line.startsWith("#")) continue;
-                    if (line.contains("=")) {
-                        String[] parts = line.split("=", 2);
-                        envConfig.put(parts[0].trim(), parts[1].trim());
-                    }
-                }
+                parseEnvLines(lines);
+                return;
             } catch (Exception e) {
                 e.printStackTrace();
+            }
+        }
+
+        // Fallback: load from classpath (bundled)
+        try (java.io.InputStream is = getClass().getResourceAsStream("/.env")) {
+            if (is != null) {
+                java.util.Scanner s = new java.util.Scanner(is).useDelimiter("\\A");
+                String content = s.hasNext() ? s.next() : "";
+                
+                // Bundled .env should be obfuscated
+                String deobfuscated = ConfigObfuscator.deobfuscate(content);
+                parseEnvLines(java.util.Arrays.asList(deobfuscated.split("\n")));
+            }
+        } catch (Exception e) {
+            System.err.println("Could not load bundled .env: " + e.getMessage());
+        }
+    }
+
+    private void parseEnvLines(java.util.List<String> lines) {
+        for (String line : lines) {
+            if (line.trim().isEmpty() || line.startsWith("#")) continue;
+            if (line.contains("=")) {
+                String[] parts = line.split("=", 2);
+                envConfig.put(parts[0].trim(), parts[1].trim());
             }
         }
     }

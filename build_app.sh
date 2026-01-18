@@ -6,7 +6,14 @@
 echo "Building Contrib Codex..."
 
 # 1. Clean and Package with dependencies
-mvn clean package -DskipTests
+# First, ensure .env is in resources and obfuscated
+cp .env src/main/resources/.env
+# Compile the obfuscator first
+mvn compile -DskipTests
+# Run obfuscation on the resource file
+mvn exec:java -Dexec.mainClass="dev.grahamhill.util.ConfigObfuscator" -Dexec.args="obfuscate src/main/resources/.env"
+
+mvn package -DskipTests
 
 if [ $? -ne 0 ]; then
     echo "Maven build failed!"
