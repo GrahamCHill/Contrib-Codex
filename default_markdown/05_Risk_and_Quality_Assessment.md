@@ -19,7 +19,8 @@ Create a table with **one row per contributor**, including:
 - Total lines added
 - **Lines added per commit** (must be calculated: total_lines_added / total_commits)
 - Tests touched (Yes/No + count if available)
-- Risk band (LOW / LOW-MED / MED / MED-HIGH / HIGH / VERY HIGH) using the defined scale
+- Risk band (LOW / LOW-MED / MED / MED-HIGH / HIGH / VERY HIGH) using the defined scale. 
+- **RISK FACTORS**: Risk is primarily driven by Lines Added/Commit, but also increases with high churn and low test coverage.
 - Brief justification (1–3 sentences, metric-backed)
 
 ### 2) Risk Reasoning (per contributor)

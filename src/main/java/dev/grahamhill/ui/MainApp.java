@@ -493,10 +493,11 @@ public class MainApp extends Application {
                 "3) Do not repeat the same points across sections. Prefer dense, high-signal writing.\n" +
                 "4) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
                 "\n" +
-                "RISK MODEL (Lines Added per Commit):\n" +
-                "- Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
+                "RISK MODEL (Primary: Lines Added per Commit, Secondary: Other Metrics):\n" +
+                "- PRIMARY METRIC: Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
                 "- Higher lines_added_per_commit = HIGHER RISK. Lower = more iterative, lower risk.\n" +
-                "- DO NOT use file length as risk. Risk is based on changed lines per commit.\n" +
+                "- SECONDARY METRICS: Risk is also increased by high code churn, low test coverage, and high AI-generated probability (if provided).\n" +
+                "- DO NOT use file length as risk. Risk is based on changed lines per commit and the secondary metrics mentioned above.\n" +
                 "- REFACTORING VS BLOAT:\n" +
                 "  - Refactoring (high deletions relative to additions) is NOT bloat. It reduces future technical debt.\n" +
                 "  - If a contributor has significant deletions (e.g., deletions > 50% of additions), acknowledge this as high-value refactoring and adjust risk downward.\n" +
@@ -598,7 +599,8 @@ public class MainApp extends Application {
                 "RISK ASSESSMENT:\n" +
                 "- Calculate risk using: lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
                 "- Higher lines_added_per_commit = HIGHER RISK (mathematically).\n" +
-                "- Apply the defined risk scale exactly.\n" +
+                "- SECONDARY RISK FACTORS: Increase risk if there is high code churn, low test coverage, or high AI-generated probability.\n" +
+                "- Apply the defined risk scale exactly, then adjust based on secondary factors.\n" +
                 "- Adjust risk downward if tests are present (changes in folders containing: test, tests, __tests__).\n" +
                 "- Consider language/file context and project phase (initial scaffolding can be lower risk only if changes are mostly config/docs/build setup, not core logic).\n" +
                 "\n" +
@@ -1132,7 +1134,8 @@ public class MainApp extends Application {
 
         metricsText.append("\nRISK RULES: CALCULATE 'Lines Added/Commit' = (Total Lines Added / Total Commits).\n");
         metricsText.append("Scale: 1500+ VERY HIGH, 1000-1500 HIGH, 750-1000 MED-HIGH, 500-750 MED, 250-500 LOW-MED, <250 LOW.\n");
-        metricsText.append("Higher = Higher Risk. Don't subtract deletions.\n");
+        metricsText.append("Higher = Higher Risk. Secondary risk factors: High churn, low test coverage, high AI probability.\n");
+        metricsText.append("Don't subtract deletions.\n");
 
         String reqFeatures = readRequiredFeatures();
         if (!reqFeatures.isEmpty()) {
@@ -1195,6 +1198,13 @@ public class MainApp extends Application {
                                 
                                 String progressMsg = String.format("Generated section: %s...", formattedTitle);
                                 Platform.runLater(() -> llmResponseArea.setText(progressMsg));
+
+                                // Wait a bit between sections to avoid rate limits
+                                try {
+                                    Thread.sleep(2000); 
+                                } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt();
+                                }
                             }
                         } else {
                     // Default behavior if no MD sections

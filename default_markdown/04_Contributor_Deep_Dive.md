@@ -59,7 +59,8 @@ Evaluate quality indicators based ONLY on METRICS:
 ### 4) Risk Rating & Justification
 Assign a risk band using the defined scale:
 - Base it primarily on **Lines Added per Commit** (higher = higher risk)
-- Adjust downward if tests were modified
+- Secondary risk factors (increase risk): High code churn, low test coverage relative to logic changes, high AI-generated probability.
+- Mitigating factors (decrease risk): High deletion ratio (refactoring), high test coverage.
 - Note if changes are concentrated in high-risk areas (core logic) vs lower-risk areas (docs/config), using directory context
 
 ### 5) "Most Valuable Contributor" Potential

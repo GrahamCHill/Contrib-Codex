@@ -1,5 +1,5 @@
 # Ownership / Bus Factor Analysis
-Evaluate ownership concentration and risk from low contributor diversity in critical modules.
+Evaluate ownership concentration and risk from low contributor diversity in critical modules. **Hero patterns in this analysis (where one person does almost everything) are comparable to "Key man" risks.**
 
 INSTRUCTIONS FOR AI (STRICT):
 - Use ONLY contributor names, file paths, directories, and metrics explicitly present in METRICS.
