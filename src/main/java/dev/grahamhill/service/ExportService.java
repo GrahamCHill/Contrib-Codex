@@ -17,7 +17,7 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String cpdPerContributorPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
+    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -124,7 +124,6 @@ public class ExportService {
         addIndexRow(indexTable, "  - Daily Activity - Total Impact (Line Chart)", "chart4", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Daily Activity per Contributor (Line Chart)", "chart5", currentPage++, normalFont);
         addIndexRow(indexTable, "  - Commits per Day (Line Chart)", "chart6", currentPage++, normalFont);
-        addIndexRow(indexTable, "  - Commits per Day per Contributor (Line Chart)", "chart7", currentPage++, normalFont);
         
         addIndexRow(indexTable, "Detailed Contributor Metrics", "details", currentPage++, normalFont);
         
@@ -409,24 +408,12 @@ public class ExportService {
         graphList.add(new ListItem("Daily Activity - Total Impact (Line Chart)", normalFont));
         graphList.add(new ListItem("Daily Activity per Contributor (Line Chart)", normalFont));
         graphList.add(new ListItem("Commits per Day (Line Chart)", normalFont));
-        graphList.add(new ListItem("Commits per Day per Contributor (Line Chart)", normalFont));
         document.add(graphList);
         document.add(new Paragraph(" ", normalFont));
 
         Image pieImage = Image.getInstance(piePath);
-        pieImage.scaleToFit(1080, 675); // Scaled Pie Chart +35% (800*1.35, 500*1.35)
-        
-        // Use absolute positioning to center and move up
-        float pageWidth = document.getPageSize().getWidth();
-        float pageHeight = document.getPageSize().getHeight();
-        float imgWidth = pieImage.getScaledWidth();
-        float imgHeight = pieImage.getScaledHeight();
-        
-        // Center horizontally, move up vertically (higher than middle)
-        float x = (pageWidth - imgWidth) / 2;
-        float y = (pageHeight - imgHeight) - 20; // 20 units from the top
-        
-        pieImage.setAbsolutePosition(x, y);
+        pieImage.scaleToFit(500, 500); 
+        pieImage.setAlignment(Image.MIDDLE);
         document.add(pieImage);
 
         document.newPage();
@@ -473,17 +460,6 @@ public class ExportService {
         cpdImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
-
-        if (cpdPerContributorPath != null) {
-            document.newPage();
-            Paragraph chartTitle7 = new Paragraph("Commits per Day per Contributor:", sectionFont);
-            chartTitle7.setSpacingBefore(15f);
-            document.add(chartTitle7);
-            Image cpdPerImage = Image.getInstance(cpdPerContributorPath);
-            cpdPerImage.scaleToFit(document.getPageSize().getWidth() * 0.95f, (document.getPageSize().getHeight() - 150) * 0.95f);
-            cpdPerImage.setAlignment(Image.MIDDLE);
-            document.add(cpdPerImage);
-        }
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);

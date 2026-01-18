@@ -1,5 +1,6 @@
 # Requirements Alignment
 Evaluate whether repository work and implemented capabilities align with project requirements, using both the git METRICS and the uploaded **Features** reference.
+**CRITICAL: You MUST list ALL features requested in the requirements.md or Features input.**
 
 INSTRUCTIONS FOR AI (STRICT):
 - You MUST use BOTH inputs:
@@ -25,14 +26,16 @@ Provide:
 Create a table mapping EVERY feature area from **Features** to evidence in **METRICS**.
 **CRITICAL: You MUST include ALL features listed in the "Features" input in this table. If a feature is not present in METRICS, you MUST still include it and state "Not Implemented / No Evidence Detected".**
 
-| Feature / Requirement (from Features) | Evidence in Repo (from METRICS) | Contributors Involved | Alignment Status |
-|---|---|---|---|
-| ... | directories/files touched, commit refs if provided | contributor names | Fully Met / Partially Met / Not Implemented / No Evidence Detected |
+| Feature / Requirement (from Features) | Evidence in Repo (from METRICS) | Contributors Involved | Contribution Breakdown (%) | Alignment Status |
+|---|---|---|---|---|
+| ... | directories/files touched, commit refs if provided | contributor names | e.g., Alice (70%), Bob (30%) | Fully Met / Partially Met / Not Implemented / No Evidence Detected |
 
 Rules:
 - Evidence MUST reference file paths/directories from METRICS (and commit refs if present).
-- If no evidence exists in METRICS, mark as **Not Implemented / No Evidence Detected** and leave "Evidence in Repo" and "Contributors Involved" as "N/A" or "None".
+- If no evidence exists in METRICS, mark as **Not Implemented / No Evidence Detected** and leave "Evidence in Repo", "Contributors Involved", and "Contribution Breakdown (%)" as "N/A" or "None".
+- **Contribution Breakdown (%)**: For each feature, estimate the percentage of implementation effort per contributor based on their **Meaningful Score** and volume of changes (LOC/commits) in the relevant directories/files.
 - DO NOT skip any features from the provided Features input, regardless of whether evidence exists.
+- You MUST list ALL features requested in the **requirements.md** or Features input.
 
 ## 3) Alignment by Architecture Area
 Using directory patterns from METRICS, describe alignment across:

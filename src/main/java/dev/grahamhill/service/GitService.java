@@ -609,6 +609,12 @@ public class GitService {
             
             for (org.eclipse.jgit.lib.Ref branch : branches) {
                 String fullBranchName = branch.getName();
+                
+                // Skip literal HEAD pointers to avoid attributing commits to a "branch" named HEAD
+                if (fullBranchName.equals("HEAD") || fullBranchName.equals("refs/remotes/origin/HEAD")) {
+                    continue;
+                }
+
                 String branchName = repository.shortenRemoteBranchName(fullBranchName);
                 if (branchName != null && (branchName.equals(fullBranchName) || branchName.startsWith("refs/"))) {
                     if (fullBranchName.startsWith("refs/heads/")) branchName = fullBranchName.substring(11);
@@ -657,6 +663,12 @@ public class GitService {
 
             for (org.eclipse.jgit.lib.Ref branch : branches) {
                 String fullBranchName = branch.getName();
+                
+                // Skip literal HEAD pointers
+                if (fullBranchName.equals("HEAD") || fullBranchName.equals("refs/remotes/origin/HEAD")) {
+                    continue;
+                }
+
                 String branchName = repository.shortenRemoteBranchName(fullBranchName);
                 if (branchName != null && (branchName.equals(fullBranchName) || branchName.startsWith("refs/"))) {
                     if (fullBranchName.startsWith("refs/heads/")) branchName = fullBranchName.substring(11);
