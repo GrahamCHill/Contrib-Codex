@@ -6,10 +6,11 @@ Evaluate whether repository work and implemented capabilities align with project
 
 INSTRUCTIONS FOR AI (STRICT):
 - You MUST use BOTH inputs:
-    1) the **METRICS** section (git activity, file paths, contributor mappings)
+    1) the **METRICS** section (git activity, file paths, contributor mappings, commit dates, and total counts)
     2) the **Features** field (uploaded capabilities/feature list)
 - Use ONLY names, file paths, directories, commit refs, metrics, and feature statements explicitly present in METRICS or Features.
 - **STRICT EVIDENCE RULE**: Unless you are over 90% sure a file or directory directly implements a requested feature based on the METRICS (path names, diffs, etc.), do NOT list it as "Fully Met". If confidence is lower, mark as "Partially Met" or "Not Implemented / No Evidence Detected".
+- **COMMIT CONTEXT**: Use the provided total commits and commit dates per feature/directory to assess the longevity and intensity of implementation effort.
 - Do NOT invent requirements, capabilities, modules, or features.
 - If a requirement/capability is not present in Features or cannot be supported by METRICS, state:
   **"Not provided in Features"** or **"Not Implemented / No Evidence Detected"**.
@@ -24,17 +25,20 @@ REQUIRED OUTPUT:
 Provide:
 - Overall alignment rating (High / Medium / Low)
 - 3–7 bullets summarizing what is strongly aligned, partially aligned, and missing
+- Mention specific commit count and date ranges for major features to show implementation intensity.
 
 ## 2) Feature-to-Evidence Mapping Table
 Create a table mapping EVERY feature area from **Features** to evidence in **METRICS**.
 **CRITICAL: You MUST include ALL features listed in the "Features" input in this table. If a feature is not present in METRICS, you MUST still include it and state "Not Implemented / No Evidence Detected".**
 
-| Feature / Requirement (from Features) | Evidence in Repo (from METRICS) | Contributors Involved | Contribution Breakdown (%) | Alignment Status |
-|---|---|---|---|---|
-| ... | directories/files touched, commit refs if provided | contributor names | e.g., Alice (70%), Bob (30%) | Fully Met / Partially Met / Not Implemented / No Evidence Detected |
+| Feature / Requirement (from Features) | Evidence in Repo (from METRICS) | Total Commits | Date Range | Contributors Involved | Contribution Breakdown (%) | Alignment Status |
+|---|---|---|---|---|---|---|
+| ... | directories/files | e.g. 45 | 2023-01 to 2023-06 | names | e.g. Alice (70%) | Fully Met |
 
 Rules:
 - Evidence MUST reference file paths/directories from METRICS (and commit refs if present).
+- **Total Commits**: Sum of commits from all contributors touching the relevant directories/files.
+- **Date Range**: The period from the first to the last commit relevant to this feature.
 - If no evidence exists in METRICS, mark as **Not Implemented / No Evidence Detected** and leave "Evidence in Repo", "Contributors Involved", and "Contribution Breakdown (%)" as "N/A" or "None".
 - **Contribution Breakdown (%)**: For each feature, estimate the percentage of implementation effort per contributor based on their **Meaningful Score** and volume of changes (LOC/commits) in the relevant directories/files.
     - **CRITICAL WEIGHTING**: When calculating the breakdown, you MUST apply weights based on the nature of the work:

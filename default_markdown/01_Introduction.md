@@ -17,14 +17,27 @@ Provide 5–10 bullets covering:
 - evidence-backed statements referencing the metrics (counts, lines/commit, file categories)
 
 ### 2) High-Level Contributor Responsibilities & Value Added
-Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor.
+Provide a high-level overview of the primary responsibilities and the unique value added by each major contributor. Be CRITICAL and direct. If a contributor's work appears to be low-value or purely cosmetic, state that clearly.
 For each major contributor:
 - Identify their primary area of responsibility (e.g., core logic, frontend components, infrastructure, testing) based on the directories and files they touched most.
 - Describe the high-level value they added to the project (e.g., "established the project's architectural foundation", "drove the implementation of user-facing features", "ensured system stability through comprehensive testing").
+- **HARSHNESS RULE**: If it appears all an individual did was rewrite frontend stylings (CSS, HTML, simple UI layout changes) without contributing to functional logic, you MUST state that explicitly and call out the low impact on system functionality.
 - This should be a concise, qualitative summary based on the quantitative metrics.
 - DO NOT assign future priorities here, only summarize past contributions.
 
-### 3) Repository Structure & Architecture Mapping
+### 3) Key Contributor Summary Table
+Create a table for all major contributors:
+
+| Contributor | Role / Primary Area | Key Man? | Project Dependence (5 words or less) | Risk if they leave |
+|---|---|---|---|---|
+| name | e.g. Backend | Yes/No | e.g. Sole owner of core API | High/Med/Low |
+
+Rules:
+- **Key Man?**: "Yes" if they are the primary or sole contributor to critical modules (as evidenced by high ownership concentration in those areas).
+- **Project Dependence**: A very brief statement summarizing how much the project relies on them (max 5 words).
+- **Risk if they leave**: Based on their Key Man status and the criticality of the modules they own.
+
+### 4) Repository Structure & Architecture Mapping
 Analyze the directory patterns included in METRICS and classify work into:
 - **Backend** (e.g., `backend/`, `server/`, `api/`, `src/main/`, etc. *only if present*)
 - **Frontend** (e.g., `frontend/`, `web/`, `ui/`, `src/app/`, etc. *only if present*)

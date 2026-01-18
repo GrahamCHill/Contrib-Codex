@@ -6,6 +6,7 @@ INSTRUCTIONS FOR AI (STRICT):
 - Do NOT invent PR counts, turnaround times, approvals, or policies if not provided.
 - If PR metrics are missing, state: **"Not provided in metrics"**.
 - **Merge Commit Rule:** Distinguish integration activity (merge commits) from direct change authorship. Do not treat frequent merges as direct code output without supporting evidence.
+- **NUMERIC LOGIC RULE**: You MUST correctly compare numeric values. Ensure you understand that 327 is a smaller number than 1160. Do NOT swap "highest" and "lowest" if the numbers clearly indicate otherwise. Verify all rankings before outputting.
 
 REQUIRED OUTPUT:
 

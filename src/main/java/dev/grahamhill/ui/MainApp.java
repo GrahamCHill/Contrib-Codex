@@ -489,9 +489,11 @@ public class MainApp extends Application {
                 "   - IGNORE ALL 'package-lock.json' mentions as a contributing factor for individuals. It should not influence risk or impact assessments.\n" +
                 "2) All rankings (highest/lowest) MUST be numerically correct.\n" +
                 "   - CONSISTENCY CHECK: Before writing conclusions, verify that \"highest\" corresponds to the largest numeric value and \"lowest\" to the smallest.\n" +
+                "   - NUMERIC LOGIC: Explicitly verify that you understand 327 is lower than 1160.\n" +
                 "   - If the provided METRICS labels contradict the numbers, explicitly flag it as: \"Metrics inconsistency detected\" and correct the ranking using the numeric values.\n" +
                 "3) Do not repeat the same points across sections. Prefer dense, high-signal writing.\n" +
-                "4) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
+                "4) HARSHNESS ON LOW-VALUE WORK: In sections discussing contributor responsibility and value added, be direct and critical. If a contributor's work is primarily frontend styling or cosmetic, state that clearly as low functional impact.\n" +
+                "5) STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns from any generated tables. Do not merge cells or use complex layouts.\n" +
                 "\n" +
                 "RISK MODEL (Primary: Lines Added per Commit, Secondary: Other Metrics):\n" +
                 "- PRIMARY METRIC: Compute lines_added_per_commit = total_lines_added / total_commits (per contributor).\n" +
@@ -587,6 +589,8 @@ public class MainApp extends Application {
                 "- STRICT DATA STRUCTURE: Tables MUST contain the columns exactly as requested. Do not add or remove columns.\n" +
                 "- CONSISTENCY CHECK: Any \"highest/lowest\" ranking MUST be numerically correct. If labels conflict with numbers, flag it as:\n" +
                 "  \"Metrics inconsistency detected\" and correct the ranking based on numeric values.\n" +
+                "- NUMERIC LOGIC: Explicitly verify that you understand 327 is lower than 1160.\n" +
+                "- HARSHNESS ON LOW-VALUE WORK: Be direct and critical in evaluations. If a contributor's work is primarily frontend styling or cosmetic, state that clearly.\n" +
                 "\n" +
                 "REFACTORING VS BLOAT:\n" +
                 "- Acknowledge refactoring (high deletions) as a positive quality signal that reduces technical debt.\n" +
@@ -1106,8 +1110,8 @@ public class MainApp extends Application {
             metricsText.append(String.format("\nCOMPLETE COMMIT HISTORY (LATEST %d COMMITS, INCLUDING MERGED BRANCHES, LATEST FIRST):\n", commitLimit));
             for (CommitInfo ci : allCommits) {
                 String mergeMarker = ci.isMerge() ? " [MERGE]" : "";
-                metricsText.append(String.format("[%s]%s %s <%s>: %s (%s) +%d/-%d l, %d n/%d e/%d d f, AI: %.0f%%\n",
-                    ci.id(), mergeMarker, ci.authorName(), ci.branch(), ci.message(), formatLanguages(ci.languageBreakdown()),
+                metricsText.append(String.format("[%s]%s %s <%s> [%s]: %s (%s) +%d/-%d l, %d n/%d e/%d d f, AI: %.0f%%\n",
+                    ci.id(), mergeMarker, ci.authorName(), ci.branch(), ci.timestamp().toString(), ci.message(), formatLanguages(ci.languageBreakdown()),
                     ci.linesAdded(), ci.linesDeleted(), ci.filesAdded(), ci.filesEdited(), ci.filesDeleted(),
                     ci.aiProbability() * 100));
             }
