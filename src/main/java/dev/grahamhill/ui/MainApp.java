@@ -146,6 +146,12 @@ public class MainApp extends Application {
         });
 
         primaryStage.setTitle("Contrib Codex");
+        try {
+            javafx.scene.image.Image icon = new javafx.scene.image.Image(getClass().getResourceAsStream("/icon.png"));
+            primaryStage.getIcons().add(icon);
+        } catch (Exception e) {
+            System.err.println("Could not load app icon: " + e.getMessage());
+        }
 
         BorderPane root = new BorderPane();
         

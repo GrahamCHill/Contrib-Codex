@@ -48,7 +48,8 @@ if [ "${PLATFORM}" == "macos" ]; then
       --vendor "Graham Hill" \
       --description "Contrib Codex Git Analytics" \
       --app-version "1.0.0" \
-      --mac-package-name "ContribCodex"
+      --mac-package-name "ContribCodex" \
+      --icon src/main/resources/contrib_codex.icns
     
     # Also create a DMG if needed: --type dmg
     
@@ -70,7 +71,8 @@ elif [ "${PLATFORM}" == "windows" ]; then
       --app-version "1.0.0" \
       --win-dir-chooser \
       --win-shortcut \
-      --win-menu
+      --win-menu \
+      --icon src/main/resources/icon.png
 else
     echo "Platform ${PLATFORM} not supported for native packaging by this script."
 fi
