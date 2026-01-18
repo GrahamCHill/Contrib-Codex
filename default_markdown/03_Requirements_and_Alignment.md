@@ -38,9 +38,10 @@ Rules:
 - If no evidence exists in METRICS, mark as **Not Implemented / No Evidence Detected** and leave "Evidence in Repo", "Contributors Involved", and "Contribution Breakdown (%)" as "N/A" or "None".
 - **Contribution Breakdown (%)**: For each feature, estimate the percentage of implementation effort per contributor based on their **Meaningful Score** and volume of changes (LOC/commits) in the relevant directories/files.
     - **CRITICAL WEIGHTING**: When calculating the breakdown, you MUST apply weights based on the nature of the work:
-        - **Backend/Logic**: 1.0x (Full weight for core logic and backend implementation).
-        - **Frontend/Styling**: 0.5x (Half weight if the contribution is primarily visual or styling).
-        - Use the **Change Classification** from the Top Files analysis to identify if a contributor's work on a feature was primarily Logic vs. Styling. A contributor who implemented the backend logic should be credited more than one who only applied styling to the same feature.
+        - **Backend/Logic / API Implementation**: 1.0x (Full weight for core logic, backend implementation, and actually *developing* an API endpoint).
+        - **Frontend/Styling / API Consumption**: 0.5x (Half weight if the contribution is primarily visual, styling, or simply *calling* an existing API endpoint without implementing the underlying logic).
+        - **Developing vs. Calling**: A contributor who *implements* the logic for an API endpoint should be credited significantly more than one who only adds a call to that endpoint in the frontend. Calling an API is an integration/usage task, whereas developing the endpoint is a core logic task.
+        - Use the **Change Classification** from the Top Files analysis to identify if a contributor's work on a feature was primarily Logic vs. Styling/Other.
 - DO NOT skip any features from the provided Features input, regardless of whether evidence exists.
 - You MUST list ALL features requested in the **requirements.md** or Features input.
 

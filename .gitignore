@@ -40,3 +40,4 @@ build/
 metrics.db
 .output.txt
 /requirements.md
+/.env

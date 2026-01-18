@@ -412,7 +412,9 @@ public class ExportService {
         document.add(new Paragraph(" ", normalFont));
 
         Image pieImage = Image.getInstance(piePath);
-        pieImage.scaleToFit(400, 400); 
+        // Pie chart is 1080x1080, scale it to fit nicely while maintaining square aspect
+        float pieSize = Math.min(document.getPageSize().getWidth() * 0.85f, (document.getPageSize().getHeight() - 150) * 0.85f);
+        pieImage.scaleToFit(pieSize, pieSize); 
         pieImage.setAlignment(Image.MIDDLE);
         document.add(pieImage);
 
@@ -421,7 +423,7 @@ public class ExportService {
         chartTitle2.setSpacingBefore(15f);
         document.add(chartTitle2);
         Image barImage = Image.getInstance(barPath);
-        barImage.scaleToFit(document.getPageSize().getWidth() * 0.80f, (document.getPageSize().getHeight() - 150) * 0.80f);
+        barImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
 
@@ -430,7 +432,7 @@ public class ExportService {
         chartTitle3.setSpacingBefore(15f);
         document.add(chartTitle3);
         Image lineImage = Image.getInstance(linePath);
-        lineImage.scaleToFit(document.getPageSize().getWidth() * 0.80f, (document.getPageSize().getHeight() - 150) * 0.80f);
+        lineImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         lineImage.setAlignment(Image.MIDDLE);
         document.add(lineImage);
 
@@ -439,7 +441,7 @@ public class ExportService {
         chartTitle4.setSpacingBefore(15f);
         document.add(chartTitle4);
         Image calendarImage = Image.getInstance(calendarPath);
-        calendarImage.scaleToFit(document.getPageSize().getWidth() * 0.80f, (document.getPageSize().getHeight() - 150) * 0.80f);
+        calendarImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         calendarImage.setAlignment(Image.MIDDLE);
         document.add(calendarImage);
 
@@ -448,7 +450,7 @@ public class ExportService {
         chartTitle5.setSpacingBefore(15f);
         document.add(chartTitle5);
         Image contribImage = Image.getInstance(contribPath);
-        contribImage.scaleToFit(document.getPageSize().getWidth() * 0.80f, (document.getPageSize().getHeight() - 150) * 0.80f);
+        contribImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         contribImage.setAlignment(Image.MIDDLE);
         document.add(contribImage);
 
@@ -457,7 +459,7 @@ public class ExportService {
         chartTitle6.setSpacingBefore(15f);
         document.add(chartTitle6);
         Image cpdImage = Image.getInstance(cpdPath);
-        cpdImage.scaleToFit(document.getPageSize().getWidth() * 0.80f, (document.getPageSize().getHeight() - 150) * 0.80f);
+        cpdImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
 

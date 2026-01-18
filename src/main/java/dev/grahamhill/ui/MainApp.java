@@ -81,14 +81,19 @@ public class MainApp extends Application {
 
     private CheckBox aiReviewCheckBox;
 
+    private Map<String, String> envConfig = new HashMap<>();
+
     @Override
     public void start(Stage primaryStage) {
+        loadDotenv();
         // Initialize UI components before loading settings to avoid NPE
         repoPathField = new TextField();
         commitLimitSpinner = new Spinner<>(0, 10000, 100);
         commitLimitSpinner.setEditable(true);
+        commitLimitSpinner.valueProperty().addListener((obs, oldVal, newVal) -> analyzeRepo());
         tableLimitSpinner = new Spinner<>(1, 100, 20);
         tableLimitSpinner.setEditable(true);
+        tableLimitSpinner.valueProperty().addListener((obs, oldVal, newVal) -> analyzeRepo());
         ignoredExtensionsField = new TextField("json,xml,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml");
         ignoredFoldersField = new TextField("node_modules,target,build,dist,.git");
         mdFolderPathField = new TextField();
@@ -135,7 +140,17 @@ public class MainApp extends Application {
         MenuItem genFeaturesTemplateItem = new MenuItem("Generate Features Template");
         genFeaturesTemplateItem.setOnAction(e -> generateRequiredFeaturesTemplate());
         settingsMenu.getItems().addAll(apiKeysItem, new SeparatorMenuItem(), genDefaultMdItem, genDefaultCoverItem, genFeaturesTemplateItem);
-        menuBar.getMenus().add(settingsMenu);
+        
+        Menu infoMenu = new Menu("Info");
+        MenuItem websiteItem = new MenuItem("Website");
+        websiteItem.setOnAction(e -> getHostServices().showDocument(envConfig.getOrDefault("APP_WEBSITE_URL", "https://github.com/grahamhill/contrib_metric")));
+        
+        MenuItem aboutItem = new MenuItem("App Info");
+        aboutItem.setOnAction(e -> showAppInfoDialog());
+        
+        infoMenu.getItems().addAll(websiteItem, aboutItem);
+
+        menuBar.getMenus().addAll(settingsMenu, infoMenu);
         root.setTop(new VBox(menuBar));
 
         VBox contentBox = new VBox(10);
@@ -299,9 +314,13 @@ public class MainApp extends Application {
 
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
-        commitPieChart.setMinWidth(810); // +35% of 600
-        commitPieChart.setPrefWidth(1230); // Increased by 150 (from 1080)
-        commitPieChart.setLegendVisible(false); // Labels on graph instead
+        commitPieChart.setMinWidth(1080);
+        commitPieChart.setMaxWidth(1080);
+        commitPieChart.setPrefWidth(1080);
+        commitPieChart.setMinHeight(1080);
+        commitPieChart.setMaxHeight(1080);
+        commitPieChart.setPrefHeight(1080);
+        commitPieChart.setLegendVisible(true);
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
@@ -309,13 +328,14 @@ public class MainApp extends Application {
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
         impactBarChart.setMinWidth(1770); // +5% of 1686
         impactBarChart.setPrefWidth(2336); // Increased by 150 (from 2186)
-        impactBarChart.setMinHeight(990); 
-        impactBarChart.setCategoryGap(20);
+        // Increase chart heights by 50 pixels in both UI and snapshots
+        impactBarChart.setMinHeight(1040); 
+        impactBarChart.setPrefHeight(1040);
         impactBarChart.setLegendSide(javafx.geometry.Side.RIGHT);
         impactBarChart.setPadding(new Insets(0, 100, 0, 0)); // Extra internal right padding
         xAxis.setLabel("Contributor");
         xAxis.setTickLabelRotation(45); // Prevent overlap
-        xAxis.setTickLabelGap(10);
+        xAxis.setTickLabelGap(20); // Increased from 10 to move labels down
         xAxis.setTickLength(10);
         yAxis.setLabel("Lines of Code");
 
@@ -325,12 +345,13 @@ public class MainApp extends Application {
         activityLineChart.setTitle("Recent Commit Activity");
         activityLineChart.setMinWidth(1770);
         activityLineChart.setPrefWidth(2336);
-        activityLineChart.setMinHeight(990);
+        activityLineChart.setMinHeight(1040);
+        activityLineChart.setPrefHeight(1040);
         activityLineChart.setLegendSide(javafx.geometry.Side.RIGHT);
         activityLineChart.setPadding(new Insets(0, 100, 0, 0));
         lxAxis.setLabel("Commit ID");
         lxAxis.setTickLabelRotation(45); // Prevent overlap
-        lxAxis.setTickLabelGap(10);
+        lxAxis.setTickLabelGap(20);
         lxAxis.setTickLength(10);
         lyAxis.setLabel("Lines Added");
 
@@ -340,12 +361,13 @@ public class MainApp extends Application {
         calendarActivityChart.setTitle("Daily Activity (Total Impact)");
         calendarActivityChart.setMinWidth(1770);
         calendarActivityChart.setPrefWidth(2336);
-        calendarActivityChart.setMinHeight(990);
+        calendarActivityChart.setMinHeight(1040);
+        calendarActivityChart.setPrefHeight(1040);
         calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
         calendarActivityChart.setPadding(new Insets(0, 100, 0, 0));
         cxAxis.setLabel("Date");
         cxAxis.setTickLabelRotation(45); // Prevent overlap
-        cxAxis.setTickLabelGap(10);
+        cxAxis.setTickLabelGap(20);
         cxAxis.setTickLength(10);
         cyAxis.setLabel("Total Lines Added");
 
@@ -355,12 +377,13 @@ public class MainApp extends Application {
         contributorActivityChart.setTitle("Daily Activity per Contributor");
         contributorActivityChart.setMinWidth(1770);
         contributorActivityChart.setPrefWidth(2336);
-        contributorActivityChart.setMinHeight(990);
+        contributorActivityChart.setMinHeight(1040);
+        contributorActivityChart.setPrefHeight(1040);
         contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
         contributorActivityChart.setPadding(new Insets(0, 100, 0, 0));
         caxAxis.setLabel("Date");
         caxAxis.setTickLabelRotation(45);
-        caxAxis.setTickLabelGap(10);
+        caxAxis.setTickLabelGap(20);
         caxAxis.setTickLength(10);
         cayAxis.setLabel("Lines Added");
 
@@ -370,12 +393,13 @@ public class MainApp extends Application {
         commitsPerDayChart.setTitle("Commits per Day");
         commitsPerDayChart.setMinWidth(1770);
         commitsPerDayChart.setPrefWidth(2336);
-        commitsPerDayChart.setMinHeight(990);
+        commitsPerDayChart.setMinHeight(1040);
+        commitsPerDayChart.setPrefHeight(1040);
         commitsPerDayChart.setLegendSide(javafx.geometry.Side.RIGHT);
         commitsPerDayChart.setPadding(new Insets(0, 100, 0, 0));
         cpdXAxis.setLabel("Date");
         cpdXAxis.setTickLabelRotation(45);
-        cpdXAxis.setTickLabelGap(10);
+        cpdXAxis.setTickLabelGap(20);
         cpdXAxis.setTickLength(10);
         cpdYAxis.setLabel("Commit Count");
 
@@ -385,14 +409,25 @@ public class MainApp extends Application {
         cpdPerContributorChart.setTitle("Commits per Day per Contributor");
         cpdPerContributorChart.setMinWidth(1770);
         cpdPerContributorChart.setPrefWidth(2336);
-        cpdPerContributorChart.setMinHeight(990);
+        cpdPerContributorChart.setMinHeight(1040);
+        cpdPerContributorChart.setPrefHeight(1040);
         cpdPerContributorChart.setLegendSide(javafx.geometry.Side.RIGHT);
         cpdPerContributorChart.setPadding(new Insets(0, 100, 0, 0));
         cpdPerXAxis.setLabel("Date");
         cpdPerXAxis.setTickLabelRotation(45);
-        cpdPerXAxis.setTickLabelGap(10);
+        cpdPerXAxis.setTickLabelGap(20);
         cpdPerXAxis.setTickLength(10);
         cpdPerYAxis.setLabel("Commit Count");
+
+        // Set a fixed height for all charts in the visuals box to ensure consistency
+        commitPieChart.setMinHeight(1080);
+        commitPieChart.setMaxHeight(1080);
+        commitPieChart.setPrefHeight(1080);
+        impactBarChart.setPrefHeight(1040);
+        activityLineChart.setPrefHeight(1040);
+        calendarActivityChart.setPrefHeight(1040);
+        contributorActivityChart.setPrefHeight(1040);
+        commitsPerDayChart.setPrefHeight(1040);
 
         chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
@@ -1090,88 +1125,53 @@ public class MainApp extends Application {
             try {
                 StringBuilder fullReport = new StringBuilder();
                 
-                // If there are MD sections, call LLM for each one
-                if (!mdSections.isEmpty()) {
-                    for (Map.Entry<String, String> entry : mdSections.entrySet()) {
-                        String sectionTitle = entry.getKey().replace(".md", "");
-                        String formattedTitle = formatSectionTitle(sectionTitle);
-                        String sectionInstructions = entry.getValue();
-                        
-                        String basePrompt = userPromptArea.getText() + "\n\n" + 
-                                       "FOCUS SECTION: " + formattedTitle + "\n" +
-                                       "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
-                                       "IMPORTANT: Provide ONLY the content for this section as defined by the instructions. " +
-                                       "Do not include information that belongs in other sections. " +
-                                       "Use the provided metrics to inform your analysis for this specific section.\n" +
-                                       "HEADER NESTING: The application will prepend a top-level header (# " + formattedTitle + ") for this section. " +
-                                       "Ensure all headers in your response use at least TWO hashes (##) so they are correctly nested under the section header.";
-                        
-                        // No more chunking metrics. Pass full baseMetrics.
-                        String fullPrompt = basePrompt + "\n\n" + baseMetrics;
-                                           
-                        String sectionResponse = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), fullPrompt);
-                        
-                        // Sanitize sectionResponse to remove markdown code blocks and duplicate titles
-                        sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
-                        
-                        // Remove repeated section titles if the LLM provided them at the start of the response
-                        String trimmedResponse = sectionResponse;
-                        
-                        // More aggressive multi-line title removal
-                        String[] responseLines = sectionResponse.split("\n", 5);
-                        boolean titleFound = false;
-                        String normalizedTitle = formattedTitle.toLowerCase().trim();
-                        
-                        for (int lineIdx = 0; lineIdx < Math.min(responseLines.length, 3); lineIdx++) {
-                            String line = responseLines[lineIdx].trim().toLowerCase();
-                            if (line.isEmpty()) continue;
+                        // If there are MD sections, call LLM for each one
+                        if (!mdSections.isEmpty()) {
+                            // Split metrics into parts to reduce redundancy if possible, or send sequentially.
+                            // The user said "split the prompt over several prompts and only take the final response per section".
+                            // This currently does one call per section.
                             
-                            // Check for common header formats
-                            if (line.startsWith("#")) {
-                                line = line.replaceAll("^#+\\s*", "");
-                            }
-                            
-                            if (line.equals(normalizedTitle) || line.contains(normalizedTitle)) {
-                                // Found the title, let's remove everything up to this line + next empty line
-                                int charsToSkip = 0;
-                                for (int j = 0; j <= lineIdx; j++) {
-                                    charsToSkip += responseLines[j].length() + 1;
-                                }
-                                if (sectionResponse.length() > charsToSkip) {
-                                    trimmedResponse = sectionResponse.substring(charsToSkip).trim();
-                                } else {
-                                    trimmedResponse = "";
-                                }
-                                titleFound = true;
-                                break;
-                            }
-                        }
-                        
-                        if (!titleFound) {
-                            // Fallback to simpler check if multi-line check didn't find it
-                            String normalizedResponse = sectionResponse.toLowerCase();
-                            if (normalizedResponse.startsWith("# " + normalizedTitle) || 
-                                normalizedResponse.startsWith("## " + normalizedTitle) ||
-                                normalizedResponse.startsWith("### " + normalizedTitle) ||
-                                normalizedResponse.startsWith("#### " + normalizedTitle)) {
-                                int firstNewline = sectionResponse.indexOf("\n");
-                                if (firstNewline != -1) {
-                                    trimmedResponse = sectionResponse.substring(firstNewline + 1).trim();
-                                }
-                            }
-                        }
-                        
-                        // Shift headers in sectionResponse
-                        sectionResponse = demoteMarkdownHeaders(sectionResponse);
+                            for (Map.Entry<String, String> entry : mdSections.entrySet()) {
+                                String sectionTitle = entry.getKey().replace(".md", "");
+                                String formattedTitle = formatSectionTitle(sectionTitle);
+                                String sectionInstructions = entry.getValue();
+                                
+                                String basePrompt = userPromptArea.getText() + "\n\n" + 
+                                               "FOCUS SECTION: " + formattedTitle + "\n" +
+                                               "SECTION INSTRUCTIONS: " + sectionInstructions + "\n\n" +
+                                               "IMPORTANT: Provide ONLY the content for this section as defined by the instructions. " +
+                                               "Do not include information that belongs in other sections. " +
+                                               "Use the provided metrics to inform your analysis for this specific section.\n" +
+                                               "HEADER NESTING: The application will prepend a top-level header (# " + formattedTitle + ") for this section. " +
+                                               "Ensure all headers in your response use at least TWO hashes (##) so they are correctly nested under the section header.";
+                                
+                                String fullPrompt = basePrompt + "\n\n" + baseMetrics;
+                                                   
+                                String sectionResponse = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), fullPrompt);
+                                
+                                // Take only the final response for this section (if it's a list or multi-part)
+                                // The user said "only take the final response per section when sending multiple sections"
+                                // If the API returned multiple messages or choices, we already take one in callLlmApi.
+                                // If "multiple sections" refers to the loop, we are already doing it.
+                                
+                                // Sanitize sectionResponse to remove markdown code blocks and duplicate titles
+                                sectionResponse = sectionResponse.replaceAll("```markdown", "").replaceAll("```", "").trim();
+                                
+                                // Remove redundant top-level title if AI included it
+                                String titlePattern = "^#\\s+" + java.util.regex.Pattern.quote(formattedTitle) + "\\s*\\n+";
+                                sectionResponse = sectionResponse.replaceFirst("(?i)" + titlePattern, "");
 
-                        // Add the section title
-                        fullReport.append("# ").append(formattedTitle).append("\n\n");
-                        fullReport.append(sectionResponse).append("\n\n");
-                        
-                        String progressMsg = String.format("Generated section: %s...", formattedTitle);
-                        Platform.runLater(() -> llmResponseArea.setText(progressMsg));
-                    }
-                } else {
+                                // Shift headers in sectionResponse
+                                sectionResponse = demoteMarkdownHeaders(sectionResponse);
+
+                                // Add the section title
+                                fullReport.append("# ").append(formattedTitle).append("\n\n");
+                                fullReport.append(sectionResponse).append("\n\n");
+                                
+                                String progressMsg = String.format("Generated section: %s...", formattedTitle);
+                                Platform.runLater(() -> llmResponseArea.setText(progressMsg));
+                            }
+                        } else {
                     // Default behavior if no MD sections
                     String response = callLlmApi(finalUrl, finalApiKey, finalModel, systemPromptArea.getText(), userPromptArea.getText() + "\n\n" + baseMetrics);
                     response = response.replaceAll("```markdown", "").replaceAll("```", "").trim();
@@ -1726,7 +1726,23 @@ public class MainApp extends Application {
             // Pie Chart with percentages
             commitPieChart.getData().clear();
             commitPieChart.setAnimated(false);
+            commitPieChart.setMinWidth(1080);
+            commitPieChart.setMaxWidth(1080);
+            commitPieChart.setPrefWidth(1080);
+            commitPieChart.setMinHeight(1080);
+            commitPieChart.setMaxHeight(1080);
+            commitPieChart.setPrefHeight(1080);
             commitPieChart.setLabelsVisible(true); // Enable labels to show contributor names
+            commitPieChart.setLabelLineLength(25); // Slightly more space
+            commitPieChart.setStartAngle(0); // Standard start angle
+            commitPieChart.setClockwise(true);
+            
+            // Force re-layout for labels to appear
+            commitPieChart.requestLayout();
+            
+            // Re-apply labels visible to be absolutely sure
+            commitPieChart.setLabelsVisible(true);
+            
             int totalCommits = stats.stream().mapToInt(s -> s.commitCount() + s.mergeCount()).sum();
             List<PieChart.Data> pieData = stats.stream()
                     .limit(10) // Show more on pie if labels are visible
@@ -1741,7 +1757,8 @@ public class MainApp extends Application {
                     })
                     .toList();
             commitPieChart.setData(FXCollections.observableArrayList(pieData));
-            commitPieChart.setLegendVisible(false);
+            commitPieChart.setLegendVisible(true);
+            commitPieChart.setLegendSide(javafx.geometry.Side.BOTTOM);
 
             // Stacked Bar Chart for Impact
             impactBarChart.getData().clear();
@@ -2183,7 +2200,11 @@ public class MainApp extends Application {
 
     private void saveNodeSnapshot(javafx.scene.Node node, File file) throws Exception {
         SnapshotParameters params = new SnapshotParameters();
-        params.setTransform(javafx.scene.transform.Transform.scale(2, 2)); // Increase resolution
+        params.setTransform(javafx.scene.transform.Transform.scale(3, 3)); 
+        // Ensure the node is laid out before taking a snapshot
+        if (node instanceof javafx.scene.Parent parent) {
+            parent.layout();
+        }
         WritableImage image = node.snapshot(params, null);
         ImageIO.write(SwingFXUtils.fromFXImage(image, null), "png", file);
     }
@@ -2203,6 +2224,52 @@ public class MainApp extends Application {
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
+    }
+
+    private void loadDotenv() {
+        File envFile = new File(".env");
+        if (envFile.exists()) {
+            try {
+                java.util.List<String> lines = java.nio.file.Files.readAllLines(envFile.toPath());
+                for (String line : lines) {
+                    if (line.trim().isEmpty() || line.startsWith("#")) continue;
+                    if (line.contains("=")) {
+                        String[] parts = line.split("=", 2);
+                        envConfig.put(parts[0].trim(), parts[1].trim());
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void showAppInfoDialog() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("App Info");
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 20, 20, 20));
+
+        grid.add(new Label("Developer:"), 0, 0);
+        grid.add(new Label(envConfig.getOrDefault("APP_DEVELOPER", "Graham Hill")), 1, 0);
+        
+        grid.add(new Label("Version:"), 0, 1);
+        grid.add(new Label(envConfig.getOrDefault("APP_VERSION", "1.0-SNAPSHOT")), 1, 1);
+        
+        grid.add(new Label("Year:"), 0, 2);
+        grid.add(new Label(envConfig.getOrDefault("APP_YEAR", "2026")), 1, 2);
+        
+        grid.add(new Label("Source Code:"), 0, 3);
+        Hyperlink sourceLink = new Hyperlink(envConfig.getOrDefault("APP_SOURCE_CODE_URL", "https://github.com/grahamhill/contrib_metric"));
+        sourceLink.setOnAction(e -> getHostServices().showDocument(sourceLink.getText()));
+        grid.add(sourceLink, 1, 3);
+
+        dialog.getDialogPane().setContent(grid);
+        dialog.showAndWait();
     }
 
     public static void main(String[] args) {

@@ -71,6 +71,9 @@ mvn javafx:run
     - **Model Selection:** Select or manually enter the model name (e.g., `gpt-4o` for OpenAI or `mixtral-8x7b-32768` for Groq).
     - **Fetch Models:** For Groq and Ollama, use the "Fetch Models" button to automatically retrieve a list of available models from their respective APIs.
 6. **Export:** Click "Export to PDF" to save a visual and detailed report.
+7. **Info Menu:**
+    - **Website:** Links to the project website (configurable via `.env`).
+    - **App Info:** Displays a popup with developer details, version, and source code link (all configurable via `.env`).
 
 ## Contributor Scoring & Penalties
 
