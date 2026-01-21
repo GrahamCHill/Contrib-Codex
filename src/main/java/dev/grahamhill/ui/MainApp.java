@@ -339,7 +339,7 @@ public class MainApp extends Application {
         statsTable.getColumns().addAll(nameCol, emailCol, genderCol, commitsCol, mergesCol, addedCol, deletedCol, fNewCol, fEditCol, fDelCol, languagesCol, aiCol, scoreCol);
         setupStatsTableContextMenu();
 
-        statsBox.getChildren().addAll(new Label("Top 10 Contributors (Double-click Gender to edit):"), statsTable);
+        statsBox.getChildren().addAll(new Label("Top 10 Contributors (Double-click Gender to edit; used for LLM pronouns only):"), statsTable);
         VBox.setVgrow(statsTable, javafx.scene.layout.Priority.ALWAYS);
         statsTab.setContent(statsBox);
 
@@ -1006,17 +1006,21 @@ public class MainApp extends Application {
     }
 
     private void updateContributorGender(ContributorStats stat, String newGender) {
-        String currentGenders = gendersData;
         String mapping = stat.email() + "=" + newGender;
         
-        String[] lines = currentGenders.split("\n");
+        String[] lines = gendersData.split("\n");
         StringBuilder newGenders = new StringBuilder();
         boolean found = false;
         for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-            if (line.startsWith(stat.email() + "=") || line.startsWith(stat.name() + "=")) {
-                newGenders.append(mapping).append("\n");
-                found = true;
+            String trimmedLine = line.trim();
+            if (trimmedLine.isEmpty()) continue;
+            
+            // Match by either email or name to avoid duplicates
+            if (trimmedLine.startsWith(stat.email() + "=") || trimmedLine.startsWith(stat.name() + "=")) {
+                if (!found) {
+                    newGenders.append(mapping).append("\n");
+                    found = true;
+                }
             } else {
                 newGenders.append(line).append("\n");
             }
@@ -1463,7 +1467,7 @@ public class MainApp extends Application {
                 "A detailed evaluation of individual contributions based on commit frequency, impact volume, and code quality.\n\n" +
                 "INSTRUCTIONS FOR AI:\n" +
                 "- For EVERY major contributor listed in the METRICS, provide a dedicated technical subsection.\n" +
-                "- Use the 'Gender' field for correct pronouns.\n" +
+                "- Use the 'Gender' field for correct pronouns. Do NOT explicitly state the gender or pronouns in the document text (e.g., do not say \"He is a male contributor\"). Simply use the correct pronouns when referring to the contributor.\n" +
                 "- Analyze their specific 'Impact Analysis' (Added vs Deleted lines) and the types of files they touched as shown in their metrics.\n" +
                 "- Do NOT invent or assume names; attribute impact ONLY to the names provided in the metrics.\n" +
                 "- **Key Man Identification**: Assess if this contributor is a Key Man for specific sections. High total lines committed indicate potential Key Man risk, but look at where all other contributors have committed. If other contributors did not touch a section this contributor owns, they are a Key Man for that section.\n" +
@@ -1493,7 +1497,9 @@ public class MainApp extends Application {
                 "INSTRUCTIONS FOR AI:\n" +
                 "- Identify the overall 'Most Valuable Contributor' with a detailed justification.\n" +
                 "- Summarize the top 3 technical risks found in the repo.\n" +
-                "- Provide 3 actionable recommendations for improving code quality or team velocity.");
+                "- Provide 3 actionable recommendations for improving code quality or team velocity. " +
+                "For each recommendation, include: Title, Severity, Effort, Why It Matters, and Action Plan.\n" +
+                "- Do NOT list names or raw metrics in the recommendation titles.");
         }
     }
 

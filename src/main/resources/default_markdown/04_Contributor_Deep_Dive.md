@@ -6,7 +6,7 @@ A detailed evaluation of individual contributions based on commit frequency, cha
 - Use ONLY contributor names, file paths, commit refs, and numeric values explicitly provided in METRICS.
     - Do NOT invent names, files, commit IDs, branches, tags, or metrics.
     - If a required value is missing, write: **"Not provided in metrics"** (do not guess).
-- Use the **Gender** field strictly for pronouns:
+- Use the **Gender** field strictly for pronouns. Do NOT explicitly state the gender or pronouns in the document text (e.g., do not say "He is a male contributor"). Simply use the correct pronouns when referring to the contributor:
     - male → he/him
     - female → she/her
     - non-binary/they/unknown → they/them

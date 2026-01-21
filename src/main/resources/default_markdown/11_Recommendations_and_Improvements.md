@@ -4,6 +4,8 @@ Actionable, evidence-based improvements to reduce technical risk, improve audita
 INSTRUCTIONS FOR AI (STRICT):
 - Use ONLY contributor names, file paths, directories, commit refs, and numeric values explicitly provided in the METRICS section.
 - Do NOT invent contributors, commits, branches, tags, technologies, or missing metrics.
+- DO NOT list names or data in the section title unless they are part of a specific recommendation title. 
+- Avoid repeating metrics like "Name 1160.3" without context. All metrics must be placed within the "Evidence Observed" or "Action Plan" sections.
 - If data needed to support a recommendation is missing, write: **"Not provided in metrics"** and keep it generic.
 - Do NOT repeat yourself across recommendations; each recommendation must address a distinct improvement area.
 - Each recommendation MUST cite evidence from METRICS (e.g., lines/commit, churn, tests touched, high-risk directories, bulk commit patterns).
@@ -16,16 +18,18 @@ INSTRUCTIONS FOR AI (STRICT):
       **"Merge commit breakdown not provided; some commit-based metrics may be skewed."**
 
 REQUIRED OUTPUT FORMAT:
-Provide **8–12 recommendations**. For each recommendation, include:
+Provide **8–12 recommendations**. For each recommendation, use this EXACT structure:
 
-**Title:** (short, action-oriented; max ~60 characters)  
-**Severity / Priority:** (High / Medium / Low)  
-**Effort:** (Low / Medium / High)  
-**Evidence Observed:** (2–5 bullets referencing METRICS)  
-**Why It Matters:** (risk/maintainability/security/velocity impact)  
-**Action Plan:** (clear steps; include team/process + technical steps)  
-**Where:** (directories / file types affected; from METRICS only)  
-**Success Criteria:** (how to measure improvement)
+### Recommendation [N]: [Title]
+**Severity / Priority:** [High / Medium / Low]  
+**Effort:** [Low / Medium / High]  
+**Evidence Observed:**
+- [Metric-based evidence bullet 1]
+- [Metric-based evidence bullet 2]
+**Why It Matters:** [Impact on stability/maintainability/velocity]  
+**Action Plan:** [Technical and process steps]  
+**Where:** [Affected directories/file types from METRICS]  
+**Success Criteria:** [Measurable improvement goal]
 
 MANDATORY RECOMMENDATION CATEGORIES (cover all below if supported by METRICS):
 
@@ -37,6 +41,9 @@ Focus: strengthen traceability without making commit titles too long.
 Requirements:
 - Titles must be **short** (50–72 chars max) but informative.
 - Use descriptive bodies for context (why, not just what).
+- Use `type(scope): summary` format for recommendations about commit messages.
+- DO NOT list names or metrics in the recommendation title unless they are part of a specific descriptive title.
+- DO NOT use numbered lists within the title itself; use the "### Recommendation [N]:" format provided in REQUIRED OUTPUT FORMAT.
 - Separate refactor/formatting commits from feature commits.
 - If merge commits are present in the metrics, recommend merge commit messages that capture:
     - the merged scope/feature area
@@ -107,6 +114,7 @@ Requirements:
 Include:
 - Suggest “refactor-only commits” and churn budgeting.
 - Suggest identifying instability hotspots.
+- **Churn Definition:** Churn refers to files with high frequency of changes (additions and deletions) in the same area over a short period. Do NOT simply repeat the word "churn" without context.
 
 ---
 
@@ -117,6 +125,7 @@ Requirements:
 - Identify if changes include dist/build outputs, sourcemaps, minified files,
   lockfiles, or huge config dumps (only if present in METRICS).
 - Recommend `.gitignore` and build pipeline artifacts storage.
+- Include an example of a good `.gitignore` entry based on METRICS.
 - Recommend review rules that de-emphasize such files in risk scoring.
 - If merges often contain these artifacts (if detectable), recommend preventing them from entering merge commits.
 

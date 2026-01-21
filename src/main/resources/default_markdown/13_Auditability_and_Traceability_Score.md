@@ -1,4 +1,4 @@
-# Auditability_and_Traceability_Score.md
+# Auditability & Traceability Score
 Compute an evidence-based Auditability & Traceability Score for a Git repository using ONLY high-level Git metadata and the provided METRICS. This section MUST NOT inspect or interpret actual source code contents.
 
 ---
@@ -18,6 +18,9 @@ This is NOT a security score. It is an auditability score focused on traceabilit
 - Use ONLY contributor names, file paths, directories, commit refs, commit message text (if included in METRICS), and numeric values explicitly provided in the METRICS section.
 - Do NOT invent contributors, commits, PR numbers, issue IDs, branches, tags, technologies, ticketing systems, or review processes not explicitly mentioned.
 - Do NOT infer actual intent beyond what commit messages and structural patterns support.
+- Use `type(scope): summary` format for recommendations about commit messages.
+- DO NOT list names or metrics in the recommendation title unless they are part of a specific descriptive title.
+- Avoid repeating metrics like "Name 1160.3" without context. All metrics must be placed within the "Evidence Observed" or "Action Plan" sections.
 - If any metric needed to support a claim is missing, write: **"Not provided in metrics"**
 - Do NOT analyze or quote repository source code content. Only commit metadata and file path distribution are allowed.
 
@@ -95,7 +98,8 @@ Examples of acceptable evidence bullets:
 - "Merge commits touch /core and /infra in 60% of merges (METRICS)"
 - "Lockfile-only commits in /package-lock.json occur in N commits (METRICS)"
 
-If the metric is not in METRICS:
+- **Churn Definition:** Churn refers to files with high frequency of changes (additions and deletions) in the same area over a short period. Do NOT simply repeat the word "churn" without context.
+- If the metric is not in METRICS:
 - write: **"Not provided in metrics"**
 
 ---
@@ -120,19 +124,19 @@ Example failure modes:
 ---
 
 ## 5) Recommendations to Improve Score (8–12)
-Each recommendation MUST follow this format:
+Provide **8–12 recommendations**. For each recommendation, use this EXACT structure:
 
-Title: (short, action-oriented; max ~60 chars)
-Severity / Priority: (High / Medium / Low)
-Effort: (Low / Medium / High)
-Score Impact: (+1 to +15 expected improvement)
-Evidence Observed: (2–5 bullets referencing METRICS)
-Why It Matters: (auditability/maintainability/velocity)
-Action Plan:
-- Process steps (policy / checklist / CI checks)
-- Technical steps (git hooks / templates / enforcement)
-  Where: (directories / file types from METRICS only)
-  Success Criteria: (measurable metric improvements)
+### Recommendation [N]: [Title]
+**Severity / Priority:** [High / Medium / Low]  
+**Effort:** [Low / Medium / High]  
+**Score Impact:** [+1 to +15 expected improvement]
+**Evidence Observed:**
+- [Metric-based evidence bullet 1]
+- [Metric-based evidence bullet 2]
+**Why It Matters:** [Impact on auditability/maintainability/velocity]  
+**Action Plan:** [Technical and process steps]  
+**Where:** [Affected directories/file types from METRICS]  
+**Success Criteria:** [Measurable improvement goal]
 
 Constraints:
 - Recommendations MUST be derived strictly from METRICS.
