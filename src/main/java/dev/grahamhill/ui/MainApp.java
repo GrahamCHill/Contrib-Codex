@@ -1693,7 +1693,11 @@ public class MainApp extends Application {
                 CommitInfo initial = gitService.getInitialCommit(repoDir, currentAliases);
 
                 if (databaseService != null) {
-                    databaseService.saveMetrics(finalRepoId, currentStats);
+                    try {
+                        databaseService.saveMetrics(finalRepoId, currentStats);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
 
                 Platform.runLater(() -> {
@@ -1972,6 +1976,14 @@ public class MainApp extends Application {
             List<ReportHistory> historyList = new ArrayList<>();
             if (databaseService != null) {
                 try {
+                    String path = repoPathField.getText();
+                    String repoId;
+                    try {
+                        repoId = new File(path).getCanonicalPath();
+                    } catch (Exception e) {
+                        repoId = new File(path).getAbsolutePath();
+                    }
+
                     String earliestCommit = "unknown";
                     if (currentMeaningfulAnalysis != null && currentMeaningfulAnalysis.commitRange() != null) {
                         String range = currentMeaningfulAnalysis.commitRange();
@@ -1982,7 +1994,7 @@ public class MainApp extends Application {
                         }
                     }
 
-                    ReportHistory latest = databaseService.getLatestReportForCommit(earliestCommit);
+                    ReportHistory latest = databaseService.getLatestReportForCommit(repoId, earliestCommit);
                     String newVersion = "1.0";
                     if (manualVersionField != null && !manualVersionField.getText().trim().isEmpty()) {
                         newVersion = manualVersionField.getText().trim();
@@ -2002,6 +2014,7 @@ public class MainApp extends Application {
 
                     ReportHistory newEntry = new ReportHistory(
                         0, 
+                        repoId,
                         newVersion, 
                         java.time.LocalDate.now(), 
                         System.getProperty("user.name"), 
@@ -2009,7 +2022,7 @@ public class MainApp extends Application {
                         earliestCommit
                     );
                     databaseService.saveReportHistory(newEntry);
-                    historyList = databaseService.getLatestReportHistory(5);
+                    historyList = databaseService.getLatestReportHistory(repoId, 5);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -2065,7 +2078,14 @@ public class MainApp extends Application {
 
         if (databaseService != null) {
             try {
-                databaseService.saveMetrics(currentStats);
+                String path = repoPathField.getText();
+                String repoId;
+                try {
+                    repoId = new File(path).getCanonicalPath();
+                } catch (Exception e) {
+                    repoId = new File(path).getAbsolutePath();
+                }
+                databaseService.saveMetrics(repoId, currentStats);
             } catch (Exception e) {
                 e.printStackTrace();
             }
