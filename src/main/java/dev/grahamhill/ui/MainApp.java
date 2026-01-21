@@ -54,6 +54,7 @@ public class MainApp extends Application {
     private ListView<String> commitList;
     private Label initialCommitLabel;
     private TextField repoPathField;
+    private TextField mainBranchField;
     private TextField manualVersionField;
     private TextArea manualDescriptionArea;
     private Spinner<Integer> commitLimitSpinner;
@@ -99,6 +100,9 @@ public class MainApp extends Application {
         loadDotenv();
         // Initialize UI components before loading settings to avoid NPE
         repoPathField = new TextField();
+        mainBranchField = new TextField();
+        mainBranchField.setPromptText("Main Branch (e.g. main, master)");
+        mainBranchField.textProperty().addListener((obs, oldVal, newVal) -> analyzeRepo());
         commitLimitSpinner = new Spinner<>(0, 10000, 100);
         commitLimitSpinner.setEditable(true);
         commitLimitSpinner.valueProperty().addListener((obs, oldVal, newVal) -> analyzeRepo());
@@ -137,6 +141,7 @@ public class MainApp extends Application {
         commitLimitSpinner.valueProperty().addListener((obs, oldVal, newVal) -> saveSettings());
         tableLimitSpinner.valueProperty().addListener((obs, oldVal, newVal) -> saveSettings());
         repoPathField.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
+        mainBranchField.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
         aliasesArea.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
         mdFolderPathField.textProperty().addListener((obs, oldVal, newVal) -> {
             Platform.runLater(this::saveSettings);
@@ -195,11 +200,12 @@ public class MainApp extends Application {
         VBox topBox = new VBox(10);
         HBox repoBox = new HBox(10);
         repoPathField.setPrefWidth(400);
+        mainBranchField.setPrefWidth(100);
         Button browseButton = new Button("Browse...");
         browseButton.setOnAction(e -> browseRepo(primaryStage));
         Button analyzeButton = new Button("Analyze");
         analyzeButton.setOnAction(e -> analyzeRepo());
-        repoBox.getChildren().addAll(new Label("Repo Path:"), repoPathField, browseButton, analyzeButton);
+        repoBox.getChildren().addAll(new Label("Repo Path:"), repoPathField, browseButton, analyzeButton, new Label("Main Branch:"), mainBranchField);
 
         HBox settingsBox = new HBox(10);
         ignoredExtensionsField.setPromptText("e.g. json,csv");
@@ -772,6 +778,7 @@ public class MainApp extends Application {
         configManager.saveSetting("genders", gendersData);
         
         configManager.saveSetting("repoPath", repoPathField.getText());
+        configManager.saveSetting("mainBranch", mainBranchField.getText());
         configManager.saveSetting("commitLimit", String.valueOf(commitLimitSpinner.getValue()));
         configManager.saveSetting("tableLimit", String.valueOf(tableLimitSpinner.getValue()));
         configManager.saveSetting("ignoredExtensions", ignoredExtensionsField.getText());
@@ -816,6 +823,7 @@ public class MainApp extends Application {
         gendersData = configManager.getSetting("genders", "");
         
         repoPathField.setText(configManager.getSetting("repoPath", ""));
+        mainBranchField.setText(configManager.getSetting("mainBranch", ""));
         commitLimitSpinner.getValueFactory().setValue(Integer.parseInt(configManager.getSetting("commitLimit", "10")));
         tableLimitSpinner.getValueFactory().setValue(Integer.parseInt(configManager.getSetting("tableLimit", "20")));
         ignoredExtensionsField.setText(configManager.getSetting("ignoredExtensions", "json,xml,csv,lock,txt,package-lock.json,yarn.lock,pnpm-lock.yaml"));
@@ -1144,7 +1152,7 @@ public class MainApp extends Application {
         Map<String, List<FileChange>> contributorFiles = null;
         try {
             int commitLimit = selectedProvider.equals("Groq") ? 300 : 1000;
-            allCommits = gitService.getLastCommits(repoDir, commitLimit, aliasesMap());
+            allCommits = gitService.getLastCommits(repoDir, commitLimit, aliasesMap(), mainBranchField.getText());
             allCommits = allCommits.stream()
                     .sorted(Comparator.comparing(CommitInfo::timestamp).reversed())
                     .limit(commitLimit)
@@ -1337,30 +1345,67 @@ public class MainApp extends Application {
 
     private void createDefaultMdFiles(File folder) {
         try {
-            String[] defaultFiles = {
-                "01_Introduction.md", "02_Methodology.md", "03_Requirements_and_Alignment.md",
-                "04_Contributor_Deep_Dive.md", "05_Risk_and_Quality_Assessment.md",
-                "06_Code_Hotspots.md", "07_Bus_factor_analysis.md", "08_Review_Hygiene.md",
-                "09_Contribution_Patterns.md", "10_Conclusion.md", "11_Recommendations_and_Improvements.md"
-            };
+            boolean filesCopied = false;
 
-            for (String fileName : defaultFiles) {
-                File targetFile = new File(folder, fileName);
-                if (!targetFile.exists()) {
-                    try (java.io.InputStream is = getClass().getResourceAsStream("/default_markdown/" + fileName)) {
-                        if (is != null) {
-                            java.nio.file.Files.copy(is, targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                        } else {
-                            // Fallback to local folder if resource not found (dev mode)
-                            File templateFile = new File("default_markdown", fileName);
-                            if (templateFile.exists()) {
-                                java.nio.file.Files.copy(templateFile.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                            } else {
-                                // Last resort: hardcoded defaults for essential files
-                                writeHardcodedDefault(fileName, targetFile);
+            // Try to list resources from the JAR or classpath
+            java.net.URL resourceUrl = getClass().getResource("/default_markdown");
+            if (resourceUrl != null) {
+                if (resourceUrl.getProtocol().equals("jar")) {
+                    String jarPath = resourceUrl.getPath().substring(5, resourceUrl.getPath().indexOf("!"));
+                    try (java.util.jar.JarFile jar = new java.util.jar.JarFile(java.net.URLDecoder.decode(jarPath, "UTF-8"))) {
+                        java.util.Enumeration<java.util.jar.JarEntry> entries = jar.entries();
+                        while (entries.hasMoreElements()) {
+                            java.util.jar.JarEntry entry = entries.nextElement();
+                            String name = entry.getName();
+                            if (name.startsWith("default_markdown/") && name.endsWith(".md")) {
+                                String fileName = name.substring("default_markdown/".length());
+                                if (!fileName.isEmpty()) {
+                                    File targetFile = new File(folder, fileName);
+                                    if (!targetFile.exists()) {
+                                        copyResourceToFile(name, targetFile);
+                                    }
+                                    filesCopied = true;
+                                }
                             }
                         }
                     }
+                } else if (resourceUrl.getProtocol().equals("file")) {
+                    File resourceFolder = new File(resourceUrl.toURI());
+                    File[] files = resourceFolder.listFiles((dir, name) -> name.endsWith(".md"));
+                    if (files != null) {
+                        for (File file : files) {
+                            File targetFile = new File(folder, file.getName());
+                            if (!targetFile.exists()) {
+                                java.nio.file.Files.copy(file.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            }
+                            filesCopied = true;
+                        }
+                    }
+                }
+            }
+
+            // Fallback to local folder if no files were copied from resources
+            if (!filesCopied) {
+                File templateFolder = new File("default_markdown");
+                if (templateFolder.exists() && templateFolder.isDirectory()) {
+                    File[] files = templateFolder.listFiles((dir, name) -> name.endsWith(".md"));
+                    if (files != null) {
+                        for (File file : files) {
+                            File targetFile = new File(folder, file.getName());
+                            if (!targetFile.exists()) {
+                                java.nio.file.Files.copy(file.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            }
+                            filesCopied = true;
+                        }
+                    }
+                }
+            }
+
+            // Final fallback: if still no files, use some hardcoded ones
+            if (!filesCopied) {
+                String[] essentialFiles = {"01_Introduction.md", "02_Methodology.md", "04_Contributor_Deep_Dive.md", "05_Risk_and_Quality_Assessment.md", "10_Conclusion.md"};
+                for (String fileName : essentialFiles) {
+                    writeHardcodedDefault(fileName, new File(folder, fileName));
                 }
             }
 
@@ -1370,6 +1415,14 @@ public class MainApp extends Application {
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private void copyResourceToFile(String resourcePath, File targetFile) throws java.io.IOException {
+        try (java.io.InputStream is = getClass().getResourceAsStream("/" + resourcePath)) {
+            if (is != null) {
+                java.nio.file.Files.copy(is, targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         }
     }
 
@@ -1568,6 +1621,15 @@ public class MainApp extends Application {
             return;
         }
 
+        String repoId;
+        try {
+            repoId = repoDir.getCanonicalPath();
+        } catch (Exception e) {
+            repoId = repoDir.getAbsolutePath();
+        }
+
+        final String finalRepoId = repoId;
+
         Map<String, String> aliases = new HashMap<>();
         String[] lines = aliasesArea.getText().split("\n");
         for (String line : lines) {
@@ -1626,11 +1688,12 @@ public class MainApp extends Application {
                 }).collect(Collectors.toList());
 
                 currentMeaningfulAnalysis = gitService.performMeaningfulChangeAnalysis(repoDir, commitLimitSpinner.getValue(), ignoredFolders);
-                List<CommitInfo> recentCommits = gitService.getLastCommits(repoDir, commitLimitSpinner.getValue(), currentAliases);
+                String mainBranch = mainBranchField.getText();
+                List<CommitInfo> recentCommits = gitService.getLastCommits(repoDir, commitLimitSpinner.getValue(), currentAliases, mainBranch);
                 CommitInfo initial = gitService.getInitialCommit(repoDir, currentAliases);
 
                 if (databaseService != null) {
-                    databaseService.saveMetrics(currentStats);
+                    databaseService.saveMetrics(finalRepoId, currentStats);
                 }
 
                 Platform.runLater(() -> {
@@ -1945,7 +2008,7 @@ public class MainApp extends Application {
                 }
             }
 
-            exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
+            exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap(), mainBranchField.getText()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
                 pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), 
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);
