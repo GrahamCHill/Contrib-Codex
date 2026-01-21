@@ -650,7 +650,7 @@ public class GitService {
         return Math.min(1.0, score);
     }
 
-    public List<CommitInfo> getLastCommits(File repoPath, int limit, Map<String, String> aliases) throws Exception {
+    public List<CommitInfo> getLastCommits(File repoPath, int limit, Map<String, String> aliases, String mainBranchName) throws Exception {
         try (Git git = Git.open(repoPath)) {
             Repository repository = git.getRepository();
             var logCommand = git.log().all(); // Use .all() to include branch commits
@@ -669,6 +669,9 @@ public class GitService {
             // These should be attributed to the main branch.
             Set<ObjectId> trunkCommits = new HashSet<>();
             
+            // Normalize mainBranchName for comparison
+            String normalizedMain = mainBranchName != null ? mainBranchName.trim().toLowerCase() : "";
+
             for (org.eclipse.jgit.lib.Ref branch : branches) {
                 String fullBranchName = branch.getName();
                 
@@ -687,8 +690,13 @@ public class GitService {
                 if (branchName.startsWith("refs/heads/")) branchName = branchName.substring(11);
                 if (branchName.startsWith("refs/remotes/")) branchName = branchName.substring(13);
                 
-                boolean isMainBranch = branchName.equalsIgnoreCase("main") || branchName.equalsIgnoreCase("master") || branchName.equalsIgnoreCase("develop") || 
-                                     branchName.equalsIgnoreCase("origin/main") || branchName.equalsIgnoreCase("origin/master") || branchName.equalsIgnoreCase("origin/develop");
+                boolean isMainBranch;
+                if (!normalizedMain.isEmpty()) {
+                    isMainBranch = branchName.equalsIgnoreCase(normalizedMain) || branchName.equalsIgnoreCase("origin/" + normalizedMain);
+                } else {
+                    isMainBranch = branchName.equalsIgnoreCase("main") || branchName.equalsIgnoreCase("master") || branchName.equalsIgnoreCase("develop") || 
+                                         branchName.equalsIgnoreCase("origin/main") || branchName.equalsIgnoreCase("origin/master") || branchName.equalsIgnoreCase("origin/develop");
+                }
                 
                 if (isMainBranch) {
                     try (org.eclipse.jgit.revwalk.RevWalk walk = new org.eclipse.jgit.revwalk.RevWalk(repository)) {
@@ -715,8 +723,16 @@ public class GitService {
                 String n1 = b1.getName();
                 String n2 = b2.getName();
                 
-                boolean isMain1 = n1.contains("main") || n1.contains("master") || n1.contains("develop");
-                boolean isMain2 = n2.contains("main") || n2.contains("master") || n2.contains("develop");
+                boolean isMain1;
+                boolean isMain2;
+
+                if (!normalizedMain.isEmpty()) {
+                    isMain1 = n1.contains(normalizedMain);
+                    isMain2 = n2.contains(normalizedMain);
+                } else {
+                    isMain1 = n1.contains("main") || n1.contains("master") || n1.contains("develop");
+                    isMain2 = n2.contains("main") || n2.contains("master") || n2.contains("develop");
+                }
                 
                 if (isMain1 && !isMain2) return 1;
                 if (!isMain1 && isMain2) return -1;

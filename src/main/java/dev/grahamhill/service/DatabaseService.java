@@ -19,6 +19,7 @@ public class DatabaseService {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS contributor_metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    repo_id TEXT,
                     name TEXT,
                     email TEXT,
                     gender TEXT,
@@ -48,6 +49,7 @@ public class DatabaseService {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS report_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    repo_id TEXT,
                     version TEXT,
                     date TEXT,
                     author TEXT,
@@ -55,6 +57,14 @@ public class DatabaseService {
                     earliest_commit TEXT
                 )
                 """);
+            
+            // Migration for repo_id if it doesn't exist
+            try {
+                stmt.execute("ALTER TABLE report_history ADD COLUMN repo_id TEXT");
+            } catch (SQLException e) { /* already exists */ }
+            try {
+                stmt.execute("ALTER TABLE contributor_metrics ADD COLUMN repo_id TEXT");
+            } catch (SQLException e) { /* already exists */ }
         }
     }
 
@@ -103,76 +113,81 @@ public class DatabaseService {
         return null;
     }
 
-    public void saveMetrics(List<ContributorStats> stats) throws SQLException {
-        String sql = "INSERT INTO contributor_metrics (name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    public void saveMetrics(String repoId, List<ContributorStats> stats) throws SQLException {
+        String sql = "INSERT INTO contributor_metrics (repo_id, name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             for (ContributorStats stat : stats) {
-                pstmt.setString(1, stat.name());
-                pstmt.setString(2, stat.email());
-                pstmt.setString(3, stat.gender());
-                pstmt.setInt(4, stat.commitCount());
-                pstmt.setInt(5, stat.mergeCount());
-                pstmt.setInt(6, stat.linesAdded());
-                pstmt.setInt(7, stat.linesDeleted());
-                pstmt.setString(8, stat.languageBreakdown().toString());
-                pstmt.setString(9, stat.directoryBreakdown().toString());
-                pstmt.setDouble(10, stat.averageAiProbability());
-                pstmt.setInt(11, stat.filesAdded());
-                pstmt.setInt(12, stat.filesEdited());
-                pstmt.setInt(13, stat.filesDeletedCount());
-                pstmt.setDouble(14, stat.meaningfulChangeScore());
-                pstmt.setInt(15, stat.touchedTests() ? 1 : 0);
-                pstmt.setInt(16, stat.generatedFilesPushed());
-                pstmt.setInt(17, stat.documentationLinesAdded());
+                pstmt.setString(1, repoId);
+                pstmt.setString(2, stat.name());
+                pstmt.setString(3, stat.email());
+                pstmt.setString(4, stat.gender());
+                pstmt.setInt(5, stat.commitCount());
+                pstmt.setInt(6, stat.mergeCount());
+                pstmt.setInt(7, stat.linesAdded());
+                pstmt.setInt(8, stat.linesDeleted());
+                pstmt.setString(9, stat.languageBreakdown().toString());
+                pstmt.setString(10, stat.directoryBreakdown().toString());
+                pstmt.setDouble(11, stat.averageAiProbability());
+                pstmt.setInt(12, stat.filesAdded());
+                pstmt.setInt(13, stat.filesEdited());
+                pstmt.setInt(14, stat.filesDeletedCount());
+                pstmt.setDouble(15, stat.meaningfulChangeScore());
+                pstmt.setInt(16, stat.touchedTests() ? 1 : 0);
+                pstmt.setInt(17, stat.generatedFilesPushed());
+                pstmt.setInt(18, stat.documentationLinesAdded());
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
         }
     }
 
-    public List<ContributorStats> getLatestMetrics() throws SQLException {
+    public List<ContributorStats> getLatestMetrics(String repoId) throws SQLException {
         List<ContributorStats> stats = new ArrayList<>();
         // This is a simplified version, just getting the last set of entries
-        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added FROM contributor_metrics ORDER BY timestamp DESC LIMIT 10";
+        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added FROM contributor_metrics WHERE repo_id = ? ORDER BY timestamp DESC LIMIT 10";
         try (Connection conn = DriverManager.getConnection(dbUrl);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                stats.add(new ContributorStats(
-                        rs.getString("name"),
-                        rs.getString("email"),
-                        rs.getString("gender"),
-                        rs.getInt("commits"),
-                        rs.getInt("merges"),
-                        rs.getInt("lines_added"),
-                        rs.getInt("lines_deleted"),
-                        parseLanguageBreakdown(rs.getString("language_breakdown")),
-                        rs.getDouble("ai_probability"),
-                        rs.getInt("files_added"),
-                        rs.getInt("files_edited"),
-                        rs.getInt("files_deleted_count"),
-                        rs.getDouble("meaningful_change_score"),
-                        rs.getInt("touched_tests") == 1,
-                        rs.getInt("generated_files_pushed"),
-                        rs.getInt("documentation_lines_added"),
-                        parseLanguageBreakdown(rs.getString("directory_breakdown"))
-                ));
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, repoId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    stats.add(new ContributorStats(
+                            rs.getString("name"),
+                            rs.getString("email"),
+                            rs.getString("gender"),
+                            rs.getInt("commits"),
+                            rs.getInt("merges"),
+                            rs.getInt("lines_added"),
+                            rs.getInt("lines_deleted"),
+                            parseLanguageBreakdown(rs.getString("language_breakdown")),
+                            rs.getDouble("ai_probability"),
+                            rs.getInt("files_added"),
+                            rs.getInt("files_edited"),
+                            rs.getInt("files_deleted_count"),
+                            rs.getDouble("meaningful_change_score"),
+                            rs.getInt("touched_tests") == 1,
+                            rs.getInt("generated_files_pushed"),
+                            rs.getInt("documentation_lines_added"),
+                            parseLanguageBreakdown(rs.getString("directory_breakdown"))
+                    ));
+                }
             }
         }
         return stats;
     }
 
-    public List<ReportHistory> getLatestReportHistory(int limit) throws SQLException {
+    public List<ReportHistory> getLatestReportHistory(String repoId, int limit) throws SQLException {
         List<ReportHistory> history = new ArrayList<>();
-        String sql = "SELECT id, version, date, author, description, earliest_commit FROM report_history ORDER BY id DESC LIMIT ?";
+        String sql = "SELECT id, repo_id, version, date, author, description, earliest_commit FROM report_history WHERE repo_id = ? ORDER BY id DESC LIMIT ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, limit);
+            pstmt.setString(1, repoId);
+            pstmt.setInt(2, limit);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     history.add(new ReportHistory(
                             rs.getInt("id"),
+                            rs.getString("repo_id"),
                             rs.getString("version"),
                             LocalDate.parse(rs.getString("date")),
                             rs.getString("author"),
@@ -185,15 +200,17 @@ public class DatabaseService {
         return history;
     }
 
-    public ReportHistory getLatestReportForCommit(String earliestCommit) throws SQLException {
-        String sql = "SELECT id, version, date, author, description, earliest_commit FROM report_history WHERE earliest_commit = ? ORDER BY id DESC LIMIT 1";
+    public ReportHistory getLatestReportForCommit(String repoId, String earliestCommit) throws SQLException {
+        String sql = "SELECT id, repo_id, version, date, author, description, earliest_commit FROM report_history WHERE repo_id = ? AND earliest_commit = ? ORDER BY id DESC LIMIT 1";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, earliestCommit);
+            pstmt.setString(1, repoId);
+            pstmt.setString(2, earliestCommit);
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
                     return new ReportHistory(
                             rs.getInt("id"),
+                            rs.getString("repo_id"),
                             rs.getString("version"),
                             LocalDate.parse(rs.getString("date")),
                             rs.getString("author"),
@@ -207,14 +224,15 @@ public class DatabaseService {
     }
 
     public void saveReportHistory(ReportHistory history) throws SQLException {
-        String sql = "INSERT INTO report_history (version, date, author, description, earliest_commit) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO report_history (repo_id, version, date, author, description, earliest_commit) VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, history.version());
-            pstmt.setString(2, history.date().toString());
-            pstmt.setString(3, history.author());
-            pstmt.setString(4, history.description());
-            pstmt.setString(5, history.earliestCommit());
+            pstmt.setString(1, history.repoId());
+            pstmt.setString(2, history.version());
+            pstmt.setString(3, history.date().toString());
+            pstmt.setString(4, history.author());
+            pstmt.setString(5, history.description());
+            pstmt.setString(6, history.earliestCommit());
             pstmt.executeUpdate();
         }
     }

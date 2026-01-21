@@ -32,20 +32,52 @@ public class LlmService {
 
         String jsonBody = serializeMapToJson(body);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(apiUrl))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .timeout(Duration.ofMinutes(5))
-                .build();
+        int maxRetries = 5;
+        int retryCount = 0;
+        long backoffMs = 2000;
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("LLM API error: " + response.statusCode() + " - " + response.body());
+        while (true) {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .timeout(Duration.ofMinutes(5))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() == 200) {
+                return parseLlmResponse(response.body());
+            } else if (response.statusCode() == 429) {
+                if (retryCount >= maxRetries) {
+                    throw new RuntimeException("LLM API error: 429 - Rate limit exceeded after " + maxRetries + " retries. " + response.body());
+                }
+                
+                // Try to parse wait time from response if available (Groq provides it)
+                long waitTime = backoffMs;
+                if (response.body().contains("Please try again in ")) {
+                    try {
+                        String bodyText = response.body();
+                        int start = bodyText.indexOf("Please try again in ") + 20;
+                        int end = bodyText.indexOf("s", start);
+                        if (end > start) {
+                            double seconds = Double.parseDouble(bodyText.substring(start, end));
+                            waitTime = (long) (seconds * 1000) + 500; // Add 500ms buffer
+                        }
+                    } catch (Exception e) {
+                        // fallback to exponential backoff
+                    }
+                }
+                
+                System.out.println("[LLM] Rate limited (429). Retrying in " + waitTime + "ms... (Attempt " + (retryCount + 1) + "/" + maxRetries + ")");
+                Thread.sleep(waitTime);
+                retryCount++;
+                backoffMs *= 2; // Exponential backoff for next time if needed
+            } else {
+                throw new RuntimeException("LLM API error: " + response.statusCode() + " - " + response.body());
+            }
         }
-
-        return parseLlmResponse(response.body());
     }
 
     private String serializeMapToJson(Map<String, Object> map) {
