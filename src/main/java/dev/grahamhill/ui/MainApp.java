@@ -1820,7 +1820,14 @@ public class MainApp extends Application {
                 generateLlmReport(() -> {
                     if (databaseService != null) {
                         try {
-                            databaseService.saveMetrics(currentStats);
+                            String path = repoPathField.getText();
+                            String repoId;
+                            try {
+                                repoId = new File(path).getCanonicalPath();
+                            } catch (Exception e) {
+                                repoId = new File(path).getAbsolutePath();
+                            }
+                            databaseService.saveMetrics(repoId, currentStats);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
