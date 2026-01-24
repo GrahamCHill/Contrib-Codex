@@ -272,7 +272,7 @@ public class GitService {
         if (lowerPath.endsWith("package-lock.json") || lowerPath.endsWith("yarn.lock") || lowerPath.endsWith("pnpm-lock.yaml") || lowerPath.endsWith("requirements.txt") || lowerPath.endsWith("pom.xml")) return "Lockfiles";
         if (lowerPath.endsWith(".map") || lowerPath.endsWith(".min.js") || lowerPath.endsWith(".min.css")) return "Sourcemaps/Minified";
         if (lowerPath.endsWith(".json") || lowerPath.endsWith(".yml") || lowerPath.endsWith(".yaml") || lowerPath.endsWith(".toml") || lowerPath.endsWith(".xml")) return "Config/Data";
-        if (lowerPath.endsWith(".md")) return "Documentation";
+        if (lowerPath.endsWith(".md") || lowerPath.endsWith(".txt") || lowerPath.endsWith(".pdf") || lowerPath.endsWith(".doc") || lowerPath.endsWith(".docx")) return "Documentation";
         return "Other";
     }
 
