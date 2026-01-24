@@ -507,9 +507,10 @@ public class MainApp extends Application {
         zoomControls.getChildren().addAll(new Label("Zoom:"), zoomSlider, zoomLabel);
 
         ScrollPane visualsScrollPane = new ScrollPane();
-        visualsScrollPane.setFitToWidth(false);
+        visualsScrollPane.setFitToWidth(true);
         visualsScrollPane.setFitToHeight(false);
-        HBox chartsBox = new HBox(10);
+        VBox chartsBox = new VBox(10);
+        chartsBox.setAlignment(javafx.geometry.Pos.TOP_CENTER);
         chartsBox.setPadding(new Insets(10));
         
         javafx.scene.Group zoomGroup = new javafx.scene.Group(chartsBox);
@@ -606,18 +607,17 @@ public class MainApp extends Application {
         commitsPerDayLineChart.setPrefHeight(1080);
         commitsPerDayLineChart.setLegendVisible(true);
 
-
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         impactBarChart = new StackedBarChart<>(xAxis, yAxis);
         impactBarChart.setTitle("Impact (Lines Added/Deleted)");
-        impactBarChart.setMinWidth(1770); // +5% of 1686
-        impactBarChart.setPrefWidth(2336); // Increased by 150 (from 2186)
-        // Increase chart heights by 50 pixels in both UI and snapshots
-        impactBarChart.setMinHeight(1040); 
-        impactBarChart.setPrefHeight(1040);
+        impactBarChart.setMinWidth(1080);
+        impactBarChart.setMaxWidth(1080);
+        impactBarChart.setPrefWidth(1080);
+        impactBarChart.setMinHeight(1080);
+        impactBarChart.setMaxHeight(1080);
+        impactBarChart.setPrefHeight(1080);
         impactBarChart.setLegendSide(javafx.geometry.Side.RIGHT);
-        impactBarChart.setPadding(new Insets(0, 100, 0, 0)); // Extra internal right padding
         xAxis.setLabel("Contributor");
         xAxis.setTickLabelRotation(45); // Prevent overlap
         xAxis.setTickLabelGap(20); // Increased from 10 to move labels down
@@ -628,12 +628,13 @@ public class MainApp extends Application {
         NumberAxis lyAxis = new NumberAxis();
         activityLineChart = new LineChart<>(lxAxis, lyAxis);
         activityLineChart.setTitle("Recent Commit Activity");
-        activityLineChart.setMinWidth(1770);
-        activityLineChart.setPrefWidth(2336);
-        activityLineChart.setMinHeight(1040);
-        activityLineChart.setPrefHeight(1040);
+        activityLineChart.setMinWidth(1080);
+        activityLineChart.setMaxWidth(1080);
+        activityLineChart.setPrefWidth(1080);
+        activityLineChart.setMinHeight(1080);
+        activityLineChart.setMaxHeight(1080);
+        activityLineChart.setPrefHeight(1080);
         activityLineChart.setLegendSide(javafx.geometry.Side.RIGHT);
-        activityLineChart.setPadding(new Insets(0, 100, 0, 0));
         lxAxis.setLabel("Commit ID");
         lxAxis.setTickLabelRotation(45); // Prevent overlap
         lxAxis.setTickLabelGap(20);
@@ -644,12 +645,13 @@ public class MainApp extends Application {
         NumberAxis cyAxis = new NumberAxis();
         calendarActivityChart = new LineChart<>(cxAxis, cyAxis);
         calendarActivityChart.setTitle("Daily Activity (Total Impact)");
-        calendarActivityChart.setMinWidth(1770);
-        calendarActivityChart.setPrefWidth(2336);
-        calendarActivityChart.setMinHeight(1040);
-        calendarActivityChart.setPrefHeight(1040);
+        calendarActivityChart.setMinWidth(1080);
+        calendarActivityChart.setMaxWidth(1080);
+        calendarActivityChart.setPrefWidth(1080);
+        calendarActivityChart.setMinHeight(1080);
+        calendarActivityChart.setMaxHeight(1080);
+        calendarActivityChart.setPrefHeight(1080);
         calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
-        calendarActivityChart.setPadding(new Insets(0, 100, 0, 0));
         cxAxis.setLabel("Date");
         cxAxis.setTickLabelRotation(45); // Prevent overlap
         cxAxis.setTickLabelGap(20);
@@ -660,40 +662,52 @@ public class MainApp extends Application {
         NumberAxis cayAxis = new NumberAxis();
         contributorActivityChart = new LineChart<>(caxAxis, cayAxis);
         contributorActivityChart.setTitle("Daily Activity per Contributor (Lines Added)");
-        contributorActivityChart.setMinWidth(1770);
-        contributorActivityChart.setPrefWidth(2336);
-        contributorActivityChart.setMinHeight(1040);
-        contributorActivityChart.setPrefHeight(1040);
+        contributorActivityChart.setMinWidth(1080);
+        contributorActivityChart.setMaxWidth(1080);
+        contributorActivityChart.setPrefWidth(1080);
+        contributorActivityChart.setMinHeight(1080);
+        contributorActivityChart.setMaxHeight(1080);
+        contributorActivityChart.setPrefHeight(1080);
         contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
-        contributorActivityChart.setPadding(new Insets(0, 100, 0, 0));
         caxAxis.setLabel("Date");
         caxAxis.setTickLabelRotation(45);
         caxAxis.setTickLabelGap(20);
         caxAxis.setTickLength(10);
         cayAxis.setLabel("Lines Added");
 
-
         // Set a fixed height for all charts in the visuals box to ensure consistency
         commitPieChart.setMinHeight(1080);
         commitPieChart.setMaxHeight(1080);
         commitPieChart.setPrefHeight(1080);
-        impactBarChart.setPrefHeight(1040);
-        activityLineChart.setPrefHeight(1040);
-        calendarActivityChart.setPrefHeight(1040);
-        contributorActivityChart.setPrefHeight(1040);
-        commitsPerDayLineChart.setPrefHeight(1040);
+        languagePieChart.setMinHeight(1080);
+        languagePieChart.setMaxHeight(1080);
+        languagePieChart.setPrefHeight(1080);
+        contribLanguagePieChart.setMinHeight(1080);
+        contribLanguagePieChart.setMaxHeight(1080);
+        contribLanguagePieChart.setPrefHeight(1080);
+        devPieChart.setMinHeight(1080);
+        devPieChart.setMaxHeight(1080);
+        devPieChart.setPrefHeight(1080);
+        projectLangPieChart.setMinHeight(1080);
+        projectLangPieChart.setMaxHeight(1080);
+        projectLangPieChart.setPrefHeight(1080);
+        impactBarChart.setMinHeight(1080);
+        impactBarChart.setMaxHeight(1080);
+        impactBarChart.setPrefHeight(1080);
+        activityLineChart.setMinHeight(1080);
+        activityLineChart.setMaxHeight(1080);
+        activityLineChart.setPrefHeight(1080);
+        calendarActivityChart.setMinHeight(1080);
+        calendarActivityChart.setMaxHeight(1080);
+        calendarActivityChart.setPrefHeight(1080);
+        contributorActivityChart.setMinHeight(1080);
+        contributorActivityChart.setMaxHeight(1080);
+        contributorActivityChart.setPrefHeight(1080);
+        commitsPerDayLineChart.setMinHeight(1080);
+        commitsPerDayLineChart.setMaxHeight(1080);
+        commitsPerDayLineChart.setPrefHeight(1080);
 
         chartsBox.getChildren().addAll(commitPieChart, languagePieChart, contribLanguagePieChart, devPieChart, projectLangPieChart, commitsPerDayLineChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart);
-        HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(languagePieChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(contribLanguagePieChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(devPieChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(projectLangPieChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(commitsPerDayLineChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
-        HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
         visualsOuterBox.getChildren().addAll(zoomControls, visualsScrollPane);
         VBox.setVgrow(visualsScrollPane, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsOuterBox);
@@ -2214,11 +2228,11 @@ public class MainApp extends Application {
                 contribLanguagePieChart.setLabelsVisible(true);
 
                 // Ensure charts have enough internal padding for legends
-                impactBarChart.setPadding(new Insets(10, 400, 10, 10));
-                activityLineChart.setPadding(new Insets(10, 400, 10, 10));
-                calendarActivityChart.setPadding(new Insets(10, 400, 10, 10));
-                contributorActivityChart.setPadding(new Insets(10, 400, 10, 10));
-                commitsPerDayLineChart.setPadding(new Insets(10, 400, 10, 10));
+                impactBarChart.setPadding(new Insets(10, 10, 10, 10));
+                activityLineChart.setPadding(new Insets(10, 10, 10, 10));
+                calendarActivityChart.setPadding(new Insets(10, 10, 10, 10));
+                contributorActivityChart.setPadding(new Insets(10, 10, 10, 10));
+                commitsPerDayLineChart.setPadding(new Insets(10, 10, 10, 10));
 
                 // Set legend side to RIGHT for all except pie
                 impactBarChart.setLegendSide(javafx.geometry.Side.RIGHT);
@@ -2555,11 +2569,11 @@ public class MainApp extends Application {
                     commitsPerDayLineChart.setLegendVisible(true);
 
                     // Ensure charts have enough internal padding for legends in company mode too
-                    impactBarChart.setPadding(new Insets(10, 400, 10, 10));
-                    activityLineChart.setPadding(new Insets(10, 400, 10, 10));
-                    calendarActivityChart.setPadding(new Insets(10, 400, 10, 10));
-                    contributorActivityChart.setPadding(new Insets(10, 400, 10, 10));
-                    commitsPerDayLineChart.setPadding(new Insets(10, 400, 10, 10));
+                    impactBarChart.setPadding(new Insets(10, 10, 10, 10));
+                    activityLineChart.setPadding(new Insets(10, 10, 10, 10));
+                    calendarActivityChart.setPadding(new Insets(10, 10, 10, 10));
+                    contributorActivityChart.setPadding(new Insets(10, 10, 10, 10));
+                    commitsPerDayLineChart.setPadding(new Insets(10, 10, 10, 10));
 
                     // Force layout and requestLayout to ensure rendering
                     Platform.runLater(() -> {

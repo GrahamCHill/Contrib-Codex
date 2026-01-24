@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 public class ChartManager {
 
     private void updateActivityLineChart(LineChart<String, Number> activityLineChart, List<CommitInfo> chronological) {
-        activityLineChart.getData().clear();
         activityLineChart.setAnimated(false);
         if (chronological != null && !chronological.isEmpty()) {
             XYChart.Series<String, Number> activitySeries = new XYChart.Series<>();
@@ -19,12 +18,13 @@ public class ChartManager {
             for (CommitInfo ci : chronological) {
                 activitySeries.getData().add(new XYChart.Data<>(ci.id().substring(0, 7), ci.linesAdded()));
             }
-            activityLineChart.getData().add(activitySeries);
+            activityLineChart.setData(FXCollections.observableArrayList(activitySeries));
+        } else {
+            activityLineChart.setData(FXCollections.observableArrayList());
         }
     }
 
     private void updateCalendarActivityChart(LineChart<String, Number> calendarActivityChart, List<CommitInfo> commits) {
-        calendarActivityChart.getData().clear();
         calendarActivityChart.setAnimated(false);
         if (commits != null && !commits.isEmpty()) {
             XYChart.Series<String, Number> calSeries = new XYChart.Series<>();
@@ -45,12 +45,15 @@ public class ChartManager {
                 }
             }
             dailyImpact.forEach((date, impact) -> calSeries.getData().add(new XYChart.Data<>(date.toString(), impact)));
-            calendarActivityChart.getData().add(calSeries);
+            calendarActivityChart.setData(FXCollections.observableArrayList(calSeries));
+        } else {
+            calendarActivityChart.setData(FXCollections.observableArrayList());
         }
     }
 
     private static final Set<String> IGNORED_EXTENSIONS = Set.of(
-            "jpg", "jpeg", "png", "gif", "svg", "ico", "git", "exe", "dll", "so", "dylib", "bin", "zip", "tar", "gz", "7z", "rar"
+            "jpg", "jpeg", "png", "gif", "svg", "ico", "git", "exe", "dll", "so", "dylib", "bin", "zip", "tar", "gz", "7z", "rar",
+            "map", "min.js", "min.css", "lock", "lockfiles", "generated", "artifacts"
     );
 
     private static final Set<String> DOCUMENTATION_EXTENSIONS = Set.of(
@@ -102,7 +105,15 @@ public class ChartManager {
                         return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), (double) e.getValue());
                     })
                     .collect(Collectors.toList());
+            
+            // To prevent NPE in JavaFX PieChart layout:
+            // 1. Disable animations
+            languagePieChart.setAnimated(false);
+            // 2. Set new data as a fresh list
             languagePieChart.setData(FXCollections.observableArrayList(langPieData));
+            // 3. Force layout on the thread (this method should be called on FX thread)
+            languagePieChart.layout();
+            
             languagePieChart.setLabelsVisible(true);
         }
 
@@ -112,14 +123,19 @@ public class ChartManager {
         for (ContributorStats s : stats) {
             Map<String, Integer> processed = processLanguageBreakdown(s.languageBreakdown());
             if (!processed.isEmpty()) {
-                processed.keySet().forEach(lang -> contribLangs.merge(lang, 1, Integer::sum));
+                // Find primary language for this contributor
+                String primaryLang = processed.entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .map(Map.Entry::getKey)
+                        .orElse("Unknown");
+                contribLangs.merge(primaryLang, 1, Integer::sum);
             } else {
                 contribLangs.merge("Unknown", 1, Integer::sum);
             }
         }
         int totalLangContributions = (int) contribLangs.values().stream().mapToLong(Integer::intValue).sum();
         if (totalLangContributions == 0) {
-            contribLanguagePieChart.getData().clear();
+            contribLanguagePieChart.setData(FXCollections.observableArrayList());
         } else {
             List<PieChart.Data> contribLangPieData = contribLangs.entrySet().stream()
                     .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
@@ -128,12 +144,15 @@ public class ChartManager {
                         return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), (double) e.getValue());
                     })
                     .collect(Collectors.toList());
-            contribLanguagePieChart.getData().setAll(contribLangPieData);
+            
+            contribLanguagePieChart.setAnimated(false);
+            contribLanguagePieChart.setData(FXCollections.observableArrayList(contribLangPieData));
+            contribLanguagePieChart.layout();
+            
             contribLanguagePieChart.setLabelsVisible(true);
         }
 
         // Commits per Day (Overall)
-        commitsPerDayLineChart.getData().clear();
         commitsPerDayLineChart.setAnimated(false);
         if (recentCommits != null && !recentCommits.isEmpty()) {
             TreeMap<java.time.LocalDate, Integer> dailyCommits = new TreeMap<>();
@@ -152,7 +171,7 @@ public class ChartManager {
                 series.getData().add(new XYChart.Data<>(current.toString(), dailyCommits.getOrDefault(current, 0)));
                 current = current.plusDays(1);
             }
-            commitsPerDayLineChart.getData().add(series);
+            commitsPerDayLineChart.setData(FXCollections.observableArrayList(series));
             // Apply line thickness after adding to chart so the node is created
             if (series.getNode() != null) {
                 series.getNode().setStyle("-fx-stroke-width: 4px;");
@@ -164,6 +183,8 @@ public class ChartManager {
                     }
                 });
             }
+        } else {
+            commitsPerDayLineChart.setData(FXCollections.observableArrayList());
         }
 
         commitPieChart.setAnimated(false);
@@ -189,12 +210,15 @@ public class ChartManager {
                     return new PieChart.Data(String.format("%s (%.1f%%)", displayName, percentage), (double) s.commitCount());
                 })
                 .toList();
-        commitPieChart.getData().setAll(pieData);
+        
+        commitPieChart.setAnimated(false);
+        commitPieChart.setData(FXCollections.observableArrayList(pieData));
+        commitPieChart.layout();
+        
         commitPieChart.setLegendVisible(true);
         commitPieChart.setLegendSide(javafx.geometry.Side.BOTTOM);
 
         // Stacked Bar Chart for Impact
-        impactBarChart.getData().clear();
         impactBarChart.setAnimated(false);
         XYChart.Series<String, Number> addedSeries = new XYChart.Series<>();
         addedSeries.setName("Added");
@@ -208,7 +232,7 @@ public class ChartManager {
             addedSeries.getData().add(addedData);
             deletedSeries.getData().add(deletedData);
         }
-        impactBarChart.getData().addAll(addedSeries, deletedSeries);
+        impactBarChart.setData(FXCollections.observableArrayList(addedSeries, deletedSeries));
 
         // Activity Line Chart
         if (recentCommits != null && !recentCommits.isEmpty()) {
@@ -219,8 +243,8 @@ public class ChartManager {
             updateActivityLineChart(activityLineChart, chronological);
             updateCalendarActivityChart(calendarActivityChart, chronological);
         } else {
-            activityLineChart.getData().clear();
-            calendarActivityChart.getData().clear();
+            activityLineChart.setData(FXCollections.observableArrayList());
+            calendarActivityChart.setData(FXCollections.observableArrayList());
         }
 
         updateContributorActivityChart(contributorActivityChart, stats, recentCommits);
@@ -228,11 +252,14 @@ public class ChartManager {
     }
 
     public void updateContributorActivityChart(LineChart<String, Number> chart, List<ContributorStats> stats, List<CommitInfo> recentCommits) {
-        chart.getData().clear();
         chart.setAnimated(false);
 
-        if (recentCommits == null || recentCommits.isEmpty()) return;
+        if (recentCommits == null || recentCommits.isEmpty()) {
+            chart.setData(FXCollections.observableArrayList());
+            return;
+        }
 
+        List<XYChart.Series<String, Number>> allSeries = new ArrayList<>();
         // Group lines added by date and author
         Map<String, TreeMap<java.time.LocalDate, Integer>> contributorDailyLines = new HashMap<>();
         TreeMap<java.time.LocalDate, Integer> totalDailyLines = new TreeMap<>();
@@ -253,7 +280,10 @@ public class ChartManager {
             totalDailyLines.merge(date, ci.linesAdded(), Integer::sum);
         }
 
-        if (firstDate == null) return;
+        if (firstDate == null) {
+            chart.setData(FXCollections.observableArrayList());
+            return;
+        }
 
         // Total Series
         XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
@@ -265,7 +295,7 @@ public class ChartManager {
             totalSeries.getData().add(new XYChart.Data<>(current.toString(), lines));
             current = current.plusDays(1);
         }
-        chart.getData().add(totalSeries);
+        allSeries.add(totalSeries);
 
         // Fill gaps with zeros and create series for top contributors
         if (stats != null) {
@@ -286,17 +316,21 @@ public class ChartManager {
                     series.getData().add(new XYChart.Data<>(current.toString(), lines));
                     current = current.plusDays(1);
                 }
-                chart.getData().add(series);
+                allSeries.add(series);
             }
         }
+        chart.setData(FXCollections.observableArrayList(allSeries));
     }
 
     public void updateCpdPerContributorChart(LineChart<String, Number> chart, List<ContributorStats> stats, List<CommitInfo> recentCommits) {
-        chart.getData().clear();
         chart.setAnimated(false);
 
-        if (recentCommits == null || recentCommits.isEmpty()) return;
+        if (recentCommits == null || recentCommits.isEmpty()) {
+            chart.setData(FXCollections.observableArrayList());
+            return;
+        }
 
+        List<XYChart.Series<String, Number>> allSeries = new ArrayList<>();
         // Group commits by date and author
         Map<String, TreeMap<java.time.LocalDate, Integer>> contributorDailyCommits = new HashMap<>();
         TreeMap<java.time.LocalDate, Integer> totalDailyCommits = new TreeMap<>();
@@ -316,7 +350,10 @@ public class ChartManager {
             totalDailyCommits.merge(date, 1, Integer::sum);
         }
 
-        if (firstDate == null) return;
+        if (firstDate == null) {
+            chart.setData(FXCollections.observableArrayList());
+            return;
+        }
 
         // Total Series
         XYChart.Series<String, Number> totalSeries = new XYChart.Series<>();
@@ -328,7 +365,7 @@ public class ChartManager {
             totalSeries.getData().add(new XYChart.Data<>(current.toString(), count));
             current = current.plusDays(1);
         }
-        chart.getData().add(totalSeries);
+        allSeries.add(totalSeries);
 
         // Fill gaps with zeros and create series for top contributors
         if (stats != null) {
@@ -349,9 +386,10 @@ public class ChartManager {
                     series.getData().add(new XYChart.Data<>(current.toString(), count));
                     current = current.plusDays(1);
                 }
-                chart.getData().add(series);
+                allSeries.add(series);
             }
         }
+        chart.setData(FXCollections.observableArrayList(allSeries));
     }
 
     public void updateCompanyCharts(PieChart commitPieChart, PieChart languagePieChart, StackedBarChart<String, Number> impactBarChart, PieChart devPieChart, 
@@ -369,7 +407,11 @@ public class ChartManager {
                     return new PieChart.Data(String.format("%s (%.1f%%)", repoName, percentage), (double) m.totalCommits());
                 })
                 .collect(Collectors.toList());
-        commitPieChart.getData().setAll(commitData);
+        
+        commitPieChart.setAnimated(false);
+        commitPieChart.setData(FXCollections.observableArrayList(commitData));
+        commitPieChart.layout();
+        
         commitPieChart.setLabelsVisible(true);
 
         // Language Breakdown (Company)
@@ -382,7 +424,7 @@ public class ChartManager {
         });
         int totalCompanyLangFiles = (int) companyOverallLangs.values().stream().mapToLong(Integer::intValue).sum();
         if (totalCompanyLangFiles == 0) {
-            languagePieChart.getData().clear();
+            languagePieChart.setData(FXCollections.observableArrayList());
         } else {
             List<PieChart.Data> companyLangData = companyOverallLangs.entrySet().stream()
                     .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
@@ -393,13 +435,16 @@ public class ChartManager {
                         return data;
                     })
                     .collect(Collectors.toList());
-            languagePieChart.getData().setAll(companyLangData);
+            
+            languagePieChart.setAnimated(false);
+            languagePieChart.setData(FXCollections.observableArrayList(companyLangData));
+            languagePieChart.layout();
+            
             languagePieChart.setLabelsVisible(true);
         }
 
         // Impact Bar Chart
         impactBarChart.setAnimated(false);
-        impactBarChart.getData().clear();
         XYChart.Series<String, Number> addedSeries = new XYChart.Series<>();
         addedSeries.setName("Added");
         XYChart.Series<String, Number> deletedSeries = new XYChart.Series<>();
@@ -410,7 +455,7 @@ public class ChartManager {
             addedSeries.getData().add(new XYChart.Data<>(repoName, Math.max(0, m.totalLinesAdded())));
             deletedSeries.getData().add(new XYChart.Data<>(repoName, Math.max(0, m.totalLinesDeleted())));
         }
-        impactBarChart.getData().addAll(addedSeries, deletedSeries);
+        impactBarChart.setData(FXCollections.observableArrayList(addedSeries, deletedSeries));
 
         // Code by Developer (Company)
         if (devPieChart != null && allContributors != null) {
@@ -428,7 +473,11 @@ public class ChartManager {
                         return new PieChart.Data(String.format("%s (%.1f%%)", sanitizeName(e.getKey()), percentage), (double) e.getValue());
                     })
                     .collect(Collectors.toList());
-            devPieChart.getData().setAll(devData);
+            
+            devPieChart.setAnimated(false);
+            devPieChart.setData(FXCollections.observableArrayList(devData));
+            devPieChart.layout();
+            
             devPieChart.setLabelsVisible(true);
         }
 
@@ -459,7 +508,11 @@ public class ChartManager {
                         return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), (double) e.getValue());
                     })
                     .collect(Collectors.toList());
-            projectLangPieChart.getData().setAll(projLangData);
+            
+            projectLangPieChart.setAnimated(false);
+            projectLangPieChart.setData(FXCollections.observableArrayList(projLangData));
+            projectLangPieChart.layout();
+            
             projectLangPieChart.setLabelsVisible(true);
         }
 
@@ -480,7 +533,12 @@ public class ChartManager {
 
             for (Map<String, Integer> langs : aggregatedContribLangs.values()) {
                 if (!langs.isEmpty()) {
-                    langs.keySet().forEach(lang -> cLangs.merge(lang, 1, Integer::sum));
+                    // Find primary language for this contributor
+                    String primaryLang = langs.entrySet().stream()
+                            .max(Map.Entry.comparingByValue())
+                            .map(Map.Entry::getKey)
+                            .orElse("Unknown");
+                    cLangs.merge(primaryLang, 1, Integer::sum);
                 } else {
                     cLangs.merge("Unknown", 1, Integer::sum);
                 }
@@ -488,7 +546,7 @@ public class ChartManager {
 
             int totalC = (int) cLangs.values().stream().mapToLong(Integer::intValue).sum();
             if (totalC == 0) {
-                contribLangPieChart.getData().clear();
+                contribLangPieChart.setData(FXCollections.observableArrayList());
             } else {
                 List<PieChart.Data> cLangData = cLangs.entrySet().stream()
                         .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
@@ -497,7 +555,11 @@ public class ChartManager {
                             return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), (double) e.getValue());
                         })
                         .collect(Collectors.toList());
-                contribLangPieChart.getData().setAll(cLangData);
+                
+                contribLangPieChart.setAnimated(false);
+                contribLangPieChart.setData(FXCollections.observableArrayList(cLangData));
+                contribLangPieChart.layout();
+                
                 contribLangPieChart.setLabelsVisible(true);
             }
         }
