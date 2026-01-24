@@ -50,6 +50,7 @@ public class ChartManager {
     }
 
     public void updateCharts(PieChart commitPieChart, PieChart languagePieChart, PieChart contribLanguagePieChart,
+                             PieChart commitsPerDayPieChart,
                              StackedBarChart<String, Number> impactBarChart, 
                              LineChart<String, Number> activityLineChart, LineChart<String, Number> calendarActivityChart, 
                              LineChart<String, Number> contributorActivityChart, LineChart<String, Number> commitsPerDayChart,
@@ -96,6 +97,26 @@ public class ChartManager {
                 })
                 .collect(Collectors.toList());
         contribLanguagePieChart.setData(FXCollections.observableArrayList(contribLangPieData));
+
+        // Commits per Day (Overall)
+        commitsPerDayPieChart.getData().clear();
+        commitsPerDayPieChart.setAnimated(false);
+        if (recentCommits != null && !recentCommits.isEmpty()) {
+            Map<java.time.LocalDate, Integer> dailyCommits = new TreeMap<>();
+            for (CommitInfo ci : recentCommits) {
+                dailyCommits.merge(ci.timestamp().toLocalDate(), 1, Integer::sum);
+            }
+            int totalC = recentCommits.size();
+            List<PieChart.Data> cpdPieData = dailyCommits.entrySet().stream()
+                    .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                    .limit(10)
+                    .map(e -> {
+                        double percentage = (totalC > 0) ? (double)e.getValue() / totalC * 100 : 0;
+                        return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey().toString(), percentage), e.getValue());
+                    })
+                    .collect(Collectors.toList());
+            commitsPerDayPieChart.setData(FXCollections.observableArrayList(cpdPieData));
+        }
 
         // Pie Chart with percentages
         commitPieChart.getData().clear();

@@ -71,6 +71,7 @@ public class MainApp extends Application {
     private PieChart commitPieChart;
     private PieChart languagePieChart;
     private PieChart contribLanguagePieChart;
+    private PieChart commitsPerDayPieChart;
     private StackedBarChart<String, Number> impactBarChart;
     private LineChart<String, Number> activityLineChart;
     private LineChart<String, Number> calendarActivityChart;
@@ -95,9 +96,11 @@ public class MainApp extends Application {
     private String selectedProvider = "OpenAI";
 
     private CheckBox aiReviewCheckBox;
-
+    private TabPane mainTopTabPane;
+    private Tab repoModeTab;
     private Tab companyReviewTab;
     private TableView<CompanyMetric> companyReviewTable;
+    private ListView<CompanyMetricSelection> repoSelectionList;
     private TextField companyReviewMdPathField;
     private PieChart companyCommitPieChart;
     private PieChart companyLanguagePieChart;
@@ -111,6 +114,20 @@ public class MainApp extends Application {
     private LineChart<String, Number> companyCpdPerContributorChart;
 
     private Map<String, String> envConfig = new HashMap<>();
+
+    public static class CompanyMetricSelection {
+        private final CompanyMetric metric;
+        private final javafx.beans.property.BooleanProperty selected = new javafx.beans.property.SimpleBooleanProperty(true);
+
+        public CompanyMetricSelection(CompanyMetric metric) {
+            this.metric = metric;
+        }
+
+        public CompanyMetric getMetric() { return metric; }
+        public boolean isSelected() { return selected.get(); }
+        public javafx.beans.property.BooleanProperty selectedProperty() { return selected; }
+        public void setSelected(boolean s) { selected.set(s); }
+    }
 
     @Override
     public void start(Stage primaryStage) {
@@ -217,12 +234,12 @@ public class MainApp extends Application {
         contentBox.setPadding(new Insets(10));
         root.setCenter(contentBox);
 
-        TabPane mainTopTabPane = new TabPane();
-        Tab repoModeTab = new Tab("Repo Analysis");
+        mainTopTabPane = new TabPane();
+        repoModeTab = new Tab("Repo Analysis");
         repoModeTab.setClosable(false);
-        Tab companyModeTab = new Tab("Company Review");
-        companyModeTab.setClosable(false);
-        mainTopTabPane.getTabs().addAll(repoModeTab, companyModeTab);
+        companyReviewTab = new Tab("Company Review");
+        companyReviewTab.setClosable(false);
+        mainTopTabPane.getTabs().addAll(repoModeTab, companyReviewTab);
 
         // Define results container 
         VBox sharedResultsBox = new VBox(10);
@@ -328,158 +345,35 @@ public class MainApp extends Application {
         Button exportCompanyPdfButton = new Button("Export Company PDF");
         exportCompanyPdfButton.setOnAction(e -> exportCompanyToPdf(primaryStage));
 
-        Button analyzeCompanyButton = new Button("Analyze Company");
+        Button analyzeCompanyButton = new Button("Analyze Selected Repos");
         analyzeCompanyButton.setOnAction(e -> refreshCompanyReviewData(true));
 
         companyReviewActions.getChildren().addAll(loadCsvsButton, new Label("Company Review MD:"), companyReviewMdPathField, browseCompanyMdButton, analyzeCompanyButton, exportCompanyPdfButton);
         
-        TabPane companyTabPane = new TabPane();
-        Tab companyStatsTab = new Tab("Statistics");
-        companyStatsTab.setClosable(false);
-        Tab companyVisualsTab = new Tab("Visuals");
-        companyVisualsTab.setClosable(false);
-
-        companyReviewTable = new TableView<>();
-        companyReviewTable.setRowFactory(tv -> {
-            TableRow<CompanyMetric> row = new TableRow<>();
-            row.setOnMouseClicked(event -> {
-                if (event.getClickCount() == 2 && (!row.isEmpty())) {
-                    CompanyMetric rowData = row.getItem();
-                    repoPathField.setText(rowData.repoName());
-                    mainTopTabPane.getSelectionModel().select(repoModeTab);
-                    analyzeRepo();
+        repoSelectionList = new ListView<>();
+        repoSelectionList.setCellFactory(lv -> new ListCell<>() {
+            private final CheckBox checkBox = new CheckBox();
+            @Override
+            protected void updateItem(CompanyMetricSelection item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                    setText(null);
+                } else {
+                    checkBox.selectedProperty().bindBidirectional(item.selectedProperty());
+                    String repoName = new File(item.getMetric().repoName()).getName();
+                    setText(repoName + " (" + item.getMetric().repoName() + ")");
+                    setGraphic(checkBox);
                 }
-            });
-            return row;
+            }
         });
-        TableColumn<CompanyMetric, String> repoCol = new TableColumn<>("Repository");
-        repoCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().repoName()));
-        TableColumn<CompanyMetric, Integer> cContribCol = new TableColumn<>("Contributors");
-        cContribCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalContributors()).asObject());
-        TableColumn<CompanyMetric, Integer> cCommitsCol = new TableColumn<>("Commits");
-        cCommitsCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalCommits()).asObject());
-        TableColumn<CompanyMetric, Integer> cAddedCol = new TableColumn<>("Added");
-        cAddedCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalLinesAdded()).asObject());
-        TableColumn<CompanyMetric, Integer> cDeletedCol = new TableColumn<>("Deleted");
-        cDeletedCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalLinesDeleted()).asObject());
-        TableColumn<CompanyMetric, String> cLangCol = new TableColumn<>("Primary Language");
-        cLangCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().primaryLanguage()));
-        TableColumn<CompanyMetric, String> cScoreCol = new TableColumn<>("Avg Meaningful Score");
-        cScoreCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f", data.getValue().averageMeaningfulScore())));
+        repoSelectionList.setPrefHeight(150);
+
+        companyModeBox.getChildren().addAll(new Label("Select Repositories for Company Review:"), repoSelectionList, companyReviewActions);
+        companyReviewTab.setContent(companyModeBox);
         
-        companyReviewTable.getColumns().addAll(repoCol, cContribCol, cCommitsCol, cAddedCol, cDeletedCol, cLangCol, cScoreCol);
-        companyStatsTab.setContent(companyReviewTable);
-
-        // --- Company Visuals ---
-        VBox companyVisualsOuterBox = new VBox(5);
-        HBox companyZoomControls = new HBox(10);
-        companyZoomControls.setPadding(new Insets(5));
-        companyZoomControls.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        Slider companyZoomSlider = new Slider(0.1, 2.0, 1.0);
-        Label companyZoomLabel = new Label("Zoom: 100%");
-        companyZoomSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
-            companyZoomLabel.setText(String.format("Zoom: %.0f%%", newVal.doubleValue() * 100));
-        });
-        companyZoomControls.getChildren().addAll(new Label("Zoom:"), companyZoomSlider, companyZoomLabel);
-
-        ScrollPane companyVisualsScrollPane = new ScrollPane();
-        companyVisualsScrollPane.setFitToWidth(false);
-        companyVisualsScrollPane.setFitToHeight(false);
-        HBox companyChartsBox = new HBox(10);
-        companyChartsBox.setPadding(new Insets(10));
-        
-        javafx.scene.Group companyZoomGroup = new javafx.scene.Group(companyChartsBox);
-        companyVisualsScrollPane.setContent(companyZoomGroup);
-
-        javafx.scene.transform.Scale companyScale = new javafx.scene.transform.Scale(1, 1, 0, 0);
-        companyZoomGroup.getTransforms().add(companyScale);
-        companyScale.xProperty().bind(companyZoomSlider.valueProperty());
-        companyScale.yProperty().bind(companyZoomSlider.valueProperty());
-
-        companyVisualsScrollPane.setOnScroll(event -> {
-            double delta = event.getDeltaY();
-            double zoomFactor = 1.05;
-            if (delta < 0) zoomFactor = 1 / zoomFactor;
-            double newScale = companyZoomSlider.getValue() * zoomFactor;
-            companyZoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
-            event.consume();
-        });
-
-        companyCommitPieChart = new PieChart();
-        companyCommitPieChart.setTitle("Commits by Repository");
-        companyCommitPieChart.setMinWidth(600);
-        companyCommitPieChart.setPrefHeight(600);
-
-        companyLanguagePieChart = new PieChart();
-        companyLanguagePieChart.setTitle("Language Breakdown (Company)");
-        companyLanguagePieChart.setMinWidth(600);
-        companyLanguagePieChart.setPrefHeight(600);
-
-        companyDevPieChart = new PieChart();
-        companyDevPieChart.setTitle("Code by Developer (Company)");
-        companyDevPieChart.setMinWidth(600);
-        companyDevPieChart.setPrefHeight(600);
-
-        companyProjLangPieChart = new PieChart();
-        companyProjLangPieChart.setTitle("Language of Projects");
-        companyProjLangPieChart.setMinWidth(600);
-        companyProjLangPieChart.setPrefHeight(600);
-
-        companyContribLangPieChart = new PieChart();
-        companyContribLangPieChart.setTitle("Languages by Contributor (Company)");
-        companyContribLangPieChart.setMinWidth(600);
-        companyContribLangPieChart.setPrefHeight(600);
-
-        CategoryAxis compXAxis = new CategoryAxis();
-        NumberAxis compYAxis = new NumberAxis();
-        companyImpactBarChart = new StackedBarChart<>(compXAxis, compYAxis);
-        companyImpactBarChart.setTitle("Impact by Repository");
-        companyImpactBarChart.setMinWidth(800);
-        companyImpactBarChart.setPrefHeight(600);
-        compXAxis.setLabel("Repository");
-        compYAxis.setLabel("Lines of Code");
-
-        CategoryAxis cactX = new CategoryAxis();
-        NumberAxis cactY = new NumberAxis();
-        companyActivityLineChart = new LineChart<>(cactX, cactY);
-        companyActivityLineChart.setTitle("Recent Activity (Company)");
-        companyActivityLineChart.setMinWidth(800);
-        companyActivityLineChart.setPrefHeight(600);
-
-        CategoryAxis ccalX = new CategoryAxis();
-        NumberAxis ccalY = new NumberAxis();
-        companyCalendarActivityChart = new LineChart<>(ccalX, ccalY);
-        companyCalendarActivityChart.setTitle("Daily Activity (Company)");
-        companyCalendarActivityChart.setMinWidth(800);
-        companyCalendarActivityChart.setPrefHeight(600);
-
-        CategoryAxis cconX = new CategoryAxis();
-        NumberAxis cconY = new NumberAxis();
-        companyContributorActivityChart = new LineChart<>(cconX, cconY);
-        companyContributorActivityChart.setTitle("Daily Activity per Contributor (Company)");
-        companyContributorActivityChart.setMinWidth(800);
-        companyContributorActivityChart.setPrefHeight(600);
-
-        CategoryAxis ccpdX = new CategoryAxis();
-        NumberAxis ccpdY = new NumberAxis();
-        companyCpdPerContributorChart = new LineChart<>(ccpdX, ccpdY);
-        companyCpdPerContributorChart.setTitle("Commits per Day (Company)");
-        companyCpdPerContributorChart.setMinWidth(800);
-        companyCpdPerContributorChart.setPrefHeight(600);
-
-        companyChartsBox.getChildren().addAll(companyCommitPieChart, companyLanguagePieChart, companyDevPieChart, companyProjLangPieChart, companyContribLangPieChart, companyImpactBarChart, companyActivityLineChart, companyCalendarActivityChart, companyContributorActivityChart, companyCpdPerContributorChart);
-        companyVisualsOuterBox.getChildren().addAll(companyZoomControls, companyVisualsScrollPane);
-        VBox.setVgrow(companyVisualsScrollPane, javafx.scene.layout.Priority.ALWAYS);
-        companyVisualsTab.setContent(companyVisualsOuterBox);
-
-        companyTabPane.getTabs().addAll(companyStatsTab, companyVisualsTab);
-        
-        companyModeBox.getChildren().addAll(new Label("Repositories in Database (Double-click to analyze):"), companyReviewActions, companyTabPane);
-        VBox.setVgrow(companyTabPane, javafx.scene.layout.Priority.ALWAYS);
-        companyModeTab.setContent(companyModeBox);
-        
-        companyModeTab.setOnSelectionChanged(e -> {
-            if (companyModeTab.isSelected()) {
+        companyReviewTab.setOnSelectionChanged(e -> {
+            if (companyReviewTab.isSelected()) {
                 refreshCompanyReviewData(false);
             }
         });
@@ -594,9 +488,18 @@ public class MainApp extends Application {
         scale.yProperty().bind(zoomSlider.valueProperty());
 
         visualsScrollPane.setOnScroll(event -> {
-            double delta = event.getDeltaY();
-            double zoomFactor = 1.05;
-            if (delta < 0) zoomFactor = 1 / zoomFactor;
+            if (event.isControlDown()) {
+                double delta = event.getDeltaY();
+                double zoomFactor = 1.05;
+                if (delta < 0) zoomFactor = 1 / zoomFactor;
+                double newScale = zoomSlider.getValue() * zoomFactor;
+                zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
+                event.consume();
+            }
+        });
+
+        visualsScrollPane.setOnZoom(event -> {
+            double zoomFactor = event.getZoomFactor();
             double newScale = zoomSlider.getValue() * zoomFactor;
             zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
             event.consume();
@@ -631,6 +534,16 @@ public class MainApp extends Application {
         contribLanguagePieChart.setMaxHeight(1080);
         contribLanguagePieChart.setPrefHeight(1080);
         contribLanguagePieChart.setLegendVisible(true);
+
+        commitsPerDayPieChart = new PieChart();
+        commitsPerDayPieChart.setTitle("Commits per Day");
+        commitsPerDayPieChart.setMinWidth(1080);
+        commitsPerDayPieChart.setMaxWidth(1080);
+        commitsPerDayPieChart.setPrefWidth(1080);
+        commitsPerDayPieChart.setMinHeight(1080);
+        commitsPerDayPieChart.setMaxHeight(1080);
+        commitsPerDayPieChart.setPrefHeight(1080);
+        commitsPerDayPieChart.setLegendVisible(true);
 
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
@@ -723,10 +636,11 @@ public class MainApp extends Application {
         contributorActivityChart.setPrefHeight(1040);
         cpdPerContributorChart.setPrefHeight(1040);
 
-        chartsBox.getChildren().addAll(commitPieChart, languagePieChart, contribLanguagePieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, cpdPerContributorChart);
+        chartsBox.getChildren().addAll(commitPieChart, languagePieChart, contribLanguagePieChart, commitsPerDayPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, cpdPerContributorChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(languagePieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(contribLanguagePieChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(commitsPerDayPieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
@@ -928,7 +842,15 @@ public class MainApp extends Application {
         
         Button generateLlmReportBtn = new Button("Generate LLM Report");
         generateLlmReportBtn.setOnAction(e -> {
-            if (mainTopTabPane.getSelectionModel().getSelectedItem() == companyModeTab) {
+            if (mainTopTabPane.getSelectionModel().getSelectedItem() == companyReviewTab) {
+                List<CompanyMetric> selectedMetrics = repoSelectionList.getItems().stream()
+                        .filter(CompanyMetricSelection::isSelected)
+                        .map(CompanyMetricSelection::getMetric)
+                        .collect(Collectors.toList());
+                if (selectedMetrics.isEmpty()) {
+                    showAlert("Warning", "No repositories selected for LLM analysis.");
+                    return;
+                }
                 generateCompanyLlmReport(null);
             } else {
                 generateLlmReport(null);
@@ -948,7 +870,7 @@ public class MainApp extends Application {
         VBox.setVgrow(horizontalSplit, javafx.scene.layout.Priority.ALWAYS);
 
         repoModeTab.setContent(repoModeBox);
-        companyModeTab.setContent(companyModeBox);
+        companyReviewTab.setContent(companyModeBox);
 
         SplitPane verticalContentSplit = new SplitPane(mainTopTabPane, sharedResultsBox);
         verticalContentSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
@@ -961,7 +883,7 @@ public class MainApp extends Application {
                 if (!rightBox.getChildren().contains(commitList)) {
                     rightBox.getChildren().addAll(new Label("Recent Commits:"), commitList, initialCommitLabel);
                 }
-            } else if (newTab == companyModeTab) {
+            } else if (newTab == companyReviewTab) {
                 rightBox.getChildren().clear();
                 rightBox.getChildren().add(new Label("Company Context (Select repo to analyze)"));
             }
@@ -1414,7 +1336,12 @@ public class MainApp extends Application {
             } else {
                 aliasesArea.setText(currentAliases + "\n" + newAlias);
             }
-            analyzeRepo(); // Re-analyze with new alias
+            saveSettings();
+            if (mainTopTabPane.getSelectionModel().getSelectedItem() == companyReviewTab) {
+                refreshCompanyReviewData(true);
+            } else {
+                analyzeRepo(); // Re-analyze with new alias
+            }
         });
     }
 
@@ -1582,6 +1509,11 @@ public class MainApp extends Application {
     private void generateCompanyLlmReport(Runnable onComplete) {
         if (databaseService == null) return;
         
+        List<CompanyMetric> selectedMetrics = repoSelectionList.getItems().stream()
+                .filter(CompanyMetricSelection::isSelected)
+                .map(CompanyMetricSelection::getMetric)
+                .collect(Collectors.toList());
+
         String apiKey;
         String url;
         String model;
@@ -2166,7 +2098,7 @@ public class MainApp extends Application {
 
     private void updateCharts(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         Platform.runLater(() -> {
-            chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, impactBarChart, activityLineChart, calendarActivityChart, 
+            chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, commitsPerDayPieChart, impactBarChart, activityLineChart, calendarActivityChart, 
                                      contributorActivityChart, cpdPerContributorChart, stats, recentCommits);
             
             // Force layout pass and refresh to ensure charts are rendered correctly
@@ -2262,7 +2194,7 @@ public class MainApp extends Application {
         List<File> files = fileChooser.showOpenMultipleDialog(stage);
 
         if (files != null) {
-            List<CompanyMetric> metrics = new ArrayList<>();
+            List<CompanyMetricSelection> selections = new ArrayList<>();
             for (File f : files) {
                 try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(f))) {
                     String header = reader.readLine();
@@ -2301,7 +2233,7 @@ public class MainApp extends Application {
                             .map(Map.Entry::getKey)
                             .orElse("N/A");
                     
-                    metrics.add(new CompanyMetric(
+                    CompanyMetric metric = new CompanyMetric(
                         f.getName(),
                         contribCount,
                         totalCommits,
@@ -2310,13 +2242,13 @@ public class MainApp extends Application {
                         contribCount > 0 ? totalScore / contribCount : 0,
                         primaryLang,
                         langTotals
-                    ));
+                    );
+                    selections.add(new CompanyMetricSelection(metric));
                 } catch (Exception e) {
                     System.err.println("Error parsing CSV " + f.getName() + ": " + e.getMessage());
                 }
             }
-            companyReviewTable.getItems().addAll(metrics);
-            updateCompanyCharts(new ArrayList<>(companyReviewTable.getItems()), null, null);
+            repoSelectionList.getItems().addAll(selections);
         }
     }
 
@@ -2324,16 +2256,22 @@ public class MainApp extends Application {
         if (databaseService == null) return;
         try {
             List<String> repoIds = databaseService.getAllRepoIds();
-            List<CompanyMetric> companyMetrics = new ArrayList<>();
-            List<ContributorStats> allContributors = new ArrayList<>();
-            List<CommitInfo> allCommits = new ArrayList<>();
+            List<CompanyMetricSelection> currentSelections = new ArrayList<>(repoSelectionList.getItems());
+            List<CompanyMetricSelection> newSelections = new ArrayList<>();
 
             for (String repoId : repoIds) {
+                // Check if already in list
+                Optional<CompanyMetricSelection> existing = currentSelections.stream()
+                        .filter(s -> s.getMetric().repoName().equals(repoId))
+                        .findFirst();
+                
+                if (existing.isPresent()) {
+                    newSelections.add(existing.get());
+                    continue;
+                }
+
                 List<ContributorStats> stats = databaseService.getLatestMetrics(repoId);
-                List<CommitInfo> commits = databaseService.getLatestCommits(repoId);
                 if (stats.isEmpty()) continue;
-                allContributors.addAll(stats);
-                allCommits.addAll(commits);
 
                 int totalCommits = stats.stream().mapToInt(ContributorStats::commitCount).sum();
                 int totalAdded = stats.stream().mapToInt(ContributorStats::linesAdded).sum();
@@ -2349,7 +2287,7 @@ public class MainApp extends Application {
                         .map(Map.Entry::getKey)
                         .orElse("N/A");
 
-                companyMetrics.add(new CompanyMetric(
+                CompanyMetric metric = new CompanyMetric(
                     repoId,
                     stats.size(),
                     totalCommits,
@@ -2358,19 +2296,49 @@ public class MainApp extends Application {
                     avgScore,
                     primaryLang,
                     langTotals
-                ));
+                );
+                newSelections.add(new CompanyMetricSelection(metric));
             }
-            companyReviewTable.setItems(FXCollections.observableArrayList(companyMetrics));
-            updateCompanyCharts(companyMetrics, allContributors, allCommits);
+            
+            // Add any CSV loaded ones that are not in DB
+            for (CompanyMetricSelection s : currentSelections) {
+                if (repoIds.stream().noneMatch(id -> id.equals(s.getMetric().repoName()))) {
+                    newSelections.add(s);
+                }
+            }
+
+            repoSelectionList.setItems(FXCollections.observableArrayList(newSelections));
             
             if (updateLowerTabs) {
+                List<CompanyMetric> selectedMetrics = repoSelectionList.getItems().stream()
+                        .filter(CompanyMetricSelection::isSelected)
+                        .map(CompanyMetricSelection::getMetric)
+                        .collect(Collectors.toList());
+
+                List<ContributorStats> allContributors = new ArrayList<>();
+                List<CommitInfo> allCommits = new ArrayList<>();
+
+                for (CompanyMetric m : selectedMetrics) {
+                    // Try to load from DB if it exists
+                    List<ContributorStats> stats = databaseService.getLatestMetrics(m.repoName());
+                    List<CommitInfo> commits = databaseService.getLatestCommits(m.repoName());
+                    if (!stats.isEmpty()) {
+                        allContributors.addAll(stats);
+                        allCommits.addAll(commits);
+                    }
+                }
+
+                if (allContributors.isEmpty()) {
+                    showAlert("Warning", "No contributor data found for selected repositories. Some may only have summary metrics from CSV.");
+                }
+
                 // Overwrite lower tabs with company-wide contributor stats
                 Platform.runLater(() -> {
                     List<ContributorStats> aggregatedStats = aggregateContributors(allContributors);
                     statsTable.setItems(FXCollections.observableArrayList(groupOthers(aggregatedStats, tableLimitSpinner.getValue())));
                     
                     // Update shared charts with aggregated company stats
-                    chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, impactBarChart, activityLineChart, calendarActivityChart, 
+                    chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, commitsPerDayPieChart, impactBarChart, activityLineChart, calendarActivityChart, 
                                              contributorActivityChart, cpdPerContributorChart, aggregatedStats, allCommits);
                 });
             }
@@ -2439,6 +2407,16 @@ public class MainApp extends Application {
 
     private void performCompanyPdfExport(File file) {
         try {
+            List<CompanyMetric> selectedMetrics = repoSelectionList.getItems().stream()
+                    .filter(CompanyMetricSelection::isSelected)
+                    .map(CompanyMetricSelection::getMetric)
+                    .collect(Collectors.toList());
+
+            if (selectedMetrics.isEmpty()) {
+                showAlert("Warning", "No repositories selected for PDF export.");
+                return;
+            }
+
             File exportDir = file.getParentFile();
             File pieFile = new File(exportDir, "company_commit_pie.png");
             File langPieFile = new File(exportDir, "company_lang_pie.png");
@@ -2450,17 +2428,19 @@ public class MainApp extends Application {
             File calFile = new File(exportDir, "company_calendar_activity.png");
             File conFile = new File(exportDir, "company_contributor_activity.png");
             File cpdFile = new File(exportDir, "company_cpd.png");
+            File cpdPieFile = new File(exportDir, "company_cpd_pie.png");
 
-            saveNodeSnapshot(companyCommitPieChart, pieFile);
-            saveNodeSnapshot(companyLanguagePieChart, langPieFile);
-            saveNodeSnapshot(companyImpactBarChart, barFile);
-            saveNodeSnapshot(companyDevPieChart, devPieFile);
-            saveNodeSnapshot(companyProjLangPieChart, projLangPieFile);
-            saveNodeSnapshot(companyContribLangPieChart, contribLangPieFile);
-            saveNodeSnapshot(companyActivityLineChart, lineFile);
-            saveNodeSnapshot(companyCalendarActivityChart, calFile);
-            saveNodeSnapshot(companyContributorActivityChart, conFile);
-            saveNodeSnapshot(companyCpdPerContributorChart, cpdFile);
+            saveNodeSnapshot(commitPieChart, pieFile);
+            saveNodeSnapshot(languagePieChart, langPieFile);
+            saveNodeSnapshot(impactBarChart, barFile);
+            saveNodeSnapshot(contribLanguagePieChart, devPieFile);
+            saveNodeSnapshot(languagePieChart, projLangPieFile); // Fallback mapping
+            saveNodeSnapshot(contribLanguagePieChart, contribLangPieFile); // Fallback mapping
+            saveNodeSnapshot(activityLineChart, lineFile);
+            saveNodeSnapshot(calendarActivityChart, calFile);
+            saveNodeSnapshot(contributorActivityChart, conFile);
+            saveNodeSnapshot(cpdPerContributorChart, cpdFile);
+            saveNodeSnapshot(commitsPerDayPieChart, cpdPieFile);
 
             Map<String, String> mdSections = new HashMap<>();
             String mdPath = companyReviewMdPathField.getText();
@@ -2479,7 +2459,7 @@ public class MainApp extends Application {
 
             Map<String, String> metadata = new LinkedHashMap<>();
             metadata.put("Report Type", "Company Review");
-            metadata.put("Repositories Analyzed", String.valueOf(companyReviewTable.getItems().size()));
+            metadata.put("Repositories Selected", String.valueOf(selectedMetrics.size()));
             metadata.put("Generated On", java.time.LocalDateTime.now().toString());
             metadata.put("User", System.getProperty("user.name"));
 
@@ -2498,7 +2478,7 @@ public class MainApp extends Application {
             }
 
             exportService.exportCompanyToPdf(
-                    companyReviewTable.getItems(),
+                    selectedMetrics,
                     file.getAbsolutePath(),
                     pieFile.getAbsolutePath(),
                     langPieFile.getAbsolutePath(),
@@ -2510,6 +2490,7 @@ public class MainApp extends Application {
                     calFile.getAbsolutePath(),
                     conFile.getAbsolutePath(),
                     cpdFile.getAbsolutePath(),
+                    cpdPieFile.getAbsolutePath(),
                     mdSections,
                     coverHtml,
                     coverBasePath,
@@ -2570,10 +2551,12 @@ public class MainApp extends Application {
             File calendarFile = new File(exportDir, "calendar_chart.png");
             File contribFile = new File(exportDir, "contrib_activity.png");
             File cpdFile = new File(exportDir, "commits_per_day.png");
+            File cpdPieFile = new File(exportDir, "cpd_pie.png");
             
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(languagePieChart, langPieFile);
             saveNodeSnapshot(contribLanguagePieChart, contribLangPieFile);
+            saveNodeSnapshot(commitsPerDayPieChart, cpdPieFile);
             saveNodeSnapshot(impactBarChart, barFile);
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calendarFile);

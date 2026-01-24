@@ -21,7 +21,7 @@ public class ExportService {
     public void exportCompanyToPdf(List<dev.grahamhill.model.CompanyMetric> metrics, String filePath, 
                                    String piePath, String langPiePath, String barPath, String devPiePath, 
                                    String projLangPiePath, String contribLangPiePath,
-                                   String linePath, String calendarPath, String contribPath, String cpdPath,
+                                   String linePath, String calendarPath, String contribPath, String cpdPath, String cpdPiePath,
                                    java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, 
                                    java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
         Document document = new Document(PageSize.A4);
@@ -210,6 +210,13 @@ public class ExportService {
         cpdImage.scaleToFit(500, 500);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
+        document.newPage();
+
+        document.add(new Paragraph("Commits per Day Pie Chart (Company):", sectionFont));
+        Image cpdPieImage = Image.getInstance(cpdPiePath);
+        cpdPieImage.scaleToFit(500, 500);
+        cpdPieImage.setAlignment(Image.MIDDLE);
+        document.add(cpdPieImage);
         document.newPage();
 
         // Data Table
