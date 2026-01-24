@@ -85,7 +85,6 @@ public class ChartManager {
         List<ContributorStats> top5 = stats.stream().limit(5).collect(Collectors.toList());
 
         languagePieChart.setAnimated(false);
-        languagePieChart.getData().clear();
         Map<String, Integer> overallLangs = new HashMap<>();
         for (ContributorStats s : stats) {
             Map<String, Integer> processed = processLanguageBreakdown(s.languageBreakdown());
@@ -93,7 +92,7 @@ public class ChartManager {
         }
         int totalLangFiles = (int) overallLangs.values().stream().mapToLong(Integer::intValue).sum();
         if (totalLangFiles == 0) {
-            languagePieChart.getData().clear();
+            languagePieChart.setData(FXCollections.observableArrayList());
         } else {
             List<PieChart.Data> langPieData = overallLangs.entrySet().stream()
                     .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
@@ -103,13 +102,12 @@ public class ChartManager {
                         return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), (double) e.getValue());
                     })
                     .collect(Collectors.toList());
-            languagePieChart.getData().setAll(langPieData);
+            languagePieChart.setData(FXCollections.observableArrayList(langPieData));
             languagePieChart.setLabelsVisible(true);
         }
 
         // Languages by Contributor
         contribLanguagePieChart.setAnimated(false);
-        contribLanguagePieChart.getData().clear();
         Map<String, Integer> contribLangs = new HashMap<>();
         for (ContributorStats s : stats) {
             Map<String, Integer> processed = processLanguageBreakdown(s.languageBreakdown());
@@ -169,7 +167,6 @@ public class ChartManager {
         }
 
         commitPieChart.setAnimated(false);
-        commitPieChart.getData().clear();
         commitPieChart.setMinWidth(1080);
         commitPieChart.setMaxWidth(1080);
         commitPieChart.setPrefWidth(1080);
@@ -364,7 +361,6 @@ public class ChartManager {
                                    List<dev.grahamhill.model.CompanyMetric> metrics, List<ContributorStats> allContributors, List<CommitInfo> allCommits) {
         // Commits by Repo
         commitPieChart.setAnimated(false);
-        commitPieChart.getData().clear();
         int totalCommits = (int) metrics.stream().mapToLong(dev.grahamhill.model.CompanyMetric::totalCommits).sum();
         List<PieChart.Data> commitData = metrics.stream()
                 .map(m -> {
@@ -378,7 +374,6 @@ public class ChartManager {
 
         // Language Breakdown (Company)
         languagePieChart.setAnimated(false);
-        languagePieChart.getData().clear();
         Map<String, Integer> companyOverallLangs = new HashMap<>();
         metrics.forEach(m -> {
             if (m.languageBreakdown() != null) {
@@ -420,7 +415,6 @@ public class ChartManager {
         // Code by Developer (Company)
         if (devPieChart != null && allContributors != null) {
             devPieChart.setAnimated(false);
-            devPieChart.getData().clear();
             Map<String, Integer> devCommits = new HashMap<>();
             for (ContributorStats s : allContributors) {
                 devCommits.merge(s.name(), s.commitCount(), Integer::sum);
@@ -441,7 +435,6 @@ public class ChartManager {
         // Language of Projects
         if (projectLangPieChart != null) {
             projectLangPieChart.setAnimated(false);
-            projectLangPieChart.getData().clear();
             Map<String, Integer> projLangs = new HashMap<>();
             metrics.forEach(m -> {
                 String lang = m.primaryLanguage();
@@ -473,7 +466,6 @@ public class ChartManager {
         // Languages by Contributor (Company)
         if (contribLangPieChart != null && allContributors != null) {
             contribLangPieChart.setAnimated(false);
-            contribLangPieChart.getData().clear();
             Map<String, Integer> cLangs = new HashMap<>();
         
             // Re-aggregate contributors by name first
@@ -481,7 +473,8 @@ public class ChartManager {
             for (ContributorStats s : allContributors) {
                 Map<String, Integer> langs = aggregatedContribLangs.computeIfAbsent(s.name(), k -> new HashMap<>());
                 if (s.languageBreakdown() != null) {
-                    s.languageBreakdown().forEach((k, v) -> langs.merge(k, v, Integer::sum));
+                    Map<String, Integer> processed = processLanguageBreakdown(s.languageBreakdown());
+                    processed.forEach((lang, count) -> langs.merge(lang, count, Integer::sum));
                 }
             }
 
