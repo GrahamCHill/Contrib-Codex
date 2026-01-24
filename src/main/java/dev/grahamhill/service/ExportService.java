@@ -205,19 +205,15 @@ public class ExportService {
         document.add(conImage);
         document.newPage();
 
-        document.add(new Paragraph("Commits per Day (Company):", sectionFont));
+        document.add(new Paragraph("Commits per Day & per Contributor (Company):", sectionFont));
         Image cpdImage = Image.getInstance(cpdPath);
         cpdImage.scaleToFit(500, 500);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
         document.newPage();
 
-        document.add(new Paragraph("Commits per Day Pie Chart (Company):", sectionFont));
-        Image cpdPieImage = Image.getInstance(cpdPiePath);
-        cpdPieImage.scaleToFit(500, 500);
-        cpdPieImage.setAlignment(Image.MIDDLE);
-        document.add(cpdPieImage);
-        document.newPage();
+        // No more double Commits per Day image as both are now line charts and redundant
+        // Removing the cpdPieImage section as cpdPiePath was a duplicate anyway in MainApp.java
 
         // Data Table
         document.setPageSize(PageSize.A4.rotate());
@@ -815,17 +811,8 @@ public class ExportService {
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
 
-        document.newPage();
-        Paragraph chartTitle7 = new Paragraph("Commits per Day (Pie Chart):", sectionFont);
-        Anchor chartAnchor7 = new Anchor(chartTitle7);
-        chartAnchor7.setName("chart7");
-        chartTitle7.setSpacingBefore(15f);
-        document.add(chartAnchor7);
-        Image cpdPieImage = Image.getInstance(cpdPiePath);
-        cpdPieImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
-        cpdPieImage.setAlignment(Image.MIDDLE);
-        document.add(cpdPieImage);
-
+        // Removing chartTitle7 as it was "Commits per Day" pie chart, now redundant line chart
+        
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);
         document.newPage();

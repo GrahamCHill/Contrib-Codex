@@ -492,47 +492,54 @@ public class GitService {
                     path = entry.getOldPath();
                 }
 
-                if (path != null && !path.equals(DiffEntry.DEV_NULL)) {
-                    if (isIgnoredFolder(path, ignoredFolders)) continue;
-                    
-                    // Explicitly ignore lockfiles
-                    String lowerPath = path.toLowerCase();
-                    String category = categorizePath(path, repository);
-                    if ("Generated/Artifacts".equals(category) || "Sourcemaps/Minified".equals(category)) {
-                        builder.generatedFilesPushed++;
-                    }
-                    if ("Documentation".equals(category)) {
-                        // We'll calculate documentation lines later in the loop where lines are added
-                    }
-                    
-                    if (lowerPath.contains("package-lock.json") || lowerPath.contains("yarn.lock") || lowerPath.contains("pnpm-lock.yaml")) {
-                        continue;
-                    }
+                    if (path != null && !path.equals(DiffEntry.DEV_NULL)) {
+                        if (isIgnoredFolder(path, ignoredFolders)) continue;
+                        
+                        // Detect extension first for languages
+                        String lowerPath = path.toLowerCase();
+                        String fileName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1).toLowerCase() : lowerPath;
+                        
+                        String ext = "";
+                        int lastDot = path.lastIndexOf('.');
+                        if (lastDot > 0) {
+                            ext = path.substring(lastDot + 1).toLowerCase();
+                        }
 
-                    String ext = "";
-                    int lastDot = path.lastIndexOf('.');
-                    if (lastDot > 0) {
-                        ext = path.substring(lastDot + 1).toLowerCase();
-                    }
+                        // Special case for config/tooling files that might not have traditional extensions or are important
+                        if (fileName.equals("dockerfile")) ext = "docker";
+                        else if (fileName.equals("cmakelists.txt")) ext = "cmake";
+                        else if (fileName.equals("makefile")) ext = "make";
+                        else if (fileName.equals("jenkinsfile")) ext = "jenkins";
+                        else if (fileName.equals(".env")) ext = "env";
+                        else if (fileName.equals(".gitignore")) ext = "git";
+                        
+                        String category = categorizePath(path, repository);
+                        if ("Generated/Artifacts".equals(category) || "Sourcemaps/Minified".equals(category)) {
+                            builder.generatedFilesPushed++;
+                        }
+                        
+                        if (lowerPath.contains("package-lock.json") || lowerPath.contains("yarn.lock") || lowerPath.contains("pnpm-lock.yaml")) {
+                            // still skip lockfiles from general counts but maybe we want them in language? 
+                            // user said "picking up the other languages like typescript in the projects or config (docker, cmake, etc.)"
+                            // If they are config, they should be counted.
+                        }
 
-                    if (!ext.isEmpty()) {
-                        boolean ignored = false;
-                        for (String ignoredExt : ignoredExtensions) {
-                            if (path.toLowerCase().endsWith(ignoredExt.toLowerCase())) {
-                                ignored = true;
-                                break;
+                        if (!ext.isEmpty()) {
+                            boolean ignored = false;
+                            for (String ignoredExt : ignoredExtensions) {
+                                if (path.toLowerCase().endsWith(ignoredExt.toLowerCase())) {
+                                    ignored = true;
+                                    break;
+                                }
+                            }
+                            if (!ignored) {
+                                builder.languageBreakdown.merge(ext, 1, Integer::sum);
+                                if (commitLanguages != null) {
+                                    commitLanguages.merge(ext, 1, Integer::sum);
+                                }
                             }
                         }
-                        if (!ignored) {
-                            builder.languageBreakdown.merge(ext, 1, Integer::sum);
-                            if (commitLanguages != null) {
-                                commitLanguages.merge(ext, 1, Integer::sum);
-                            }
-                        } else {
-                            continue;
-                        }
                     }
-                }
 
                 // Metric for new, edited, other (deleted)
                 switch (entry.getChangeType()) {
