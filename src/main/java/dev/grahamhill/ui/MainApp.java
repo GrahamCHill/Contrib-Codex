@@ -2515,6 +2515,18 @@ public class MainApp extends Application {
 
                 // Force layout and requestLayout to ensure rendering
                 Platform.runLater(() -> {
+                    // Force a CSS pass
+                    commitPieChart.applyCss();
+                    languagePieChart.applyCss();
+                    devPieChart.applyCss();
+                    projectLangPieChart.applyCss();
+                    contribLanguagePieChart.applyCss();
+                    impactBarChart.applyCss();
+                    activityLineChart.applyCss();
+                    calendarActivityChart.applyCss();
+                    contributorActivityChart.applyCss();
+                    commitsPerDayLineChart.applyCss();
+
                     commitPieChart.layout();
                     languagePieChart.layout();
                     devPieChart.layout();

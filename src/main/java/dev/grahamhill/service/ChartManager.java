@@ -68,7 +68,7 @@ public class ChartManager {
                 s.languageBreakdown().forEach((lang, count) -> overallLangs.merge(lang, count, Integer::sum));
             }
         }
-        int totalLangFiles = overallLangs.values().stream().mapToInt(Integer::intValue).sum();
+        int totalLangFiles = (int) overallLangs.values().stream().mapToLong(Integer::intValue).sum();
         if (totalLangFiles == 0) {
             languagePieChart.setData(FXCollections.emptyObservableList());
         } else {
@@ -77,7 +77,7 @@ public class ChartManager {
                     .limit(10)
                     .map(e -> {
                         double percentage = (totalLangFiles > 0) ? (double)e.getValue() / totalLangFiles * 100 : 0;
-                        return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), e.getValue());
+                        return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), (double) e.getValue());
                     })
                     .collect(Collectors.toList());
             languagePieChart.setData(FXCollections.observableArrayList(langPieData));
@@ -90,27 +90,12 @@ public class ChartManager {
         Map<String, Integer> contribLangs = new HashMap<>();
         for (ContributorStats s : stats) {
             if (s.languageBreakdown() != null && !s.languageBreakdown().isEmpty()) {
-                int totalFilesForContrib = s.languageBreakdown().values().stream().mapToInt(Integer::intValue).sum();
-                if (totalFilesForContrib > 0) {
-                    s.languageBreakdown().forEach((lang, count) -> {
-                        // Weight contribution of this language for this contributor
-                        // Instead of 1 per contributor, we can do a sum of fractional contributions
-                        // But PieChart.Data takes double value (which we can use).
-                        // Let's use the file counts directly across all contributors.
-                        // Wait, user said "split of contributors where they have subsections by language"
-                        // If we sum all file counts per language across all contributors, it's just the Language Breakdown.
-                        // "Languages by Contributor" usually means how many contributors use each language.
-                        // If a contributor uses multiple languages, they should maybe be counted in each?
-                        contribLangs.merge(lang, 1, Integer::sum);
-                    });
-                } else {
-                    contribLangs.merge("Unknown", 1, Integer::sum);
-                }
+                s.languageBreakdown().keySet().forEach(lang -> contribLangs.merge(lang, 1, Integer::sum));
             } else {
                 contribLangs.merge("Unknown", 1, Integer::sum);
             }
         }
-        int totalLangContributions = contribLangs.values().stream().mapToInt(Integer::intValue).sum();
+        int totalLangContributions = (int) contribLangs.values().stream().mapToLong(Integer::intValue).sum();
         if (totalLangContributions == 0) {
             contribLanguagePieChart.setData(FXCollections.emptyObservableList());
         } else {
@@ -118,7 +103,7 @@ public class ChartManager {
                     .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
                     .map(e -> {
                         double percentage = (totalLangContributions > 0) ? (double)e.getValue() / totalLangContributions * 100 : 0;
-                        return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), e.getValue());
+                        return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), (double) e.getValue());
                     })
                     .collect(Collectors.toList());
             contribLanguagePieChart.setData(FXCollections.observableArrayList(contribLangPieData));
@@ -347,7 +332,7 @@ public class ChartManager {
         // Commits by Repo
         commitPieChart.getData().clear();
         commitPieChart.setAnimated(false);
-        int totalCommits = metrics.stream().mapToInt(dev.grahamhill.model.CompanyMetric::totalCommits).sum();
+        int totalCommits = (int) metrics.stream().mapToLong(dev.grahamhill.model.CompanyMetric::totalCommits).sum();
         List<PieChart.Data> commitData = metrics.stream()
                 .map(m -> {
                     double percentage = (totalCommits > 0) ? (double) m.totalCommits() / totalCommits * 100 : 0;
@@ -367,7 +352,7 @@ public class ChartManager {
                 m.languageBreakdown().forEach((k, v) -> companyOverallLangs.merge(k, v, Integer::sum));
             }
         });
-        int totalCompanyLangFiles = companyOverallLangs.values().stream().mapToInt(Integer::intValue).sum();
+        int totalCompanyLangFiles = (int) companyOverallLangs.values().stream().mapToLong(Integer::intValue).sum();
         if (totalCompanyLangFiles == 0) {
             languagePieChart.setData(FXCollections.emptyObservableList());
         } else {
@@ -406,7 +391,7 @@ public class ChartManager {
             for (ContributorStats s : allContributors) {
                 devCommits.merge(s.name(), s.commitCount(), Integer::sum);
             }
-            int totalDevCommits = devCommits.values().stream().mapToInt(Integer::intValue).sum();
+            int totalDevCommits = (int) devCommits.values().stream().mapToLong(Integer::intValue).sum();
             List<PieChart.Data> devData = devCommits.entrySet().stream()
                     .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
                     .limit(15)
@@ -456,7 +441,7 @@ public class ChartManager {
             contribLangPieChart.getData().clear();
             contribLangPieChart.setAnimated(false);
             Map<String, Integer> cLangs = new HashMap<>();
-            
+        
             // Re-aggregate contributors by name first
             Map<String, Map<String, Integer>> aggregatedContribLangs = new HashMap<>();
             for (ContributorStats s : allContributors) {
@@ -468,15 +453,13 @@ public class ChartManager {
 
             for (Map<String, Integer> langs : aggregatedContribLangs.values()) {
                 if (!langs.isEmpty()) {
-                    langs.forEach((lang, count) -> {
-                        cLangs.merge(lang, 1, Integer::sum);
-                    });
+                    langs.keySet().forEach(lang -> cLangs.merge(lang, 1, Integer::sum));
                 } else {
                     cLangs.merge("Unknown", 1, Integer::sum);
                 }
             }
 
-            int totalC = cLangs.values().stream().mapToInt(Integer::intValue).sum();
+            int totalC = (int) cLangs.values().stream().mapToLong(Integer::intValue).sum();
             if (totalC == 0) {
                 contribLangPieChart.setData(FXCollections.emptyObservableList());
             } else {
