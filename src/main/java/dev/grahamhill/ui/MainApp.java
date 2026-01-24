@@ -1,5 +1,6 @@
 package dev.grahamhill.ui;
 
+import dev.grahamhill.model.CompanyMetric;
 import dev.grahamhill.model.CommitInfo;
 import dev.grahamhill.model.ContributorStats;
 import dev.grahamhill.model.MeaningfulChangeAnalysis;
@@ -68,6 +69,8 @@ public class MainApp extends Application {
     private TextField coverPagePathField;
 
     private PieChart commitPieChart;
+    private PieChart languagePieChart;
+    private PieChart contribLanguagePieChart;
     private StackedBarChart<String, Number> impactBarChart;
     private LineChart<String, Number> activityLineChart;
     private LineChart<String, Number> calendarActivityChart;
@@ -93,6 +96,14 @@ public class MainApp extends Application {
 
     private CheckBox aiReviewCheckBox;
 
+    private Tab companyReviewTab;
+    private TableView<CompanyMetric> companyReviewTable;
+    private TextField companyReviewMdPathField;
+    private PieChart companyCommitPieChart;
+    private PieChart companyLanguagePieChart;
+    private PieChart companyDevPieChart;
+    private StackedBarChart<String, Number> companyImpactBarChart;
+
     private Map<String, String> envConfig = new HashMap<>();
 
     @Override
@@ -114,6 +125,7 @@ public class MainApp extends Application {
         mdFolderPathField = new TextField();
         requiredFeaturesPathField = new TextField();
         coverPagePathField = new TextField();
+        companyReviewMdPathField = new TextField();
         manualVersionField = new TextField();
         manualVersionField.setPromptText("Manual Version (e.g. 1.1 or 2.0)");
         manualDescriptionArea = new TextArea();
@@ -151,6 +163,7 @@ public class MainApp extends Application {
             Platform.runLater(this::saveSettings);
         });
 
+        companyReviewMdPathField.textProperty().addListener((obs, oldVal, newVal) -> saveSettings());
         primaryStage.setTitle("Contrib Codex");
         try {
             javafx.scene.image.Image icon = new javafx.scene.image.Image(getClass().getResourceAsStream("/icon.png"));
@@ -166,8 +179,10 @@ public class MainApp extends Application {
         Menu settingsMenu = new Menu("Settings");
         MenuItem apiKeysItem = new MenuItem("API Keys...");
         apiKeysItem.setOnAction(e -> showApiKeysDialog());
-        MenuItem genDefaultMdItem = new MenuItem("Generate Default MDs");
-        genDefaultMdItem.setOnAction(e -> generateDefaultMds());
+        MenuItem genRepoMdItem = new MenuItem("Generate Repo MDs");
+        genRepoMdItem.setOnAction(e -> generateRepoMds());
+        MenuItem genCompanyMdItem = new MenuItem("Generate Company Review MDs");
+        genCompanyMdItem.setOnAction(e -> generateCompanyReviewMds());
         MenuItem genDefaultCoverItem = new MenuItem("Generate Default Cover");
         genDefaultCoverItem.setOnAction(e -> generateDefaultCoverPage());
         MenuItem genFeaturesTemplateItem = new MenuItem("Generate Features Template");
@@ -178,7 +193,7 @@ public class MainApp extends Application {
             File dbFile = new File(dbPath);
             getHostServices().showDocument(dbFile.getParentFile().toURI().toString());
         });
-        settingsMenu.getItems().addAll(apiKeysItem, new SeparatorMenuItem(), genDefaultMdItem, genDefaultCoverItem, genFeaturesTemplateItem, new SeparatorMenuItem(), dbLocationItem);
+        settingsMenu.getItems().addAll(apiKeysItem, new SeparatorMenuItem(), genRepoMdItem, genCompanyMdItem, genDefaultCoverItem, genFeaturesTemplateItem, new SeparatorMenuItem(), dbLocationItem);
         
         Menu infoMenu = new Menu("Info");
         MenuItem websiteItem = new MenuItem("Website");
@@ -195,6 +210,20 @@ public class MainApp extends Application {
         VBox contentBox = new VBox(10);
         contentBox.setPadding(new Insets(10));
         root.setCenter(contentBox);
+
+        TabPane mainTopTabPane = new TabPane();
+        Tab repoModeTab = new Tab("Repo Analysis");
+        repoModeTab.setClosable(false);
+        Tab companyModeTab = new Tab("Company Review");
+        companyModeTab.setClosable(false);
+        mainTopTabPane.getTabs().addAll(repoModeTab, companyModeTab);
+
+        // Define results container 
+        VBox sharedResultsBox = new VBox(10);
+
+        // --- Repo Mode Content ---
+        VBox repoModeBox = new VBox(10);
+        repoModeBox.setPadding(new Insets(10));
 
         // Top: Repo Selection and Settings
         VBox topBox = new VBox(10);
@@ -220,7 +249,7 @@ public class MainApp extends Application {
         
         HBox settingsBox2 = new HBox(10);
         settingsBox2.setPadding(new Insets(0, 0, 5, 0));
-        mdFolderPathField.setPromptText("Path to .md sections folder");
+        mdFolderPathField.setPromptText("Path to repo_markdown folder");
         Button browseMdButton = new Button("Browse...");
         browseMdButton.setOnAction(e -> {
             browseMdFolder(primaryStage);
@@ -229,7 +258,7 @@ public class MainApp extends Application {
         Button openMdButton = new Button("Open");
         openMdButton.setOnAction(e -> openMdFolder());
         settingsBox2.getChildren().addAll(
-                new Label("MD Folder:"), mdFolderPathField, browseMdButton, openMdButton
+                new Label("Repo MD:"), mdFolderPathField, browseMdButton, openMdButton
         );
 
         HBox settingsBox3 = new HBox(10);
@@ -248,12 +277,16 @@ public class MainApp extends Application {
         aiReviewCheckBox = new CheckBox("Include AI Review in PDF");
         Button exportButton = new Button("Export to PDF");
         exportButton.setOnAction(e -> exportToPdf(primaryStage));
+
+        Button exportCsvButton = new Button("Export to CSV");
+        exportCsvButton.setOnAction(e -> exportToCsv(primaryStage));
         
         settingsBox3.getChildren().addAll(
                 new Label("Features:"), requiredFeaturesPathField, browseReqButton,
                 new Label("Coverpage:"), coverPagePathField, browseCoverButton,
                 aiReviewCheckBox,
-                exportButton
+                exportButton,
+                exportCsvButton
         );
 
         VBox aliasBox = new VBox(5);
@@ -262,7 +295,123 @@ public class MainApp extends Application {
         aliasBox.getChildren().addAll(new Label("User Aliases (email=Combined Name):"), aliasesArea);
         HBox.setHgrow(aliasBox, javafx.scene.layout.Priority.ALWAYS);
 
-        contentBox.getChildren().addAll(repoBox, settingsBox, settingsBox2, settingsBox3, aliasBox);
+        repoModeBox.getChildren().addAll(repoBox, settingsBox, settingsBox2, settingsBox3, aliasBox);
+        repoModeTab.setContent(repoModeBox);
+
+        // --- Company Mode Content ---
+        VBox companyModeBox = new VBox(10);
+        companyModeBox.setPadding(new Insets(10));
+        
+        HBox companyReviewActions = new HBox(10);
+        Button loadCsvsButton = new Button("Load Metrics CSVs");
+        loadCsvsButton.setOnAction(e -> loadCompanyCsvs(primaryStage));
+        
+        companyReviewMdPathField.setPromptText("Path to company_review markdown folder");
+        companyReviewMdPathField.setPrefWidth(300);
+        Button browseCompanyMdButton = new Button("Browse...");
+        browseCompanyMdButton.setOnAction(e -> {
+            DirectoryChooser dc = new DirectoryChooser();
+            dc.setTitle("Select Company Review Markdown Folder");
+            File selected = dc.showDialog(primaryStage);
+            if (selected != null) {
+                companyReviewMdPathField.setText(selected.getAbsolutePath());
+                saveSettings();
+            }
+        });
+
+        Button exportCompanyPdfButton = new Button("Export Company PDF");
+        exportCompanyPdfButton.setOnAction(e -> exportCompanyToPdf(primaryStage));
+
+        Button analyzeCompanyButton = new Button("Analyze Company");
+        analyzeCompanyButton.setOnAction(e -> refreshCompanyReviewData(true));
+
+        companyReviewActions.getChildren().addAll(loadCsvsButton, new Label("Company Review MD:"), companyReviewMdPathField, browseCompanyMdButton, analyzeCompanyButton, exportCompanyPdfButton);
+        
+        TabPane companyTabPane = new TabPane();
+        Tab companyStatsTab = new Tab("Statistics");
+        companyStatsTab.setClosable(false);
+        Tab companyVisualsTab = new Tab("Visuals");
+        companyVisualsTab.setClosable(false);
+
+        companyReviewTable = new TableView<>();
+        companyReviewTable.setRowFactory(tv -> {
+            TableRow<CompanyMetric> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && (!row.isEmpty())) {
+                    CompanyMetric rowData = row.getItem();
+                    repoPathField.setText(rowData.repoName());
+                    mainTopTabPane.getSelectionModel().select(repoModeTab);
+                    analyzeRepo();
+                }
+            });
+            return row;
+        });
+        TableColumn<CompanyMetric, String> repoCol = new TableColumn<>("Repository");
+        repoCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().repoName()));
+        TableColumn<CompanyMetric, Integer> cContribCol = new TableColumn<>("Contributors");
+        cContribCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalContributors()).asObject());
+        TableColumn<CompanyMetric, Integer> cCommitsCol = new TableColumn<>("Commits");
+        cCommitsCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalCommits()).asObject());
+        TableColumn<CompanyMetric, Integer> cAddedCol = new TableColumn<>("Added");
+        cAddedCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalLinesAdded()).asObject());
+        TableColumn<CompanyMetric, Integer> cDeletedCol = new TableColumn<>("Deleted");
+        cDeletedCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().totalLinesDeleted()).asObject());
+        TableColumn<CompanyMetric, String> cLangCol = new TableColumn<>("Primary Language");
+        cLangCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().primaryLanguage()));
+        TableColumn<CompanyMetric, String> cScoreCol = new TableColumn<>("Avg Meaningful Score");
+        cScoreCol.setCellValueFactory(data -> new SimpleStringProperty(String.format("%.1f", data.getValue().averageMeaningfulScore())));
+        
+        companyReviewTable.getColumns().addAll(repoCol, cContribCol, cCommitsCol, cAddedCol, cDeletedCol, cLangCol, cScoreCol);
+        companyStatsTab.setContent(companyReviewTable);
+
+        // --- Company Visuals ---
+        ScrollPane companyVisualsScrollPane = new ScrollPane();
+        companyVisualsScrollPane.setFitToWidth(true);
+        companyVisualsScrollPane.setFitToHeight(true);
+        HBox companyChartsBox = new HBox(10);
+        companyChartsBox.setPadding(new Insets(10));
+        companyVisualsScrollPane.setContent(companyChartsBox);
+
+        companyCommitPieChart = new PieChart();
+        companyCommitPieChart.setTitle("Commits by Repository");
+        companyCommitPieChart.setMinWidth(600);
+        companyCommitPieChart.setPrefHeight(600);
+
+        companyLanguagePieChart = new PieChart();
+        companyLanguagePieChart.setTitle("Language Breakdown (Company)");
+        companyLanguagePieChart.setMinWidth(600);
+        companyLanguagePieChart.setPrefHeight(600);
+
+        companyDevPieChart = new PieChart();
+        companyDevPieChart.setTitle("Code by Developer (Company)");
+        companyDevPieChart.setMinWidth(600);
+        companyDevPieChart.setPrefHeight(600);
+
+        CategoryAxis compXAxis = new CategoryAxis();
+        NumberAxis compYAxis = new NumberAxis();
+        companyImpactBarChart = new StackedBarChart<>(compXAxis, compYAxis);
+        companyImpactBarChart.setTitle("Impact by Repository");
+        companyImpactBarChart.setMinWidth(800);
+        companyImpactBarChart.setPrefHeight(600);
+        compXAxis.setLabel("Repository");
+        compYAxis.setLabel("Lines of Code");
+
+        companyChartsBox.getChildren().addAll(companyCommitPieChart, companyLanguagePieChart, companyDevPieChart, companyImpactBarChart);
+        companyVisualsTab.setContent(companyVisualsScrollPane);
+
+        companyTabPane.getTabs().addAll(companyStatsTab, companyVisualsTab);
+        
+        companyModeBox.getChildren().addAll(new Label("Repositories in Database (Double-click to analyze):"), companyReviewActions, companyTabPane);
+        VBox.setVgrow(companyTabPane, javafx.scene.layout.Priority.ALWAYS);
+        companyModeTab.setContent(companyModeBox);
+        
+        companyModeTab.setOnSelectionChanged(e -> {
+            if (companyModeTab.isSelected()) {
+                refreshCompanyReviewData(false);
+            }
+        });
+
+        contentBox.getChildren().add(mainTopTabPane);
 
         // SplitPane for Main Content and LLM Panel
         SplitPane mainSplit = new SplitPane();
@@ -362,6 +511,26 @@ public class MainApp extends Application {
         commitPieChart.setPrefHeight(1080);
         commitPieChart.setLegendVisible(true);
 
+        languagePieChart = new PieChart();
+        languagePieChart.setTitle("Language Breakdown (Overall)");
+        languagePieChart.setMinWidth(1080);
+        languagePieChart.setMaxWidth(1080);
+        languagePieChart.setPrefWidth(1080);
+        languagePieChart.setMinHeight(1080);
+        languagePieChart.setMaxHeight(1080);
+        languagePieChart.setPrefHeight(1080);
+        languagePieChart.setLegendVisible(true);
+
+        contribLanguagePieChart = new PieChart();
+        contribLanguagePieChart.setTitle("Languages by Contributor");
+        contribLanguagePieChart.setMinWidth(1080);
+        contribLanguagePieChart.setMaxWidth(1080);
+        contribLanguagePieChart.setPrefWidth(1080);
+        contribLanguagePieChart.setMinHeight(1080);
+        contribLanguagePieChart.setMaxHeight(1080);
+        contribLanguagePieChart.setPrefHeight(1080);
+        contribLanguagePieChart.setLegendVisible(true);
+
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         impactBarChart = new StackedBarChart<>(xAxis, yAxis);
@@ -453,8 +622,10 @@ public class MainApp extends Application {
         contributorActivityChart.setPrefHeight(1040);
         cpdPerContributorChart.setPrefHeight(1040);
 
-        chartsBox.getChildren().addAll(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, cpdPerContributorChart);
+        chartsBox.getChildren().addAll(commitPieChart, languagePieChart, contribLanguagePieChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart, cpdPerContributorChart);
         HBox.setHgrow(commitPieChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(languagePieChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(contribLanguagePieChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(impactBarChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(activityLineChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
@@ -664,7 +835,28 @@ public class MainApp extends Application {
         );
         VBox.setVgrow(llmResponseArea, javafx.scene.layout.Priority.ALWAYS);
 
-        mainSplit.getItems().addAll(horizontalSplit, llmPanel);
+        sharedResultsBox.getChildren().add(horizontalSplit);
+        VBox.setVgrow(horizontalSplit, javafx.scene.layout.Priority.ALWAYS);
+
+        repoModeTab.setContent(repoModeBox);
+        companyModeTab.setContent(companyModeBox);
+
+        SplitPane verticalContentSplit = new SplitPane(mainTopTabPane, sharedResultsBox);
+        verticalContentSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        verticalContentSplit.setDividerPositions(0.4);
+
+        mainSplit.getItems().addAll(verticalContentSplit, llmPanel);
+        
+        mainTopTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+            if (newTab == repoModeTab) {
+                if (!rightBox.getChildren().contains(commitList)) {
+                    rightBox.getChildren().addAll(new Label("Recent Commits:"), commitList, initialCommitLabel);
+                }
+            } else if (newTab == companyModeTab) {
+                rightBox.getChildren().clear();
+                rightBox.getChildren().add(new Label("Company Context (Select repo to analyze)"));
+            }
+        });
         mainSplit.setDividerPositions(0.6);
 
         contentBox.getChildren().add(mainSplit);
@@ -775,6 +967,7 @@ public class MainApp extends Application {
         configManager.saveSetting("ollamaModel", ollamaModel);
         configManager.saveSetting("selectedProvider", selectedProvider);
         configManager.saveSetting("aliases", aliasesArea.getText());
+        configManager.saveSetting("companyReviewMdPath", companyReviewMdPathField.getText());
         configManager.saveSetting("genders", gendersData);
         
         configManager.saveSetting("repoPath", repoPathField.getText());
@@ -820,6 +1013,19 @@ public class MainApp extends Application {
         ollamaModel = configManager.getSetting("ollamaModel", "llama3");
         selectedProvider = configManager.getSetting("selectedProvider", "OpenAI");
         aliasesArea.setText(configManager.getSetting("aliases", ""));
+
+        String companyMdPath = configManager.getSetting("companyReviewMdPath", "");
+        companyReviewMdPathField.setText(companyMdPath);
+        if (companyMdPath.isEmpty()) {
+            String appDir = DatabaseService.getAppDir();
+            File defaultDir = new File(appDir, "company_review");
+            if (!defaultDir.exists()) {
+                defaultDir.mkdirs();
+                createDefaultMdFiles(defaultDir, "company_review");
+            }
+            companyReviewMdPathField.setText(defaultDir.getAbsolutePath());
+        }
+
         gendersData = configManager.getSetting("genders", "");
         
         repoPathField.setText(configManager.getSetting("repoPath", ""));
@@ -831,7 +1037,7 @@ public class MainApp extends Application {
 
         // Set default paths based on app data directory
         String appDir = DatabaseService.getAppDir();
-        String defaultMdPath = appDir + File.separator + "md_sections";
+        String defaultMdPath = appDir + File.separator + "repo_markdown";
         String defaultCoverPath = appDir + File.separator + "coverpage.html";
 
         mdFolderPathField.setText(defaultMdPath);
@@ -864,7 +1070,7 @@ public class MainApp extends Application {
             if (!mdFolder.exists()) {
                 mdFolder.mkdirs();
             }
-            createDefaultMdFiles(mdFolder);
+            createDefaultMdFiles(mdFolder, "repo_markdown");
         }
 
         String coverPath = coverPagePathField.getText();
@@ -1314,19 +1520,34 @@ public class MainApp extends Application {
         }
     }
 
-    private void generateDefaultMds() {
+    private void generateRepoMds() {
         String path = mdFolderPathField.getText();
         if (path == null || path.isEmpty()) {
             String appDir = DatabaseService.getAppDir();
-            path = appDir + File.separator + "md_sections";
+            path = appDir + File.separator + "repo_markdown";
             mdFolderPathField.setText(path);
         }
         File folder = new File(path);
         if (!folder.exists()) {
             folder.mkdirs();
         }
-        createDefaultMdFiles(folder);
-        showAlert("Success", "Default Markdown files created in: " + folder.getAbsolutePath());
+        createDefaultMdFiles(folder, "repo_markdown");
+        showAlert("Success", "Repo Markdown files created in: " + folder.getAbsolutePath());
+    }
+
+    private void generateCompanyReviewMds() {
+        String path = companyReviewMdPathField.getText();
+        if (path == null || path.isEmpty()) {
+            String appDir = DatabaseService.getAppDir();
+            path = appDir + File.separator + "company_review";
+            companyReviewMdPathField.setText(path);
+        }
+        File folder = new File(path);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        createDefaultMdFiles(folder, "company_review");
+        showAlert("Success", "Company Review Markdown files created in: " + folder.getAbsolutePath());
     }
 
     private void openMdFolder() {
@@ -1339,7 +1560,7 @@ public class MainApp extends Application {
         if (!folder.exists()) {
             if (confirmDialog("Folder does not exist", "The MD folder does not exist. Would you like to create it and add default sections?")) {
                 folder.mkdirs();
-                createDefaultMdFiles(folder);
+                createDefaultMdFiles(folder, "repo_markdown");
             } else {
                 return;
             }
@@ -1347,12 +1568,12 @@ public class MainApp extends Application {
         getHostServices().showDocument(folder.toURI().toString());
     }
 
-    private void createDefaultMdFiles(File folder) {
+    private void createDefaultMdFiles(File folder, String resourcePath) {
         try {
             boolean filesCopied = false;
 
             // Try to list resources from the JAR or classpath
-            java.net.URL resourceUrl = getClass().getResource("/default_markdown");
+            java.net.URL resourceUrl = getClass().getResource("/" + resourcePath);
             if (resourceUrl != null) {
                 if (resourceUrl.getProtocol().equals("jar")) {
                     String jarPath = resourceUrl.getPath().substring(5, resourceUrl.getPath().indexOf("!"));
@@ -1361,8 +1582,8 @@ public class MainApp extends Application {
                         while (entries.hasMoreElements()) {
                             java.util.jar.JarEntry entry = entries.nextElement();
                             String name = entry.getName();
-                            if (name.startsWith("default_markdown/") && name.endsWith(".md")) {
-                                String fileName = name.substring("default_markdown/".length());
+                            if (name.startsWith(resourcePath + "/") && name.endsWith(".md")) {
+                                String fileName = name.substring((resourcePath + "/").length());
                                 if (!fileName.isEmpty()) {
                                     File targetFile = new File(folder, fileName);
                                     if (!targetFile.exists()) {
@@ -1390,7 +1611,7 @@ public class MainApp extends Application {
 
             // Fallback to local folder if no files were copied from resources
             if (!filesCopied) {
-                File templateFolder = new File("default_markdown");
+                File templateFolder = new File(resourcePath);
                 if (templateFolder.exists() && templateFolder.isDirectory()) {
                     File[] files = templateFolder.listFiles((dir, name) -> name.endsWith(".md"));
                     if (files != null) {
@@ -1405,16 +1626,16 @@ public class MainApp extends Application {
                 }
             }
 
-            // Final fallback: if still no files, use some hardcoded ones
-            if (!filesCopied) {
+            // Final fallback: if still no files and it's repo_markdown, use some hardcoded ones
+            if (!filesCopied && resourcePath.equals("repo_markdown")) {
                 String[] essentialFiles = {"01_Introduction.md", "02_Methodology.md", "04_Contributor_Deep_Dive.md", "05_Risk_and_Quality_Assessment.md", "10_Conclusion.md"};
                 for (String fileName : essentialFiles) {
                     writeHardcodedDefault(fileName, new File(folder, fileName));
                 }
             }
 
-            // Also update the UI field to show the path if it was empty
-            if (mdFolderPathField.getText().isEmpty()) {
+            // Also update the UI field to show the path if it was empty for repo_markdown
+            if (resourcePath.equals("repo_markdown") && mdFolderPathField.getText().isEmpty()) {
                 mdFolderPathField.setText(folder.getAbsolutePath());
             }
         } catch (Exception e) {
@@ -1769,7 +1990,7 @@ public class MainApp extends Application {
 
     private void updateCharts(List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         Platform.runLater(() -> {
-            chartManager.updateCharts(commitPieChart, impactBarChart, activityLineChart, calendarActivityChart, 
+            chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, impactBarChart, activityLineChart, calendarActivityChart, 
                                      contributorActivityChart, cpdPerContributorChart, stats, recentCommits);
             
             // Force layout pass and refresh to ensure charts are rendered correctly
@@ -1816,6 +2037,292 @@ public class MainApp extends Application {
     }
 
 
+    private void exportToCsv(Stage stage) {
+        if (statsTable.getItems().isEmpty()) {
+            showAlert("No Data", "Please analyze a repository first.");
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Quantitative Metrics CSV");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        fileChooser.setInitialFileName("git_metrics.csv");
+        File file = fileChooser.showSaveDialog(stage);
+
+        if (file != null) {
+            try (java.io.PrintWriter writer = new java.io.PrintWriter(file)) {
+                // Header
+                writer.println("Name,Email,Gender,Commits,Merges,LinesAdded,LinesDeleted,FilesAdded,FilesEdited,FilesDeleted,MeaningfulScore,AIProbability,Languages");
+                
+                for (ContributorStats stat : statsTable.getItems()) {
+                    writer.printf("\"%s\",\"%s\",\"%s\",%d,%d,%d,%d,%d,%d,%d,%.2f,%.4f,\"%s\"%n",
+                        stat.name().replace("\"", "\"\""),
+                        stat.email().replace("\"", "\"\""),
+                        stat.gender(),
+                        stat.commitCount(),
+                        stat.mergeCount(),
+                        stat.linesAdded(),
+                        stat.linesDeleted(),
+                        stat.filesAdded(),
+                        stat.filesEdited(),
+                        stat.filesDeletedCount(),
+                        stat.meaningfulChangeScore(),
+                        stat.averageAiProbability(),
+                        formatLanguages(stat.languageBreakdown()).replace("\"", "\"\"")
+                    );
+                }
+                showAlert("Success", "CSV exported successfully to " + file.getAbsolutePath());
+            } catch (Exception e) {
+                showAlert("Error", "Could not export CSV: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void loadCompanyCsvs(Stage stage) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open Metrics CSVs");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        List<File> files = fileChooser.showOpenMultipleDialog(stage);
+
+        if (files != null) {
+            List<CompanyMetric> metrics = new ArrayList<>();
+            for (File f : files) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(f))) {
+                    String header = reader.readLine();
+                    String line;
+                    int contribCount = 0;
+                    int totalCommits = 0;
+                    int totalAdded = 0;
+                    int totalDeleted = 0;
+                    double totalScore = 0;
+                    Map<String, Integer> langTotals = new HashMap<>();
+
+                    while ((line = reader.readLine()) != null) {
+                        // Very simple CSV parsing (assuming the format we exported)
+                        String[] parts = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
+                        if (parts.length >= 13) {
+                            contribCount++;
+                            totalCommits += Integer.parseInt(parts[3]);
+                            totalAdded += Integer.parseInt(parts[5]);
+                            totalDeleted += Integer.parseInt(parts[6]);
+                            totalScore += Double.parseDouble(parts[10]);
+                            
+                            String langPart = parts[12].replace("\"", "");
+                            String[] langs = langPart.split(";");
+                            for (String lp : langs) {
+                                if (lp.contains(":")) {
+                                    String[] lkv = lp.split(":");
+                                    if (lkv.length == 2) {
+                                        langTotals.merge(lkv[0].trim(), Integer.parseInt(lkv[1].trim()), Integer::sum);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    String primaryLang = langTotals.entrySet().stream()
+                            .max(Map.Entry.comparingByValue())
+                            .map(Map.Entry::getKey)
+                            .orElse("N/A");
+                    
+                    metrics.add(new CompanyMetric(
+                        f.getName(),
+                        contribCount,
+                        totalCommits,
+                        totalAdded,
+                        totalDeleted,
+                        contribCount > 0 ? totalScore / contribCount : 0,
+                        primaryLang,
+                        langTotals
+                    ));
+                } catch (Exception e) {
+                    System.err.println("Error parsing CSV " + f.getName() + ": " + e.getMessage());
+                }
+            }
+            companyReviewTable.getItems().addAll(metrics);
+            updateCompanyCharts(new ArrayList<>(companyReviewTable.getItems()), null);
+        }
+    }
+
+    private void refreshCompanyReviewData(boolean updateLowerTabs) {
+        if (databaseService == null) return;
+        try {
+            List<String> repoIds = databaseService.getAllRepoIds();
+            List<CompanyMetric> companyMetrics = new ArrayList<>();
+            List<ContributorStats> allContributors = new ArrayList<>();
+            for (String repoId : repoIds) {
+                List<ContributorStats> stats = databaseService.getLatestMetrics(repoId);
+                if (stats.isEmpty()) continue;
+                allContributors.addAll(stats);
+
+                int totalCommits = stats.stream().mapToInt(ContributorStats::commitCount).sum();
+                int totalAdded = stats.stream().mapToInt(ContributorStats::linesAdded).sum();
+                int totalDeleted = stats.stream().mapToInt(ContributorStats::linesDeleted).sum();
+                double avgScore = stats.stream().mapToDouble(ContributorStats::meaningfulChangeScore).average().orElse(0.0);
+                
+                Map<String, Integer> langTotals = new HashMap<>();
+                for (ContributorStats s : stats) {
+                    s.languageBreakdown().forEach((l, c) -> langTotals.merge(l, c, Integer::sum));
+                }
+                String primaryLang = langTotals.entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .map(Map.Entry::getKey)
+                        .orElse("N/A");
+
+                companyMetrics.add(new CompanyMetric(
+                    repoId,
+                    stats.size(),
+                    totalCommits,
+                    totalAdded,
+                    totalDeleted,
+                    avgScore,
+                    primaryLang,
+                    langTotals
+                ));
+            }
+            companyReviewTable.setItems(FXCollections.observableArrayList(companyMetrics));
+            updateCompanyCharts(companyMetrics, allContributors);
+            
+            if (updateLowerTabs) {
+                // Overwrite lower tabs with company-wide contributor stats
+                Platform.runLater(() -> {
+                    List<ContributorStats> aggregatedStats = aggregateContributors(allContributors);
+                    statsTable.setItems(FXCollections.observableArrayList(groupOthers(aggregatedStats, tableLimitSpinner.getValue())));
+                    
+                    // Update shared charts with aggregated company stats
+                    chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, impactBarChart, activityLineChart, calendarActivityChart, 
+                                             contributorActivityChart, cpdPerContributorChart, aggregatedStats, null);
+                });
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private List<ContributorStats> aggregateContributors(List<ContributorStats> all) {
+        Map<String, ContributorStats> merged = new HashMap<>();
+        for (ContributorStats s : all) {
+            merged.merge(s.name(), s, (o, n) -> {
+                Map<String, Integer> mLangs = new HashMap<>(o.languageBreakdown());
+                n.languageBreakdown().forEach((k, v) -> mLangs.merge(k, v, Integer::sum));
+                Map<String, Integer> mDirs = new HashMap<>(o.directoryBreakdown());
+                n.directoryBreakdown().forEach((k, v) -> mDirs.merge(k, v, Integer::sum));
+                
+                return new ContributorStats(
+                    o.name(),
+                    o.email(),
+                    o.gender(),
+                    o.commitCount() + n.commitCount(),
+                    o.mergeCount() + n.mergeCount(),
+                    o.linesAdded() + n.linesAdded(),
+                    o.linesDeleted() + n.linesDeleted(),
+                    mLangs,
+                    (o.averageAiProbability() + n.averageAiProbability()) / 2.0,
+                    o.filesAdded() + n.filesAdded(),
+                    o.filesEdited() + n.filesEdited(),
+                    o.filesDeletedCount() + n.filesDeletedCount(),
+                    (o.meaningfulChangeScore() + n.meaningfulChangeScore()) / 2.0,
+                    o.touchedTests() || n.touchedTests(),
+                    o.generatedFilesPushed() + n.generatedFilesPushed(),
+                    o.documentationLinesAdded() + n.documentationLinesAdded(),
+                    mDirs
+                );
+            });
+        }
+        return merged.values().stream()
+                .sorted((s1, s2) -> Integer.compare(s2.commitCount(), s1.commitCount()))
+                .collect(Collectors.toList());
+    }
+
+    private void updateCompanyCharts(List<CompanyMetric> metrics, List<ContributorStats> allContributors) {
+        Platform.runLater(() -> {
+            chartManager.updateCompanyCharts(companyCommitPieChart, companyLanguagePieChart, companyImpactBarChart, companyDevPieChart, metrics, allContributors);
+        });
+    }
+
+    private void exportCompanyToPdf(Stage stage) {
+        if (companyReviewTable.getItems().isEmpty()) {
+            showAlert("Warning", "No data to export. Load repositories or CSVs first.");
+            return;
+        }
+
+        FileChooser chooser = new FileChooser();
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
+        File file = chooser.showSaveDialog(stage);
+        if (file != null) {
+            performCompanyPdfExport(file);
+        }
+    }
+
+    private void performCompanyPdfExport(File file) {
+        try {
+            File exportDir = file.getParentFile();
+            File pieFile = new File(exportDir, "company_commit_pie.png");
+            File langPieFile = new File(exportDir, "company_lang_pie.png");
+            File barFile = new File(exportDir, "company_impact_bar.png");
+            File devPieFile = new File(exportDir, "company_dev_pie.png");
+
+            saveNodeSnapshot(companyCommitPieChart, pieFile);
+            saveNodeSnapshot(companyLanguagePieChart, langPieFile);
+            saveNodeSnapshot(companyImpactBarChart, barFile);
+            saveNodeSnapshot(companyDevPieChart, devPieFile);
+
+            Map<String, String> mdSections = new HashMap<>();
+            String mdPath = companyReviewMdPathField.getText();
+            if (mdPath != null && !mdPath.isEmpty()) {
+                File folder = new File(mdPath);
+                if (folder.exists() && folder.isDirectory()) {
+                    File[] files = folder.listFiles((dir, name) -> name.endsWith(".md"));
+                    if (files != null) {
+                        Arrays.sort(files);
+                        for (File f : files) {
+                            mdSections.put(f.getName(), java.nio.file.Files.readString(f.toPath()));
+                        }
+                    }
+                }
+            }
+
+            Map<String, String> metadata = new LinkedHashMap<>();
+            metadata.put("Report Type", "Company Review");
+            metadata.put("Repositories Analyzed", String.valueOf(companyReviewTable.getItems().size()));
+            metadata.put("Generated On", java.time.LocalDateTime.now().toString());
+            metadata.put("User", System.getProperty("user.name"));
+
+            String coverHtml = null;
+            String coverBasePath = null;
+            String coverPath = coverPagePathField.getText();
+            if (coverPath != null && !coverPath.isEmpty()) {
+                File cf = new File(coverPath);
+                if (cf.exists()) {
+                    coverHtml = java.nio.file.Files.readString(cf.toPath());
+                    coverHtml = coverHtml.replace("{{project}}", "Company Portfolio Review")
+                                         .replace("{{user}}", System.getProperty("user.name"))
+                                         .replace("{{generated_on}}", java.time.LocalDate.now().toString());
+                    coverBasePath = cf.getParent();
+                }
+            }
+
+            exportService.exportCompanyToPdf(
+                    companyReviewTable.getItems(),
+                    file.getAbsolutePath(),
+                    pieFile.getAbsolutePath(),
+                    langPieFile.getAbsolutePath(),
+                    barFile.getAbsolutePath(),
+                    devPieFile.getAbsolutePath(),
+                    mdSections,
+                    coverHtml,
+                    coverBasePath,
+                    metadata,
+                    null // History not tracked for company yet
+            );
+
+            showAlert("Success", "Company report exported to " + file.getAbsolutePath());
+        } catch (Exception e) {
+            e.printStackTrace();
+            showAlert("Error", "Could not export PDF: " + e.getMessage());
+        }
+    }
+
     private void exportToPdf(Stage stage) {
         if (currentStats == null || currentStats.isEmpty()) {
             showAlert("Warning", "No data to export. Run analysis first.");
@@ -1855,6 +2362,8 @@ public class MainApp extends Application {
             // Take snapshots of charts in the same directory as the PDF
             File exportDir = file.getParentFile();
             File pieFile = new File(exportDir, "pie_chart.png");
+            File langPieFile = new File(exportDir, "lang_pie_chart.png");
+            File contribLangPieFile = new File(exportDir, "contrib_lang_pie_chart.png");
             File barFile = new File(exportDir, "bar_chart.png");
             File lineFile = new File(exportDir, "line_chart.png");
             File calendarFile = new File(exportDir, "calendar_chart.png");
@@ -1862,6 +2371,8 @@ public class MainApp extends Application {
             File cpdFile = new File(exportDir, "commits_per_day.png");
             
             saveNodeSnapshot(commitPieChart, pieFile);
+            saveNodeSnapshot(languagePieChart, langPieFile);
+            saveNodeSnapshot(contribLanguagePieChart, contribLangPieFile);
             saveNodeSnapshot(impactBarChart, barFile);
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calendarFile);
@@ -2035,7 +2546,8 @@ public class MainApp extends Application {
             }
 
             exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap(), mainBranchField.getText()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
-                pieFile.getAbsolutePath(), barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
+                pieFile.getAbsolutePath(), langPieFile.getAbsolutePath(), contribLangPieFile.getAbsolutePath(),
+                barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), 
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);
             

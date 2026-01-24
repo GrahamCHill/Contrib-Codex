@@ -10,13 +10,53 @@ import java.util.stream.Collectors;
 
 public class ChartManager {
 
-    public void updateCharts(PieChart commitPieChart, StackedBarChart<String, Number> impactBarChart, 
+    public void updateCharts(PieChart commitPieChart, PieChart languagePieChart, PieChart contribLanguagePieChart,
+                             StackedBarChart<String, Number> impactBarChart, 
                              LineChart<String, Number> activityLineChart, LineChart<String, Number> calendarActivityChart, 
                              LineChart<String, Number> contributorActivityChart, LineChart<String, Number> commitsPerDayChart,
                              List<ContributorStats> stats, List<CommitInfo> recentCommits) {
         
         // Limited to Top 5 for visuals
         List<ContributorStats> top5 = stats.stream().limit(5).collect(Collectors.toList());
+
+        // Language Breakdown (Overall)
+        languagePieChart.getData().clear();
+        languagePieChart.setAnimated(false);
+        Map<String, Integer> overallLangs = new HashMap<>();
+        for (ContributorStats s : stats) {
+            s.languageBreakdown().forEach((lang, count) -> overallLangs.merge(lang, count, Integer::sum));
+        }
+        int totalLangFiles = overallLangs.values().stream().mapToInt(Integer::intValue).sum();
+        List<PieChart.Data> langPieData = overallLangs.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(10)
+                .map(e -> {
+                    double percentage = (totalLangFiles > 0) ? (double)e.getValue() / totalLangFiles * 100 : 0;
+                    return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), e.getValue());
+                })
+                .collect(Collectors.toList());
+        languagePieChart.setData(FXCollections.observableArrayList(langPieData));
+
+        // Languages by Contributor
+        contribLanguagePieChart.getData().clear();
+        contribLanguagePieChart.setAnimated(false);
+        Map<String, Integer> contribLangs = new HashMap<>();
+        for (ContributorStats s : stats) {
+            String primaryLang = s.languageBreakdown().entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .orElse("Unknown");
+            contribLangs.merge(primaryLang, 1, Integer::sum);
+        }
+        int totalContribs = stats.size();
+        List<PieChart.Data> contribLangPieData = contribLangs.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .map(e -> {
+                    double percentage = (totalContribs > 0) ? (double)e.getValue() / totalContribs * 100 : 0;
+                    return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), e.getValue());
+                })
+                .collect(Collectors.toList());
+        contribLanguagePieChart.setData(FXCollections.observableArrayList(contribLangPieData));
 
         // Pie Chart with percentages
         commitPieChart.getData().clear();
@@ -231,6 +271,68 @@ public class ChartManager {
                 current = current.plusDays(1);
             }
             chart.getData().add(series);
+        }
+    }
+
+    public void updateCompanyCharts(PieChart commitPieChart, PieChart languagePieChart, StackedBarChart<String, Number> impactBarChart, PieChart devPieChart, List<dev.grahamhill.model.CompanyMetric> metrics, List<ContributorStats> allContributors) {
+        // Commits by Repo
+        commitPieChart.getData().clear();
+        int totalCommits = metrics.stream().mapToInt(dev.grahamhill.model.CompanyMetric::totalCommits).sum();
+        List<PieChart.Data> commitData = metrics.stream()
+                .map(m -> {
+                    double percentage = (totalCommits > 0) ? (double) m.totalCommits() / totalCommits * 100 : 0;
+                    String repoName = new java.io.File(m.repoName()).getName();
+                    return new PieChart.Data(String.format("%s (%.1f%%)", repoName, percentage), m.totalCommits());
+                })
+                .collect(Collectors.toList());
+        commitPieChart.setData(FXCollections.observableArrayList(commitData));
+
+        // Language Breakdown (Company)
+        languagePieChart.getData().clear();
+        Map<String, Integer> overallLangs = new HashMap<>();
+        metrics.forEach(m -> m.languageBreakdown().forEach((k, v) -> overallLangs.merge(k, v, Integer::sum)));
+        int totalLangFiles = overallLangs.values().stream().mapToInt(Integer::intValue).sum();
+        List<PieChart.Data> langData = overallLangs.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(10)
+                .map(e -> {
+                    double percentage = (totalLangFiles > 0) ? (double) e.getValue() / totalLangFiles * 100 : 0;
+                    return new PieChart.Data(String.format("%s (%.1f%%)", e.getKey(), percentage), e.getValue());
+                })
+                .collect(Collectors.toList());
+        languagePieChart.setData(FXCollections.observableArrayList(langData));
+
+        // Impact Bar Chart
+        impactBarChart.getData().clear();
+        XYChart.Series<String, Number> addedSeries = new XYChart.Series<>();
+        addedSeries.setName("Added");
+        XYChart.Series<String, Number> deletedSeries = new XYChart.Series<>();
+        deletedSeries.setName("Deleted");
+
+        for (dev.grahamhill.model.CompanyMetric m : metrics) {
+            String repoName = new java.io.File(m.repoName()).getName();
+            addedSeries.getData().add(new XYChart.Data<>(repoName, m.totalLinesAdded()));
+            deletedSeries.getData().add(new XYChart.Data<>(repoName, m.totalLinesDeleted()));
+        }
+        impactBarChart.getData().addAll(addedSeries, deletedSeries);
+
+        // Code by Developer (Company)
+        if (devPieChart != null && allContributors != null) {
+            devPieChart.getData().clear();
+            Map<String, Integer> devCommits = new HashMap<>();
+            for (ContributorStats s : allContributors) {
+                devCommits.merge(s.name(), s.commitCount(), Integer::sum);
+            }
+            int totalDevCommits = devCommits.values().stream().mapToInt(Integer::intValue).sum();
+            List<PieChart.Data> devData = devCommits.entrySet().stream()
+                    .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                    .limit(15)
+                    .map(e -> {
+                        double percentage = (totalDevCommits > 0) ? (double) e.getValue() / totalDevCommits * 100 : 0;
+                        return new PieChart.Data(String.format("%s (%.1f%%)", sanitizeName(e.getKey()), percentage), e.getValue());
+                    })
+                    .collect(Collectors.toList());
+            devPieChart.setData(FXCollections.observableArrayList(devData));
         }
     }
 

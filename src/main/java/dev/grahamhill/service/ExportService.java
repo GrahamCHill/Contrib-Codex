@@ -18,7 +18,191 @@ import java.util.List;
 
 public class ExportService {
 
-    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, String piePath, String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
+    public void exportCompanyToPdf(List<dev.grahamhill.model.CompanyMetric> metrics, String filePath, 
+                                   String piePath, String langPiePath, String barPath, String devPiePath, 
+                                   java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, 
+                                   java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
+        Document document = new Document(PageSize.A4);
+        PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
+        
+        // Find logo path
+        String logoPath = null;
+        if (coverHtml != null && coverHtml.contains("<img")) {
+            int srcStart = coverHtml.indexOf("src=\"") + 5;
+            int srcEnd = coverHtml.indexOf("\"", srcStart);
+            if (srcStart > 4 && srcEnd > srcStart) {
+                logoPath = coverHtml.substring(srcStart, srcEnd);
+            }
+        }
+        
+        HeaderFooterEvent event = new HeaderFooterEvent(logoPath);
+        writer.setPageEvent(event);
+        document.open();
+
+        Font headerFont = new Font(Font.HELVETICA, 18, Font.BOLD);
+        Font sectionFont = new Font(Font.HELVETICA, 14, Font.BOLD);
+        Font normalFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
+
+        if (coverHtml != null && !coverHtml.isEmpty()) {
+            event.setCoverPage(true);
+            try {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                PdfRendererBuilder builder = new PdfRendererBuilder();
+                builder.useFastMode();
+                builder.withHtmlContent(coverHtml, coverBasePath != null ? new File(coverBasePath).toURI().toString() : "");
+                builder.toStream(baos);
+                builder.run();
+
+                PdfReader reader = new PdfReader(baos.toByteArray());
+                PdfContentByte cb = writer.getDirectContent();
+                for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                    document.newPage();
+                    PdfImportedPage page = writer.getImportedPage(reader, i);
+                    cb.addTemplate(page, 0, 0);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                document.newPage();
+                Paragraph coverPara = new Paragraph("Company Review Report", headerFont);
+                coverPara.setAlignment(Element.ALIGN_CENTER);
+                document.add(coverPara);
+            }
+            document.newPage();
+        }
+        event.setCoverPage(false);
+
+        // 00. Document Control
+        document.newPage();
+        document.add(new Paragraph("00. Document Control", headerFont));
+        document.add(new Paragraph(" ", normalFont));
+
+        document.add(new Paragraph("00.1 Version History", sectionFont));
+        PdfPTable versionTable = new PdfPTable(4);
+        versionTable.setWidthPercentage(100);
+        versionTable.setSpacingBefore(5f);
+        versionTable.setSpacingAfter(15f);
+        versionTable.addCell("Version");
+        versionTable.addCell("Date");
+        versionTable.addCell("Author");
+        versionTable.addCell("Description");
+        
+        if (history != null && !history.isEmpty()) {
+            for (ReportHistory rh : history) {
+                versionTable.addCell(rh.version());
+                versionTable.addCell(rh.date().toString());
+                versionTable.addCell(rh.author());
+                versionTable.addCell(rh.description());
+            }
+        } else {
+            versionTable.addCell("1.0");
+            versionTable.addCell(java.time.LocalDate.now().toString());
+            versionTable.addCell(System.getProperty("user.name"));
+            versionTable.addCell("Initial Company Review Report");
+        }
+        document.add(versionTable);
+
+        document.add(new Paragraph("00.2 Generation Metadata", sectionFont));
+        PdfPTable metaTable = new PdfPTable(2);
+        metaTable.setWidthPercentage(100);
+        metaTable.setSpacingBefore(5f);
+        metaTable.setSpacingAfter(15f);
+        metaTable.setWidths(new float[]{1, 2});
+
+        if (metadata != null) {
+            metadata.forEach((k, v) -> {
+                metaTable.addCell(new Phrase(k, new Font(Font.HELVETICA, 10, Font.BOLD)));
+                metaTable.addCell(v);
+            });
+        }
+        document.add(metaTable);
+        document.newPage();
+
+        // Markdown Sections
+        if (mdSections != null && !mdSections.isEmpty()) {
+            java.util.List<String> sortedKeys = new java.util.ArrayList<>(mdSections.keySet());
+            java.util.Collections.sort(sortedKeys);
+            for (String key : sortedKeys) {
+                String content = mdSections.get(key);
+                String title = key.replace(".md", "").replaceAll("^\\d+_", "").replace("_", " ");
+                document.add(new Paragraph(title, headerFont));
+                document.add(new Paragraph(" ", normalFont));
+                
+                String[] lines = content.split("\n");
+                for (String line : lines) {
+                    if (line.startsWith("#")) continue; 
+                    document.add(new Paragraph(line, normalFont));
+                }
+                document.newPage();
+            }
+        }
+
+        // Charts
+        document.add(new Paragraph("Company Visuals", headerFont));
+        document.add(new Paragraph(" ", normalFont));
+
+        document.add(new Paragraph("Commits by Repository:", sectionFont));
+        Image pieImage = Image.getInstance(piePath);
+        pieImage.scaleToFit(500, 500);
+        pieImage.setAlignment(Image.MIDDLE);
+        document.add(pieImage);
+        document.newPage();
+
+        document.add(new Paragraph("Language Breakdown (Company):", sectionFont));
+        Image langPieImage = Image.getInstance(langPiePath);
+        langPieImage.scaleToFit(500, 500);
+        langPieImage.setAlignment(Image.MIDDLE);
+        document.add(langPieImage);
+        document.newPage();
+
+        document.add(new Paragraph("Code by Developer (Company):", sectionFont));
+        Image devPieImage = Image.getInstance(devPiePath);
+        devPieImage.scaleToFit(500, 500);
+        devPieImage.setAlignment(Image.MIDDLE);
+        document.add(devPieImage);
+        document.newPage();
+
+        document.add(new Paragraph("Impact by Repository:", sectionFont));
+        Image barImage = Image.getInstance(barPath);
+        barImage.scaleToFit(500, 500);
+        barImage.setAlignment(Image.MIDDLE);
+        document.add(barImage);
+        document.newPage();
+
+        // Data Table
+        document.setPageSize(PageSize.A4.rotate());
+        document.newPage();
+        document.add(new Paragraph("Detailed Metrics Across Repositories", headerFont));
+        document.add(new Paragraph(" ", normalFont));
+
+        PdfPTable table = new PdfPTable(7);
+        table.setWidthPercentage(100);
+        table.addCell("Repository");
+        table.addCell("Contributors");
+        table.addCell("Commits");
+        table.addCell("Lines Added");
+        table.addCell("Lines Deleted");
+        table.addCell("Primary Language");
+        table.addCell("Avg Meaningful Score");
+
+        for (dev.grahamhill.model.CompanyMetric m : metrics) {
+            table.addCell(new java.io.File(m.repoName()).getName());
+            table.addCell(String.valueOf(m.totalContributors()));
+            table.addCell(String.valueOf(m.totalCommits()));
+            table.addCell(String.valueOf(m.totalLinesAdded()));
+            table.addCell(String.valueOf(m.totalLinesDeleted()));
+            table.addCell(m.primaryLanguage());
+            table.addCell(String.format("%.1f", m.averageMeaningfulScore()));
+        }
+        document.add(table);
+
+        document.close();
+    }
+
+    public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, 
+                             String piePath, String langPiePath, String contribLangPiePath,
+                             String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, 
+                             String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, 
+                             java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(filePath));
         
@@ -485,6 +669,8 @@ public class ExportService {
         
         com.lowagie.text.List graphList = new com.lowagie.text.List(true, 20);
         graphList.add(new ListItem("Commits by Contributor (Pie Chart)", normalFont));
+        graphList.add(new ListItem("Language Breakdown (Overall) (Pie Chart)", normalFont));
+        graphList.add(new ListItem("Languages by Contributor (Pie Chart)", normalFont));
         graphList.add(new ListItem("Impact Analysis (Stacked Bar Chart)", normalFont));
         graphList.add(new ListItem("Recent Commit Activity (Line Chart)", normalFont));
         graphList.add(new ListItem("Daily Activity - Total Impact (Line Chart)", normalFont));
@@ -504,6 +690,24 @@ public class ExportService {
         pieImage.scaleToFit(pieSize, pieSize); 
         pieImage.setAlignment(Image.MIDDLE);
         document.add(pieImage);
+
+        document.newPage();
+        Paragraph langChartTitle = new Paragraph("Language Breakdown (Overall):", sectionFont);
+        langChartTitle.setSpacingBefore(15f);
+        document.add(langChartTitle);
+        Image langPieImage = Image.getInstance(langPiePath);
+        langPieImage.scaleToFit(pieSize, pieSize);
+        langPieImage.setAlignment(Image.MIDDLE);
+        document.add(langPieImage);
+
+        document.newPage();
+        Paragraph contribLangChartTitle = new Paragraph("Languages by Contributor:", sectionFont);
+        contribLangChartTitle.setSpacingBefore(15f);
+        document.add(contribLangChartTitle);
+        Image contribLangPieImage = Image.getInstance(contribLangPiePath);
+        contribLangPieImage.scaleToFit(pieSize, pieSize);
+        contribLangPieImage.setAlignment(Image.MIDDLE);
+        document.add(contribLangPieImage);
 
         document.newPage();
         Paragraph chartTitle2 = new Paragraph("Impact Analysis (Stacked):", sectionFont);

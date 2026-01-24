@@ -145,7 +145,7 @@ public class DatabaseService {
     public List<ContributorStats> getLatestMetrics(String repoId) throws SQLException {
         List<ContributorStats> stats = new ArrayList<>();
         // This is a simplified version, just getting the last set of entries
-        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added FROM contributor_metrics WHERE repo_id = ? ORDER BY timestamp DESC LIMIT 20";
+        String sql = "SELECT name, email, gender, commits, merges, lines_added, lines_deleted, language_breakdown, directory_breakdown, ai_probability, files_added, files_edited, files_deleted_count, meaningful_change_score, touched_tests, generated_files_pushed, documentation_lines_added FROM contributor_metrics WHERE repo_id = ? ORDER BY timestamp DESC";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, repoId);
@@ -174,6 +174,19 @@ public class DatabaseService {
             }
         }
         return stats;
+    }
+
+    public List<String> getAllRepoIds() throws SQLException {
+        List<String> repoIds = new ArrayList<>();
+        String sql = "SELECT DISTINCT repo_id FROM contributor_metrics";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                repoIds.add(rs.getString("repo_id"));
+            }
+        }
+        return repoIds;
     }
 
     public List<ReportHistory> getLatestReportHistory(String repoId, int limit) throws SQLException {
