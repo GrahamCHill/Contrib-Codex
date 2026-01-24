@@ -64,7 +64,9 @@ public class ChartManager {
         languagePieChart.setAnimated(false);
         Map<String, Integer> overallLangs = new HashMap<>();
         for (ContributorStats s : stats) {
-            s.languageBreakdown().forEach((lang, count) -> overallLangs.merge(lang, count, Integer::sum));
+            if (s.languageBreakdown() != null) {
+                s.languageBreakdown().forEach((lang, count) -> overallLangs.merge(lang, count, Integer::sum));
+            }
         }
         int totalLangFiles = overallLangs.values().stream().mapToInt(Integer::intValue).sum();
         List<PieChart.Data> langPieData = overallLangs.entrySet().stream()
@@ -82,11 +84,15 @@ public class ChartManager {
         contribLanguagePieChart.setAnimated(false);
         Map<String, Integer> contribLangs = new HashMap<>();
         for (ContributorStats s : stats) {
-            String primaryLang = s.languageBreakdown().entrySet().stream()
-                    .max(Map.Entry.comparingByValue())
-                    .map(Map.Entry::getKey)
-                    .orElse("Unknown");
-            contribLangs.merge(primaryLang, 1, Integer::sum);
+            if (s.languageBreakdown() != null && !s.languageBreakdown().isEmpty()) {
+                String primaryLang = s.languageBreakdown().entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .map(Map.Entry::getKey)
+                        .orElse("Unknown");
+                contribLangs.merge(primaryLang, 1, Integer::sum);
+            } else {
+                contribLangs.merge("Unknown", 1, Integer::sum);
+            }
         }
         int totalContribs = stats.size();
         List<PieChart.Data> contribLangPieData = contribLangs.entrySet().stream()

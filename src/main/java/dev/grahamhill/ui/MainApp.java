@@ -2319,12 +2319,16 @@ public class MainApp extends Application {
                 List<CommitInfo> allCommits = new ArrayList<>();
 
                 for (CompanyMetric m : selectedMetrics) {
-                    // Try to load from DB if it exists
-                    List<ContributorStats> stats = databaseService.getLatestMetrics(m.repoName());
-                    List<CommitInfo> commits = databaseService.getLatestCommits(m.repoName());
-                    if (!stats.isEmpty()) {
-                        allContributors.addAll(stats);
-                        allCommits.addAll(commits);
+                    try {
+                        // Try to load from DB if it exists
+                        List<ContributorStats> stats = databaseService.getLatestMetrics(m.repoName());
+                        List<CommitInfo> commits = databaseService.getLatestCommits(m.repoName());
+                        if (!stats.isEmpty()) {
+                            allContributors.addAll(stats);
+                            allCommits.addAll(commits);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error loading data for repo " + m.repoName() + ": " + e.getMessage());
                     }
                 }
 
@@ -2730,7 +2734,7 @@ public class MainApp extends Application {
             }
 
             exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap(), mainBranchField.getText()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
-                pieFile.getAbsolutePath(), langPieFile.getAbsolutePath(), contribLangPieFile.getAbsolutePath(),
+                pieFile.getAbsolutePath(), langPieFile.getAbsolutePath(), contribLangPieFile.getAbsolutePath(), cpdPieFile.getAbsolutePath(),
                 barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), 
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);

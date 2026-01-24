@@ -250,7 +250,7 @@ public class ExportService {
     }
 
     public void exportToPdf(List<ContributorStats> stats, List<dev.grahamhill.model.CommitInfo> allCommits, MeaningfulChangeAnalysis meaningfulAnalysis, String filePath, 
-                             String piePath, String langPiePath, String contribLangPiePath,
+                             String piePath, String langPiePath, String contribLangPiePath, String cpdPiePath,
                              String barPath, String linePath, String calendarPath, String contribPath, String cpdPath, 
                              String aiReport, java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, int tableLimit, 
                              java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
@@ -814,6 +814,17 @@ public class ExportService {
         cpdImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
         cpdImage.setAlignment(Image.MIDDLE);
         document.add(cpdImage);
+
+        document.newPage();
+        Paragraph chartTitle7 = new Paragraph("Commits per Day (Pie Chart):", sectionFont);
+        Anchor chartAnchor7 = new Anchor(chartTitle7);
+        chartAnchor7.setName("chart7");
+        chartTitle7.setSpacingBefore(15f);
+        document.add(chartAnchor7);
+        Image cpdPieImage = Image.getInstance(cpdPiePath);
+        cpdPieImage.scaleToFit(document.getPageSize().getWidth() * 0.9f, (document.getPageSize().getHeight() - 150) * 0.9f);
+        cpdPieImage.setAlignment(Image.MIDDLE);
+        document.add(cpdPieImage);
 
         // Back to Portrait for the rest
         document.setPageSize(PageSize.A4);
