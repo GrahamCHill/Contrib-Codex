@@ -65,6 +65,25 @@ public class DatabaseService {
             try {
                 stmt.execute("ALTER TABLE contributor_metrics ADD COLUMN repo_id TEXT");
             } catch (SQLException e) { /* already exists */ }
+
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS commit_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    repo_id TEXT,
+                    commit_hash TEXT,
+                    author_name TEXT,
+                    message TEXT,
+                    timestamp TEXT,
+                    lines_added INTEGER,
+                    lines_deleted INTEGER,
+                    files_added INTEGER,
+                    files_edited INTEGER,
+                    files_deleted INTEGER,
+                    is_merge INTEGER,
+                    language_breakdown TEXT,
+                    ai_probability REAL
+                )
+                """);
         }
     }
 
@@ -248,6 +267,59 @@ public class DatabaseService {
             pstmt.setString(6, history.earliestCommit());
             pstmt.executeUpdate();
         }
+    }
+
+    public void saveCommits(String repoId, List<dev.grahamhill.model.CommitInfo> commits) throws SQLException {
+        String sql = "INSERT INTO commit_metrics (repo_id, commit_hash, author_name, message, timestamp, lines_added, lines_deleted, files_added, files_edited, files_deleted, is_merge, language_breakdown, ai_probability) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            for (dev.grahamhill.model.CommitInfo ci : commits) {
+                pstmt.setString(1, repoId);
+                pstmt.setString(2, ci.id());
+                pstmt.setString(3, ci.authorName());
+                pstmt.setString(4, ci.message());
+                pstmt.setString(5, ci.timestamp().toString());
+                pstmt.setInt(6, ci.linesAdded());
+                pstmt.setInt(7, ci.linesDeleted());
+                pstmt.setInt(8, ci.filesAdded());
+                pstmt.setInt(9, ci.filesEdited());
+                pstmt.setInt(10, ci.filesDeleted());
+                pstmt.setInt(11, ci.isMerge() ? 1 : 0);
+                pstmt.setString(12, ci.languageBreakdown().toString());
+                pstmt.setDouble(13, ci.aiProbability());
+                pstmt.addBatch();
+            }
+            pstmt.executeBatch();
+        }
+    }
+
+    public List<dev.grahamhill.model.CommitInfo> getLatestCommits(String repoId) throws SQLException {
+        List<dev.grahamhill.model.CommitInfo> commits = new ArrayList<>();
+        String sql = "SELECT commit_hash, author_name, message, timestamp, lines_added, lines_deleted, files_added, files_edited, files_deleted, is_merge, language_breakdown, ai_probability FROM commit_metrics WHERE repo_id = ? ORDER BY timestamp DESC";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, repoId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    commits.add(new dev.grahamhill.model.CommitInfo(
+                            rs.getString("commit_hash"),
+                            rs.getString("author_name"),
+                            rs.getString("message"),
+                            java.time.LocalDateTime.parse(rs.getString("timestamp")),
+                            parseLanguageBreakdown(rs.getString("language_breakdown")),
+                            rs.getDouble("ai_probability"),
+                            rs.getInt("files_added"),
+                            rs.getInt("files_edited"),
+                            rs.getInt("files_deleted"),
+                            rs.getInt("lines_added"),
+                            rs.getInt("lines_deleted"),
+                            rs.getInt("is_merge") == 1,
+                            "" // branch not stored
+                    ));
+                }
+            }
+        }
+        return commits;
     }
 
     private java.util.Map<String, Integer> parseLanguageBreakdown(String str) {

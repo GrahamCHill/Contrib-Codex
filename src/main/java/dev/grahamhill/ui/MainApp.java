@@ -365,12 +365,41 @@ public class MainApp extends Application {
         companyStatsTab.setContent(companyReviewTable);
 
         // --- Company Visuals ---
+        VBox companyVisualsOuterBox = new VBox(5);
+        HBox companyZoomControls = new HBox(10);
+        companyZoomControls.setPadding(new Insets(5));
+        companyZoomControls.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        Slider companyZoomSlider = new Slider(0.1, 2.0, 1.0);
+        Label companyZoomLabel = new Label("Zoom: 100%");
+        companyZoomSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            companyZoomLabel.setText(String.format("Zoom: %.0f%%", newVal.doubleValue() * 100));
+        });
+        companyZoomControls.getChildren().addAll(new Label("Zoom:"), companyZoomSlider, companyZoomLabel);
+
         ScrollPane companyVisualsScrollPane = new ScrollPane();
-        companyVisualsScrollPane.setFitToWidth(true);
-        companyVisualsScrollPane.setFitToHeight(true);
+        companyVisualsScrollPane.setFitToWidth(false);
+        companyVisualsScrollPane.setFitToHeight(false);
         HBox companyChartsBox = new HBox(10);
         companyChartsBox.setPadding(new Insets(10));
-        companyVisualsScrollPane.setContent(companyChartsBox);
+        
+        javafx.scene.Group companyZoomGroup = new javafx.scene.Group(companyChartsBox);
+        companyVisualsScrollPane.setContent(companyZoomGroup);
+
+        javafx.scene.transform.Scale companyScale = new javafx.scene.transform.Scale(1, 1, 0, 0);
+        companyZoomGroup.getTransforms().add(companyScale);
+        companyScale.xProperty().bind(companyZoomSlider.valueProperty());
+        companyScale.yProperty().bind(companyZoomSlider.valueProperty());
+
+        companyVisualsScrollPane.setOnScroll(event -> {
+            if (event.isControlDown() || event.isShortcutDown()) {
+                double delta = event.getDeltaY();
+                double zoomFactor = 1.05;
+                if (delta < 0) zoomFactor = 1 / zoomFactor;
+                double newScale = companyZoomSlider.getValue() * zoomFactor;
+                companyZoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
+                event.consume();
+            }
+        });
 
         companyCommitPieChart = new PieChart();
         companyCommitPieChart.setTitle("Commits by Repository");
@@ -397,7 +426,9 @@ public class MainApp extends Application {
         compYAxis.setLabel("Lines of Code");
 
         companyChartsBox.getChildren().addAll(companyCommitPieChart, companyLanguagePieChart, companyDevPieChart, companyImpactBarChart);
-        companyVisualsTab.setContent(companyVisualsScrollPane);
+        companyVisualsOuterBox.getChildren().addAll(companyZoomControls, companyVisualsScrollPane);
+        VBox.setVgrow(companyVisualsScrollPane, javafx.scene.layout.Priority.ALWAYS);
+        companyVisualsTab.setContent(companyVisualsOuterBox);
 
         companyTabPane.getTabs().addAll(companyStatsTab, companyVisualsTab);
         
@@ -494,12 +525,42 @@ public class MainApp extends Application {
 
         Tab visualsTab = new Tab("Visuals");
         visualsTab.setClosable(false);
+        
+        VBox visualsOuterBox = new VBox(5);
+        HBox zoomControls = new HBox(10);
+        zoomControls.setPadding(new Insets(5));
+        zoomControls.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        Slider zoomSlider = new Slider(0.1, 2.0, 1.0);
+        Label zoomLabel = new Label("Zoom: 100%");
+        zoomSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            zoomLabel.setText(String.format("Zoom: %.0f%%", newVal.doubleValue() * 100));
+        });
+        zoomControls.getChildren().addAll(new Label("Zoom:"), zoomSlider, zoomLabel);
+
         ScrollPane visualsScrollPane = new ScrollPane();
-        visualsScrollPane.setFitToWidth(true);
-        visualsScrollPane.setFitToHeight(true);
+        visualsScrollPane.setFitToWidth(false);
+        visualsScrollPane.setFitToHeight(false);
         HBox chartsBox = new HBox(10);
         chartsBox.setPadding(new Insets(10));
-        visualsScrollPane.setContent(chartsBox);
+        
+        javafx.scene.Group zoomGroup = new javafx.scene.Group(chartsBox);
+        visualsScrollPane.setContent(zoomGroup);
+        
+        javafx.scene.transform.Scale scale = new javafx.scene.transform.Scale(1, 1, 0, 0);
+        zoomGroup.getTransforms().add(scale);
+        scale.xProperty().bind(zoomSlider.valueProperty());
+        scale.yProperty().bind(zoomSlider.valueProperty());
+
+        visualsScrollPane.setOnScroll(event -> {
+            if (event.isControlDown() || event.isShortcutDown()) {
+                double delta = event.getDeltaY();
+                double zoomFactor = 1.05;
+                if (delta < 0) zoomFactor = 1 / zoomFactor;
+                double newScale = zoomSlider.getValue() * zoomFactor;
+                zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
+                event.consume();
+            }
+        });
 
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
@@ -631,7 +692,9 @@ public class MainApp extends Application {
         HBox.setHgrow(calendarActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(contributorActivityChart, javafx.scene.layout.Priority.ALWAYS);
         HBox.setHgrow(cpdPerContributorChart, javafx.scene.layout.Priority.ALWAYS);
-        visualsTab.setContent(visualsScrollPane);
+        visualsOuterBox.getChildren().addAll(zoomControls, visualsScrollPane);
+        VBox.setVgrow(visualsScrollPane, javafx.scene.layout.Priority.ALWAYS);
+        visualsTab.setContent(visualsOuterBox);
         
         Tab docControlTab = new Tab("Document Control");
         docControlTab.setClosable(false);
@@ -1922,6 +1985,7 @@ public class MainApp extends Application {
                 if (databaseService != null) {
                     try {
                         databaseService.saveMetrics(finalRepoId, currentStats);
+                        databaseService.saveCommits(finalRepoId, recentCommits);
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
