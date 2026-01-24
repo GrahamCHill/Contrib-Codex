@@ -102,7 +102,13 @@ public class MainApp extends Application {
     private PieChart companyCommitPieChart;
     private PieChart companyLanguagePieChart;
     private PieChart companyDevPieChart;
+    private PieChart companyProjLangPieChart;
+    private PieChart companyContribLangPieChart;
     private StackedBarChart<String, Number> companyImpactBarChart;
+    private LineChart<String, Number> companyActivityLineChart;
+    private LineChart<String, Number> companyCalendarActivityChart;
+    private LineChart<String, Number> companyContributorActivityChart;
+    private LineChart<String, Number> companyCpdPerContributorChart;
 
     private Map<String, String> envConfig = new HashMap<>();
 
@@ -391,14 +397,12 @@ public class MainApp extends Application {
         companyScale.yProperty().bind(companyZoomSlider.valueProperty());
 
         companyVisualsScrollPane.setOnScroll(event -> {
-            if (event.isControlDown() || event.isShortcutDown()) {
-                double delta = event.getDeltaY();
-                double zoomFactor = 1.05;
-                if (delta < 0) zoomFactor = 1 / zoomFactor;
-                double newScale = companyZoomSlider.getValue() * zoomFactor;
-                companyZoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
-                event.consume();
-            }
+            double delta = event.getDeltaY();
+            double zoomFactor = 1.05;
+            if (delta < 0) zoomFactor = 1 / zoomFactor;
+            double newScale = companyZoomSlider.getValue() * zoomFactor;
+            companyZoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
+            event.consume();
         });
 
         companyCommitPieChart = new PieChart();
@@ -416,6 +420,16 @@ public class MainApp extends Application {
         companyDevPieChart.setMinWidth(600);
         companyDevPieChart.setPrefHeight(600);
 
+        companyProjLangPieChart = new PieChart();
+        companyProjLangPieChart.setTitle("Language of Projects");
+        companyProjLangPieChart.setMinWidth(600);
+        companyProjLangPieChart.setPrefHeight(600);
+
+        companyContribLangPieChart = new PieChart();
+        companyContribLangPieChart.setTitle("Languages by Contributor (Company)");
+        companyContribLangPieChart.setMinWidth(600);
+        companyContribLangPieChart.setPrefHeight(600);
+
         CategoryAxis compXAxis = new CategoryAxis();
         NumberAxis compYAxis = new NumberAxis();
         companyImpactBarChart = new StackedBarChart<>(compXAxis, compYAxis);
@@ -425,7 +439,35 @@ public class MainApp extends Application {
         compXAxis.setLabel("Repository");
         compYAxis.setLabel("Lines of Code");
 
-        companyChartsBox.getChildren().addAll(companyCommitPieChart, companyLanguagePieChart, companyDevPieChart, companyImpactBarChart);
+        CategoryAxis cactX = new CategoryAxis();
+        NumberAxis cactY = new NumberAxis();
+        companyActivityLineChart = new LineChart<>(cactX, cactY);
+        companyActivityLineChart.setTitle("Recent Activity (Company)");
+        companyActivityLineChart.setMinWidth(800);
+        companyActivityLineChart.setPrefHeight(600);
+
+        CategoryAxis ccalX = new CategoryAxis();
+        NumberAxis ccalY = new NumberAxis();
+        companyCalendarActivityChart = new LineChart<>(ccalX, ccalY);
+        companyCalendarActivityChart.setTitle("Daily Activity (Company)");
+        companyCalendarActivityChart.setMinWidth(800);
+        companyCalendarActivityChart.setPrefHeight(600);
+
+        CategoryAxis cconX = new CategoryAxis();
+        NumberAxis cconY = new NumberAxis();
+        companyContributorActivityChart = new LineChart<>(cconX, cconY);
+        companyContributorActivityChart.setTitle("Daily Activity per Contributor (Company)");
+        companyContributorActivityChart.setMinWidth(800);
+        companyContributorActivityChart.setPrefHeight(600);
+
+        CategoryAxis ccpdX = new CategoryAxis();
+        NumberAxis ccpdY = new NumberAxis();
+        companyCpdPerContributorChart = new LineChart<>(ccpdX, ccpdY);
+        companyCpdPerContributorChart.setTitle("Commits per Day (Company)");
+        companyCpdPerContributorChart.setMinWidth(800);
+        companyCpdPerContributorChart.setPrefHeight(600);
+
+        companyChartsBox.getChildren().addAll(companyCommitPieChart, companyLanguagePieChart, companyDevPieChart, companyProjLangPieChart, companyContribLangPieChart, companyImpactBarChart, companyActivityLineChart, companyCalendarActivityChart, companyContributorActivityChart, companyCpdPerContributorChart);
         companyVisualsOuterBox.getChildren().addAll(companyZoomControls, companyVisualsScrollPane);
         VBox.setVgrow(companyVisualsScrollPane, javafx.scene.layout.Priority.ALWAYS);
         companyVisualsTab.setContent(companyVisualsOuterBox);
@@ -552,14 +594,12 @@ public class MainApp extends Application {
         scale.yProperty().bind(zoomSlider.valueProperty());
 
         visualsScrollPane.setOnScroll(event -> {
-            if (event.isControlDown() || event.isShortcutDown()) {
-                double delta = event.getDeltaY();
-                double zoomFactor = 1.05;
-                if (delta < 0) zoomFactor = 1 / zoomFactor;
-                double newScale = zoomSlider.getValue() * zoomFactor;
-                zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
-                event.consume();
-            }
+            double delta = event.getDeltaY();
+            double zoomFactor = 1.05;
+            if (delta < 0) zoomFactor = 1 / zoomFactor;
+            double newScale = zoomSlider.getValue() * zoomFactor;
+            zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
+            event.consume();
         });
 
         commitPieChart = new PieChart();
@@ -887,7 +927,13 @@ public class MainApp extends Application {
         });
         
         Button generateLlmReportBtn = new Button("Generate LLM Report");
-        generateLlmReportBtn.setOnAction(e -> generateLlmReport(null));
+        generateLlmReportBtn.setOnAction(e -> {
+            if (mainTopTabPane.getSelectionModel().getSelectedItem() == companyModeTab) {
+                generateCompanyLlmReport(null);
+            } else {
+                generateLlmReport(null);
+            }
+        });
         llmActionBox.getChildren().addAll(new Label("Provider:"), providerCombo, generateLlmReportBtn);
 
         llmPanel.getChildren().addAll(
@@ -1521,6 +1567,72 @@ public class MainApp extends Application {
                 Platform.runLater(() -> {
                     llmResponseArea.setText(fullReport.toString().trim());
                     updateStatsWithAiScores(fullReport.toString());
+                    if (onComplete != null) onComplete.run();
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                Platform.runLater(() -> {
+                    llmResponseArea.setText("Error: " + e.getMessage());
+                    if (onComplete != null) onComplete.run();
+                });
+            }
+        }).start();
+    }
+
+    private void generateCompanyLlmReport(Runnable onComplete) {
+        if (databaseService == null) return;
+        
+        String apiKey;
+        String url;
+        String model;
+
+        if (selectedProvider.equals("OpenAI")) {
+            apiKey = openAiKey;
+            url = "https://api.openai.com/v1/chat/completions";
+            model = openAiModel;
+        } else if (selectedProvider.equals("Groq")) {
+            apiKey = groqKey;
+            url = "https://api.groq.com/openai/v1/chat/completions";
+            model = groqModel;
+        } else { // Ollama
+            apiKey = "ollama";
+            url = ollamaUrl + "/v1/chat/completions";
+            model = ollamaModel;
+        }
+
+        if (apiKey.isEmpty() && !selectedProvider.equals("Ollama")) {
+            showAlert("Error", "API Key for " + selectedProvider + " is not set.");
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+
+        Platform.runLater(() -> llmResponseArea.setText("Generating Company Review report using " + selectedProvider + "..."));
+
+        new Thread(() -> {
+            try {
+                List<String> repoIds = databaseService.getAllRepoIds();
+                StringBuilder companyMetrics = new StringBuilder();
+                companyMetrics.append("COMPANY REVIEW METRICS\n");
+                companyMetrics.append("======================\n\n");
+                
+                for (String repoId : repoIds) {
+                    List<ContributorStats> stats = databaseService.getLatestMetrics(repoId);
+                    if (stats.isEmpty()) continue;
+                    companyMetrics.append("Repository: ").append(repoId).append("\n");
+                    companyMetrics.append("Contributors: ").append(stats.size()).append("\n");
+                    int totalCommits = stats.stream().mapToInt(ContributorStats::commitCount).sum();
+                    int totalAdded = stats.stream().mapToInt(ContributorStats::linesAdded).sum();
+                    companyMetrics.append("Total Commits: ").append(totalCommits).append("\n");
+                    companyMetrics.append("Total Lines Added: ").append(totalAdded).append("\n\n");
+                }
+
+                String response = llmService.callLlmApi(url, apiKey, model, systemPromptArea.getText(), 
+                        userPromptArea.getText() + "\n\n" + companyMetrics.toString());
+                
+                response = response.replaceAll("```markdown", "").replaceAll("```", "").trim();
+                final String finalResponse = response;
+                Platform.runLater(() -> {
+                    llmResponseArea.setText(finalResponse);
                     if (onComplete != null) onComplete.run();
                 });
             } catch (Exception e) {
@@ -2204,7 +2316,7 @@ public class MainApp extends Application {
                 }
             }
             companyReviewTable.getItems().addAll(metrics);
-            updateCompanyCharts(new ArrayList<>(companyReviewTable.getItems()), null);
+            updateCompanyCharts(new ArrayList<>(companyReviewTable.getItems()), null, null);
         }
     }
 
@@ -2214,10 +2326,14 @@ public class MainApp extends Application {
             List<String> repoIds = databaseService.getAllRepoIds();
             List<CompanyMetric> companyMetrics = new ArrayList<>();
             List<ContributorStats> allContributors = new ArrayList<>();
+            List<CommitInfo> allCommits = new ArrayList<>();
+
             for (String repoId : repoIds) {
                 List<ContributorStats> stats = databaseService.getLatestMetrics(repoId);
+                List<CommitInfo> commits = databaseService.getLatestCommits(repoId);
                 if (stats.isEmpty()) continue;
                 allContributors.addAll(stats);
+                allCommits.addAll(commits);
 
                 int totalCommits = stats.stream().mapToInt(ContributorStats::commitCount).sum();
                 int totalAdded = stats.stream().mapToInt(ContributorStats::linesAdded).sum();
@@ -2245,7 +2361,7 @@ public class MainApp extends Application {
                 ));
             }
             companyReviewTable.setItems(FXCollections.observableArrayList(companyMetrics));
-            updateCompanyCharts(companyMetrics, allContributors);
+            updateCompanyCharts(companyMetrics, allContributors, allCommits);
             
             if (updateLowerTabs) {
                 // Overwrite lower tabs with company-wide contributor stats
@@ -2255,7 +2371,7 @@ public class MainApp extends Application {
                     
                     // Update shared charts with aggregated company stats
                     chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, impactBarChart, activityLineChart, calendarActivityChart, 
-                                             contributorActivityChart, cpdPerContributorChart, aggregatedStats, null);
+                                             contributorActivityChart, cpdPerContributorChart, aggregatedStats, allCommits);
                 });
             }
         } catch (Exception e) {
@@ -2298,9 +2414,12 @@ public class MainApp extends Application {
                 .collect(Collectors.toList());
     }
 
-    private void updateCompanyCharts(List<CompanyMetric> metrics, List<ContributorStats> allContributors) {
+    private void updateCompanyCharts(List<CompanyMetric> metrics, List<ContributorStats> allContributors, List<CommitInfo> allCommits) {
         Platform.runLater(() -> {
-            chartManager.updateCompanyCharts(companyCommitPieChart, companyLanguagePieChart, companyImpactBarChart, companyDevPieChart, metrics, allContributors);
+            chartManager.updateCompanyCharts(companyCommitPieChart, companyLanguagePieChart, companyImpactBarChart, companyDevPieChart, 
+                                             companyProjLangPieChart, companyContribLangPieChart,
+                                             companyActivityLineChart, companyCalendarActivityChart, companyContributorActivityChart, companyCpdPerContributorChart,
+                                             metrics, allContributors, allCommits);
         });
     }
 
@@ -2325,11 +2444,23 @@ public class MainApp extends Application {
             File langPieFile = new File(exportDir, "company_lang_pie.png");
             File barFile = new File(exportDir, "company_impact_bar.png");
             File devPieFile = new File(exportDir, "company_dev_pie.png");
+            File projLangPieFile = new File(exportDir, "company_proj_lang_pie.png");
+            File contribLangPieFile = new File(exportDir, "company_contrib_lang_pie.png");
+            File lineFile = new File(exportDir, "company_activity_line.png");
+            File calFile = new File(exportDir, "company_calendar_activity.png");
+            File conFile = new File(exportDir, "company_contributor_activity.png");
+            File cpdFile = new File(exportDir, "company_cpd.png");
 
             saveNodeSnapshot(companyCommitPieChart, pieFile);
             saveNodeSnapshot(companyLanguagePieChart, langPieFile);
             saveNodeSnapshot(companyImpactBarChart, barFile);
             saveNodeSnapshot(companyDevPieChart, devPieFile);
+            saveNodeSnapshot(companyProjLangPieChart, projLangPieFile);
+            saveNodeSnapshot(companyContribLangPieChart, contribLangPieFile);
+            saveNodeSnapshot(companyActivityLineChart, lineFile);
+            saveNodeSnapshot(companyCalendarActivityChart, calFile);
+            saveNodeSnapshot(companyContributorActivityChart, conFile);
+            saveNodeSnapshot(companyCpdPerContributorChart, cpdFile);
 
             Map<String, String> mdSections = new HashMap<>();
             String mdPath = companyReviewMdPathField.getText();
@@ -2373,6 +2504,12 @@ public class MainApp extends Application {
                     langPieFile.getAbsolutePath(),
                     barFile.getAbsolutePath(),
                     devPieFile.getAbsolutePath(),
+                    projLangPieFile.getAbsolutePath(),
+                    contribLangPieFile.getAbsolutePath(),
+                    lineFile.getAbsolutePath(),
+                    calFile.getAbsolutePath(),
+                    conFile.getAbsolutePath(),
+                    cpdFile.getAbsolutePath(),
                     mdSections,
                     coverHtml,
                     coverBasePath,

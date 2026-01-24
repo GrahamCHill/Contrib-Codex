@@ -20,6 +20,8 @@ public class ExportService {
 
     public void exportCompanyToPdf(List<dev.grahamhill.model.CompanyMetric> metrics, String filePath, 
                                    String piePath, String langPiePath, String barPath, String devPiePath, 
+                                   String projLangPiePath, String contribLangPiePath,
+                                   String linePath, String calendarPath, String contribPath, String cpdPath,
                                    java.util.Map<String, String> mdSections, String coverHtml, String coverBasePath, 
                                    java.util.Map<String, String> metadata, List<ReportHistory> history) throws Exception {
         Document document = new Document(PageSize.A4);
@@ -161,11 +163,53 @@ public class ExportService {
         document.add(devPieImage);
         document.newPage();
 
+        document.add(new Paragraph("Language of Projects:", sectionFont));
+        Image projLangPieImage = Image.getInstance(projLangPiePath);
+        projLangPieImage.scaleToFit(500, 500);
+        projLangPieImage.setAlignment(Image.MIDDLE);
+        document.add(projLangPieImage);
+        document.newPage();
+
+        document.add(new Paragraph("Languages by Contributor (Company):", sectionFont));
+        Image cLangPieImage = Image.getInstance(contribLangPiePath);
+        cLangPieImage.scaleToFit(500, 500);
+        cLangPieImage.setAlignment(Image.MIDDLE);
+        document.add(cLangPieImage);
+        document.newPage();
+
         document.add(new Paragraph("Impact by Repository:", sectionFont));
         Image barImage = Image.getInstance(barPath);
         barImage.scaleToFit(500, 500);
         barImage.setAlignment(Image.MIDDLE);
         document.add(barImage);
+        document.newPage();
+
+        document.add(new Paragraph("Recent Activity (Company):", sectionFont));
+        Image lineImage = Image.getInstance(linePath);
+        lineImage.scaleToFit(500, 500);
+        lineImage.setAlignment(Image.MIDDLE);
+        document.add(lineImage);
+        document.newPage();
+
+        document.add(new Paragraph("Daily Activity (Company):", sectionFont));
+        Image calImage = Image.getInstance(calendarPath);
+        calImage.scaleToFit(500, 500);
+        calImage.setAlignment(Image.MIDDLE);
+        document.add(calImage);
+        document.newPage();
+
+        document.add(new Paragraph("Daily Activity per Contributor (Company):", sectionFont));
+        Image conImage = Image.getInstance(contribPath);
+        conImage.scaleToFit(500, 500);
+        conImage.setAlignment(Image.MIDDLE);
+        document.add(conImage);
+        document.newPage();
+
+        document.add(new Paragraph("Commits per Day (Company):", sectionFont));
+        Image cpdImage = Image.getInstance(cpdPath);
+        cpdImage.scaleToFit(500, 500);
+        cpdImage.setAlignment(Image.MIDDLE);
+        document.add(cpdImage);
         document.newPage();
 
         // Data Table
