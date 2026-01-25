@@ -72,7 +72,7 @@ public class MainApp extends Application {
     private PieChart languagePieChart;
     private PieChart devPieChart;
     private PieChart projectLangPieChart;
-    private PieChart contribLanguagePieChart;
+    private StackedBarChart<String, Number> contribLanguageBarChart;
     private LineChart<String, Number> commitsPerDayLineChart;
     private StackedBarChart<String, Number> impactBarChart;
     private LineChart<String, Number> activityLineChart;
@@ -106,6 +106,8 @@ public class MainApp extends Application {
     private ListView<CompanyMetricSelection> repoSelectionList;
     private TextField companyReviewMdPathField;
     private VBox visualsOuterBox;
+    private Tab companyBreakdownTab;
+    private ListView<String> companyBreakdownList;
 
     private Map<String, String> envConfig = new HashMap<>();
 
@@ -494,6 +496,12 @@ public class MainApp extends Application {
 
         visualsTab = new Tab("Visuals");
         visualsTab.setClosable(false);
+
+        companyBreakdownTab = new Tab("Company Breakdown");
+        companyBreakdownTab.setClosable(false);
+        companyBreakdownList = new ListView<>();
+        companyBreakdownTab.setContent(new VBox(10, new Label("Company Breakdown (Scrollable List):"), companyBreakdownList));
+        VBox.setVgrow(companyBreakdownList, javafx.scene.layout.Priority.ALWAYS);
         
         visualsOuterBox = new VBox(5);
         HBox zoomControls = new HBox(10);
@@ -505,39 +513,6 @@ public class MainApp extends Application {
             zoomLabel.setText(String.format("Zoom: %.0f%%", newVal.doubleValue() * 100));
         });
         zoomControls.getChildren().addAll(new Label("Zoom:"), zoomSlider, zoomLabel);
-
-        ScrollPane visualsScrollPane = new ScrollPane();
-        visualsScrollPane.setFitToWidth(true);
-        visualsScrollPane.setFitToHeight(false);
-        VBox chartsBox = new VBox(10);
-        chartsBox.setAlignment(javafx.geometry.Pos.TOP_CENTER);
-        chartsBox.setPadding(new Insets(10));
-        
-        javafx.scene.Group zoomGroup = new javafx.scene.Group(chartsBox);
-        visualsScrollPane.setContent(zoomGroup);
-        
-        javafx.scene.transform.Scale scale = new javafx.scene.transform.Scale(1, 1, 0, 0);
-        zoomGroup.getTransforms().add(scale);
-        scale.xProperty().bind(zoomSlider.valueProperty());
-        scale.yProperty().bind(zoomSlider.valueProperty());
-
-        visualsScrollPane.setOnScroll(event -> {
-            if (event.isControlDown()) {
-                double delta = event.getDeltaY();
-                double zoomFactor = 1.05;
-                if (delta < 0) zoomFactor = 1 / zoomFactor;
-                double newScale = zoomSlider.getValue() * zoomFactor;
-                zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
-                event.consume();
-            }
-        });
-
-        visualsScrollPane.setOnZoom(event -> {
-            double zoomFactor = event.getZoomFactor();
-            double newScale = zoomSlider.getValue() * zoomFactor;
-            zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
-            event.consume();
-        });
 
         commitPieChart = new PieChart();
         commitPieChart.setTitle("Commits by Contributor");
@@ -561,20 +536,22 @@ public class MainApp extends Application {
         languagePieChart.setLabelLineLength(25);
         languagePieChart.setLegendVisible(true);
 
-        contribLanguagePieChart = new PieChart();
-        contribLanguagePieChart.setTitle("Languages by Contributor");
-        contribLanguagePieChart.setMinWidth(1080);
-        contribLanguagePieChart.setMaxWidth(1080);
-        contribLanguagePieChart.setPrefWidth(1080);
-        contribLanguagePieChart.setMinHeight(1080);
-        contribLanguagePieChart.setMaxHeight(1080);
-        contribLanguagePieChart.setPrefHeight(1080);
-        contribLanguagePieChart.setLabelsVisible(true);
-        contribLanguagePieChart.setLabelLineLength(25);
-        contribLanguagePieChart.setLegendVisible(true);
+        CategoryAxis clX = new CategoryAxis();
+        NumberAxis clY = new NumberAxis();
+        contribLanguageBarChart = new StackedBarChart<>(clX, clY);
+        contribLanguageBarChart.setTitle("Languages by Contributor");
+        contribLanguageBarChart.setMinWidth(1080);
+        contribLanguageBarChart.setMaxWidth(1080);
+        contribLanguageBarChart.setPrefWidth(1080);
+        contribLanguageBarChart.setMinHeight(1080);
+        contribLanguageBarChart.setMaxHeight(1080);
+        contribLanguageBarChart.setPrefHeight(1080);
+        contribLanguageBarChart.setLegendVisible(true);
+        clX.setLabel("Contributor");
+        clY.setLabel("Files count");
 
         devPieChart = new PieChart();
-        devPieChart.setTitle("Code by Developer (Company)");
+        devPieChart.setTitle("Code by Developer");
         devPieChart.setMinWidth(1080);
         devPieChart.setMaxWidth(1080);
         devPieChart.setPrefWidth(1080);
@@ -675,6 +652,42 @@ public class MainApp extends Application {
         caxAxis.setTickLength(10);
         cayAxis.setLabel("Lines Added");
 
+
+
+        ScrollPane visualsScrollPane = new ScrollPane();
+        visualsScrollPane.setFitToWidth(true);
+        visualsScrollPane.setFitToHeight(false);
+        VBox chartsBox = new VBox(10);
+        chartsBox.setAlignment(javafx.geometry.Pos.TOP_CENTER);
+        chartsBox.setPadding(new Insets(10));
+        
+        javafx.scene.Group zoomGroup = new javafx.scene.Group(chartsBox);
+        visualsScrollPane.setContent(zoomGroup);
+        
+        javafx.scene.transform.Scale scale = new javafx.scene.transform.Scale(1, 1, 0, 0);
+        zoomGroup.getTransforms().add(scale);
+        scale.xProperty().bind(zoomSlider.valueProperty());
+        scale.yProperty().bind(zoomSlider.valueProperty());
+
+        visualsScrollPane.setOnScroll(event -> {
+            if (event.isControlDown()) {
+                double delta = event.getDeltaY();
+                double zoomFactor = 1.05;
+                if (delta < 0) zoomFactor = 1 / zoomFactor;
+                double newScale = zoomSlider.getValue() * zoomFactor;
+                zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
+                event.consume();
+            }
+        });
+
+        visualsScrollPane.setOnZoom(event -> {
+            double zoomFactor = event.getZoomFactor();
+            double newScale = zoomSlider.getValue() * zoomFactor;
+            zoomSlider.setValue(Math.max(0.1, Math.min(2.0, newScale)));
+            event.consume();
+        });
+
+
         // Set a fixed height for all charts in the visuals box to ensure consistency
         commitPieChart.setMinHeight(1080);
         commitPieChart.setMaxHeight(1080);
@@ -682,9 +695,9 @@ public class MainApp extends Application {
         languagePieChart.setMinHeight(1080);
         languagePieChart.setMaxHeight(1080);
         languagePieChart.setPrefHeight(1080);
-        contribLanguagePieChart.setMinHeight(1080);
-        contribLanguagePieChart.setMaxHeight(1080);
-        contribLanguagePieChart.setPrefHeight(1080);
+        contribLanguageBarChart.setMinHeight(1080);
+        contribLanguageBarChart.setMaxHeight(1080);
+        contribLanguageBarChart.setPrefHeight(1080);
         devPieChart.setMinHeight(1080);
         devPieChart.setMaxHeight(1080);
         devPieChart.setPrefHeight(1080);
@@ -707,7 +720,7 @@ public class MainApp extends Application {
         commitsPerDayLineChart.setMaxHeight(1080);
         commitsPerDayLineChart.setPrefHeight(1080);
 
-        chartsBox.getChildren().addAll(commitPieChart, languagePieChart, contribLanguagePieChart, devPieChart, projectLangPieChart, commitsPerDayLineChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart);
+        chartsBox.getChildren().addAll(commitPieChart, languagePieChart, contribLanguageBarChart, devPieChart, projectLangPieChart, commitsPerDayLineChart, impactBarChart, activityLineChart, calendarActivityChart, contributorActivityChart);
         visualsOuterBox.getChildren().addAll(zoomControls, visualsScrollPane);
         VBox.setVgrow(visualsScrollPane, javafx.scene.layout.Priority.ALWAYS);
         visualsTab.setContent(visualsOuterBox);
@@ -724,7 +737,7 @@ public class MainApp extends Application {
         );
         docControlTab.setContent(docControlBox);
 
-        statsTabPane.getTabs().addAll(statsTab, visualsTab, docControlTab);
+        statsTabPane.getTabs().addAll(statsTab, companyBreakdownTab, visualsTab, docControlTab);
 
         // Right side: Commits
         VBox rightBox = new VBox(10);
@@ -2180,109 +2193,63 @@ public class MainApp extends Application {
             commitPieChart.setTitle("Commits by Contributor");
             languagePieChart.setTitle("Language Breakdown (Overall)");
             impactBarChart.setTitle("Impact (Lines Added/Deleted)");
-            contribLanguagePieChart.setTitle("Languages by Contributor");
+            contribLanguageBarChart.setTitle("Languages by Contributor");
+            devPieChart.setTitle("Code by Developer");
+            projectLangPieChart.setTitle("Language of Projects");
             activityLineChart.setTitle("Recent Commit Activity");
             calendarActivityChart.setTitle("Daily Activity (Total Impact)");
             contributorActivityChart.setTitle("Daily Activity per Contributor (Lines Added)");
             commitsPerDayLineChart.setTitle("Commits per Day & per Contributor");
 
-            devPieChart.setVisible(false);
-            devPieChart.setManaged(false);
-            projectLangPieChart.setVisible(false);
-            projectLangPieChart.setManaged(false);
+            if (companyBreakdownTab.getTabPane() != null) {
+                statsTabPane.getTabs().remove(companyBreakdownTab);
+            }
+
+            chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguageBarChart, commitsPerDayLineChart, impactBarChart, activityLineChart, calendarActivityChart, 
+                                     contributorActivityChart, devPieChart, projectLangPieChart, stats, recentCommits);
             
-            chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, commitsPerDayLineChart, impactBarChart, activityLineChart, calendarActivityChart, 
-                                     contributorActivityChart, stats, recentCommits);
-            
-            // Force layout pass and refresh to ensure charts are rendered correctly
-            Platform.runLater(() -> {
-                commitPieChart.layout();
-                impactBarChart.layout();
-                activityLineChart.layout();
-                calendarActivityChart.layout();
-                contributorActivityChart.layout();
-                commitsPerDayLineChart.layout();
-                languagePieChart.layout();
-                contribLanguagePieChart.layout();
-                
-                // Force visibility for shared visuals outer box in case it was somehow hidden
-                if (visualsOuterBox != null) {
-                    visualsOuterBox.setVisible(true);
-                    visualsOuterBox.setManaged(true);
-                    visualsOuterBox.requestLayout();
-                }
-                
-                // Explicitly show legends for ALL charts
-                commitPieChart.setLegendVisible(true);
-                impactBarChart.setLegendVisible(true);
-                activityLineChart.setLegendVisible(true);
-                calendarActivityChart.setLegendVisible(true);
-                contributorActivityChart.setLegendVisible(true);
-                commitsPerDayLineChart.setLegendVisible(true);
-                languagePieChart.setLegendVisible(true);
-                contribLanguagePieChart.setLegendVisible(true);
+            commitPieChart.applyCss();
+            commitPieChart.layout();
+            languagePieChart.applyCss();
+            languagePieChart.layout();
+            contribLanguageBarChart.applyCss();
+            contribLanguageBarChart.layout();
+            devPieChart.applyCss();
+            devPieChart.layout();
+            projectLangPieChart.applyCss();
+            projectLangPieChart.layout();
+            impactBarChart.applyCss();
+            impactBarChart.layout();
+            activityLineChart.applyCss();
+            activityLineChart.layout();
+            calendarActivityChart.applyCss();
+            calendarActivityChart.layout();
+            contributorActivityChart.applyCss();
+            contributorActivityChart.layout();
+            commitsPerDayLineChart.applyCss();
+            commitsPerDayLineChart.layout();
 
-                // Ensure labels are visible
-                commitPieChart.setLabelsVisible(true);
-                languagePieChart.setLabelsVisible(true);
-                contribLanguagePieChart.setLabelsVisible(true);
-
-                // Ensure charts have enough internal padding for legends
-                impactBarChart.setPadding(new Insets(10, 10, 10, 10));
-                activityLineChart.setPadding(new Insets(10, 10, 10, 10));
-                calendarActivityChart.setPadding(new Insets(10, 10, 10, 10));
-                contributorActivityChart.setPadding(new Insets(10, 10, 10, 10));
-                commitsPerDayLineChart.setPadding(new Insets(10, 10, 10, 10));
-
-                // Set legend side to RIGHT for all except pie
-                impactBarChart.setLegendSide(javafx.geometry.Side.RIGHT);
-                activityLineChart.setLegendSide(javafx.geometry.Side.RIGHT);
-                calendarActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
-                contributorActivityChart.setLegendSide(javafx.geometry.Side.RIGHT);
-                commitsPerDayLineChart.setLegendSide(javafx.geometry.Side.RIGHT);
-
-                // Set titles back to standard for any other shared charts
-                devPieChart.setTitle("Code by Developer (Company)");
-                projectLangPieChart.setTitle("Language of Projects");
-                contribLanguagePieChart.setTitle("Languages by Contributor");
-
-                // Ensure visibility of devPieChart and projectLangPieChart is reset correctly
-                devPieChart.setVisible(false);
-                devPieChart.setManaged(false);
-                projectLangPieChart.setVisible(false);
-                projectLangPieChart.setManaged(false);
-
-                // Force layout and requestLayout to ensure rendering
-                Platform.runLater(() -> {
-                    // Force a CSS pass
-                    commitPieChart.applyCss();
-                    languagePieChart.applyCss();
-                    contribLanguagePieChart.applyCss();
-                    impactBarChart.applyCss();
-                    activityLineChart.applyCss();
-                    calendarActivityChart.applyCss();
-                    contributorActivityChart.applyCss();
-                    commitsPerDayLineChart.applyCss();
-
-                    commitPieChart.layout();
-                    languagePieChart.layout();
-                    contribLanguagePieChart.layout();
-                    impactBarChart.layout();
-                    activityLineChart.layout();
-                    calendarActivityChart.layout();
-                    contributorActivityChart.layout();
-                    commitsPerDayLineChart.layout();
-
-                    commitPieChart.requestLayout();
-                    languagePieChart.requestLayout();
-                    contribLanguagePieChart.requestLayout();
-                    impactBarChart.requestLayout();
-                    activityLineChart.requestLayout();
-                    calendarActivityChart.requestLayout();
-                    contributorActivityChart.requestLayout();
-                    commitsPerDayLineChart.requestLayout();
-                });
-            });
+            // Additional force layout for shared charts visibility
+            commitPieChart.setVisible(true);
+            commitPieChart.setManaged(true);
+            languagePieChart.setVisible(true);
+            languagePieChart.setManaged(true);
+            contribLanguageBarChart.setVisible(true);
+            contribLanguageBarChart.setManaged(true);
+            impactBarChart.setVisible(true);
+            impactBarChart.setManaged(true);
+            activityLineChart.setVisible(true);
+            activityLineChart.setManaged(true);
+            calendarActivityChart.setVisible(true);
+            calendarActivityChart.setManaged(true);
+            contributorActivityChart.setVisible(true);
+            contributorActivityChart.setManaged(true);
+            commitsPerDayLineChart.setVisible(true);
+            commitsPerDayLineChart.setManaged(true);
+            devPieChart.setVisible(true);
+            devPieChart.setManaged(true);
+            projectLangPieChart.setVisible(true);
+            projectLangPieChart.setManaged(true);
         });
     }
 
@@ -2518,106 +2485,74 @@ public class MainApp extends Application {
                 commitPieChart.setTitle("Commits by Repository");
                 languagePieChart.setTitle("Language Breakdown (Company)");
                 impactBarChart.setTitle("Impact by Repository");
-                contribLanguagePieChart.setTitle("Languages by Contributor (Company)");
+                contribLanguageBarChart.setTitle("Languages by Contributor (Company)");
                 activityLineChart.setTitle("Recent Activity (Company)");
                 calendarActivityChart.setTitle("Daily Activity (Company)");
                 contributorActivityChart.setTitle("Daily Activity per Contributor (Company)");
                 commitsPerDayLineChart.setTitle("Commits per Day & per Contributor (Company)");
                 devPieChart.setTitle("Code by Developer (Company)");
-                projectLangPieChart.setTitle("Language of Projects");
+                projectLangPieChart.setTitle("Language of Projects (Company)");
 
                 // Update shared charts with company-specific visuals where appropriate
+                if (!statsTabPane.getTabs().contains(companyBreakdownTab)) {
+                    statsTabPane.getTabs().add(1, companyBreakdownTab);
+                }
+
                 chartManager.updateCompanyCharts(commitPieChart, languagePieChart, impactBarChart, devPieChart, 
-                                                 projectLangPieChart, contribLanguagePieChart,
+                                                 projectLangPieChart, contribLanguageBarChart,
                                                  activityLineChart, calendarActivityChart, contributorActivityChart, commitsPerDayLineChart,
+                                                 companyBreakdownList,
                                                  selectedMetrics, aggregatedStats, allCommits);
             
-                Platform.runLater(() -> {
-                    // Update shared charts with aggregated company stats
-                    chartManager.updateCharts(commitPieChart, languagePieChart, contribLanguagePieChart, commitsPerDayLineChart, impactBarChart, activityLineChart, calendarActivityChart, 
-                                             contributorActivityChart, aggregatedStats, allCommits);
+            // Force layout for company charts
+            commitPieChart.applyCss();
+            commitPieChart.layout();
+            languagePieChart.applyCss();
+            languagePieChart.layout();
+            impactBarChart.applyCss();
+            impactBarChart.layout();
+            devPieChart.applyCss();
+            devPieChart.layout();
+            projectLangPieChart.applyCss();
+            projectLangPieChart.layout();
+            contribLanguageBarChart.applyCss();
+            contribLanguageBarChart.layout();
+            activityLineChart.applyCss();
+            activityLineChart.layout();
+            calendarActivityChart.applyCss();
+            calendarActivityChart.layout();
+            contributorActivityChart.applyCss();
+            contributorActivityChart.layout();
+            commitsPerDayLineChart.applyCss();
+            commitsPerDayLineChart.layout();
 
-                    // Ensure labels and legends are visible on all pie charts
-                    commitPieChart.setLabelsVisible(true);
-                    languagePieChart.setLabelsVisible(true);
-                    devPieChart.setLabelsVisible(true);
-                    projectLangPieChart.setLabelsVisible(true);
-                    contribLanguagePieChart.setLabelsVisible(true);
+            // Additional force layout for shared charts visibility
+            commitPieChart.setVisible(true);
+            commitPieChart.setManaged(true);
+            languagePieChart.setVisible(true);
+            languagePieChart.setManaged(true);
+            contribLanguageBarChart.setVisible(true);
+            contribLanguageBarChart.setManaged(true);
+            impactBarChart.setVisible(true);
+            impactBarChart.setManaged(true);
+            activityLineChart.setVisible(true);
+            activityLineChart.setManaged(true);
+            calendarActivityChart.setVisible(true);
+            calendarActivityChart.setManaged(true);
+            contributorActivityChart.setVisible(true);
+            contributorActivityChart.setManaged(true);
+            commitsPerDayLineChart.setVisible(true);
+            commitsPerDayLineChart.setManaged(true);
+            devPieChart.setVisible(true);
+            devPieChart.setManaged(true);
+            projectLangPieChart.setVisible(true);
+            projectLangPieChart.setManaged(true);
 
-                    devPieChart.setVisible(true);
-                    projectLangPieChart.setVisible(true);
-                    devPieChart.setManaged(true);
-                    projectLangPieChart.setManaged(true);
-
-                    // Fix axes labels for company mode
-                    impactBarChart.getXAxis().setLabel("Repository");
-                    activityLineChart.getXAxis().setLabel("Commit (Aggregated)");
-                    calendarActivityChart.getYAxis().setLabel("Total Lines Added");
-                    contributorActivityChart.getYAxis().setLabel("Lines Added");
-                    commitsPerDayLineChart.getYAxis().setLabel("Commits");
-                    
-                    // Ensure legends are visible
-                    commitPieChart.setLegendVisible(true);
-                    languagePieChart.setLegendVisible(true);
-                    devPieChart.setLegendVisible(true);
-                    projectLangPieChart.setLegendVisible(true);
-                    contribLanguagePieChart.setLegendVisible(true);
-                    impactBarChart.setLegendVisible(true);
-                    activityLineChart.setLegendVisible(true);
-                    calendarActivityChart.setLegendVisible(true);
-                    contributorActivityChart.setLegendVisible(true);
-                    commitsPerDayLineChart.setLegendVisible(true);
-
-                    // Ensure charts have enough internal padding for legends in company mode too
-                    impactBarChart.setPadding(new Insets(10, 10, 10, 10));
-                    activityLineChart.setPadding(new Insets(10, 10, 10, 10));
-                    calendarActivityChart.setPadding(new Insets(10, 10, 10, 10));
-                    contributorActivityChart.setPadding(new Insets(10, 10, 10, 10));
-                    commitsPerDayLineChart.setPadding(new Insets(10, 10, 10, 10));
-
-                    // Force layout and requestLayout to ensure rendering
-                    Platform.runLater(() -> {
-                        // Force a CSS pass
-                        commitPieChart.applyCss();
-                        languagePieChart.applyCss();
-                        devPieChart.applyCss();
-                        projectLangPieChart.applyCss();
-                        contribLanguagePieChart.applyCss();
-                        impactBarChart.applyCss();
-                        activityLineChart.applyCss();
-                        calendarActivityChart.applyCss();
-                        contributorActivityChart.applyCss();
-                        commitsPerDayLineChart.applyCss();
-
-                        commitPieChart.layout();
-                        languagePieChart.layout();
-                        devPieChart.layout();
-                        projectLangPieChart.layout();
-                        contribLanguagePieChart.layout();
-                        impactBarChart.layout();
-                        activityLineChart.layout();
-                        calendarActivityChart.layout();
-                        contributorActivityChart.layout();
-                        commitsPerDayLineChart.layout();
-
-                        commitPieChart.requestLayout();
-                        languagePieChart.requestLayout();
-                        devPieChart.requestLayout();
-                        projectLangPieChart.requestLayout();
-                        contribLanguagePieChart.requestLayout();
-                        impactBarChart.requestLayout();
-                        activityLineChart.requestLayout();
-                        calendarActivityChart.requestLayout();
-                        contributorActivityChart.requestLayout();
-                        commitsPerDayLineChart.requestLayout();
-                        
-                        // Final attempt to force tab rendering
-                        if (statsTabPane != null && visualsTab != null) {
-                            statsTabPane.getSelectionModel().select(statsTab);
-                            Platform.runLater(() -> statsTabPane.getSelectionModel().select(visualsTab));
-                        }
-                    });
-                });
+                // Final attempt to force tab rendering
+                if (statsTabPane != null && visualsTab != null) {
+                    statsTabPane.getSelectionModel().select(statsTab);
+                    Platform.runLater(() -> statsTabPane.getSelectionModel().select(visualsTab));
+                }
             });
             }
         } catch (Exception e) {
@@ -2698,7 +2633,7 @@ public class MainApp extends Application {
             File barFile = new File(exportDir, "company_impact_bar.png");
             File devPieFile = new File(exportDir, "company_dev_pie.png");
             File projLangPieFile = new File(exportDir, "company_proj_lang_pie.png");
-            File contribLangPieFile = new File(exportDir, "company_contrib_lang_pie.png");
+            File contribLangBarFile = new File(exportDir, "company_contrib_lang_bar.png");
             File lineFile = new File(exportDir, "company_activity_line.png");
             File calFile = new File(exportDir, "company_calendar_activity.png");
             File conFile = new File(exportDir, "company_contributor_activity.png");
@@ -2710,7 +2645,7 @@ public class MainApp extends Application {
             saveNodeSnapshot(impactBarChart, barFile);
             saveNodeSnapshot(devPieChart, devPieFile); 
             saveNodeSnapshot(projectLangPieChart, projLangPieFile); 
-            saveNodeSnapshot(contribLanguagePieChart, contribLangPieFile);
+            saveNodeSnapshot(contribLanguageBarChart, contribLangBarFile);
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calFile);
             saveNodeSnapshot(contributorActivityChart, conFile);
@@ -2761,7 +2696,7 @@ public class MainApp extends Application {
                     barFile.getAbsolutePath(),
                     devPieFile.getAbsolutePath(),
                     projLangPieFile.getAbsolutePath(),
-                    contribLangPieFile.getAbsolutePath(),
+                    contribLangBarFile.getAbsolutePath(),
                     lineFile.getAbsolutePath(),
                     calFile.getAbsolutePath(),
                     conFile.getAbsolutePath(),
@@ -2821,8 +2756,10 @@ public class MainApp extends Application {
             File exportDir = file.getParentFile();
             File pieFile = new File(exportDir, "pie_chart.png");
             File langPieFile = new File(exportDir, "lang_pie_chart.png");
-            File contribLangPieFile = new File(exportDir, "contrib_lang_pie_chart.png");
+            File contribLangBarFile = new File(exportDir, "contrib_lang_bar_chart.png");
             File barFile = new File(exportDir, "bar_chart.png");
+            File devFile = new File(exportDir, "dev_pie_chart.png");
+            File projFile = new File(exportDir, "proj_lang_pie_chart.png");
             File lineFile = new File(exportDir, "line_chart.png");
             File calendarFile = new File(exportDir, "calendar_chart.png");
             File contribFile = new File(exportDir, "contrib_activity.png");
@@ -2831,9 +2768,11 @@ public class MainApp extends Application {
             
             saveNodeSnapshot(commitPieChart, pieFile);
             saveNodeSnapshot(languagePieChart, langPieFile);
-            saveNodeSnapshot(contribLanguagePieChart, contribLangPieFile);
+            saveNodeSnapshot(contribLanguageBarChart, contribLangBarFile);
             saveNodeSnapshot(commitsPerDayLineChart, cpdPieFile);
             saveNodeSnapshot(impactBarChart, barFile);
+            saveNodeSnapshot(devPieChart, devFile);
+            saveNodeSnapshot(projectLangPieChart, projFile);
             saveNodeSnapshot(activityLineChart, lineFile);
             saveNodeSnapshot(calendarActivityChart, calendarFile);
             saveNodeSnapshot(contributorActivityChart, contribFile);
@@ -3006,7 +2945,7 @@ public class MainApp extends Application {
             }
 
             exportService.exportToPdf(currentStats, gitService.getLastCommits(new File(repoPathField.getText()), commitLimitSpinner.getValue(), aliasesMap(), mainBranchField.getText()), currentMeaningfulAnalysis, file.getAbsolutePath(), 
-                pieFile.getAbsolutePath(), langPieFile.getAbsolutePath(), contribLangPieFile.getAbsolutePath(), cpdPieFile.getAbsolutePath(),
+                pieFile.getAbsolutePath(), langPieFile.getAbsolutePath(), contribLangBarFile.getAbsolutePath(), cpdPieFile.getAbsolutePath(),
                 barFile.getAbsolutePath(), lineFile.getAbsolutePath(), 
                 calendarFile.getAbsolutePath(), contribFile.getAbsolutePath(), cpdFile.getAbsolutePath(), 
                 aiReport, mdSections, coverHtml, coverBasePath, tableLimitSpinner.getValue(), metadata, historyList);
